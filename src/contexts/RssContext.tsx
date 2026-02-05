@@ -149,11 +149,8 @@ export function RssProvider({ children }: RssProviderProps) {
 
   const selectFeed = useCallback((id: string | null) => {
     setSelectedFeedId(id)
-    if (id) {
-      loadArticles(id)
-    } else {
-      setArticles([])
-    }
+    // 加载文章：指定订阅时加载该订阅的文章，否则加载全部文章
+    loadArticles(id || undefined)
   }, [loadArticles])
 
   const markArticleRead = useCallback(async (id: string, read: boolean) => {
