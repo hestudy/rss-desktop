@@ -39,24 +39,45 @@ pub fn fetch_feed(url: &str) -> Result<FeedResult> {
     // 验证 URL（防止 SSRF）
     validate_url(url)?;
 
-    // 使用 ureq 获取内容
+    // 使用 ureq 获取内容 - 增加超时时间以支持大型 RSS feeds
     let response = ureq::get(url)
         .set("User-Agent", "RSS-Desktop/0.1.0")
-        .timeout(Duration::from_secs(15))
+        .timeout(Duration::from_secs(60))  // 增加到 60 秒
         .call()
-        .map_err(|e| RssError::HttpError(e))?;
+        .map_err(|e| {
+            RssError::IoError(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Network error: {}", e)
+            ))
+        })?;
 
     // 检查响应状态 (200-299)
     let status = response.status();
     if status < 200 || status >= 300 {
         return Err(RssError::InvalidUrl(format!(
-            "HTTP error: {}", status
+            "HTTP error: {} - Server returned non-success status", status
         )));
     }
 
-    let feed_text = response.into_string()?;
+    // 获取响应内容 - 捕获读取错误
+    let feed_text = response.into_string()
+        .map_err(|e| {
+            RssError::IoError(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Failed to read response: {}", e)
+            ))
+        })?;
+
+    // 检查内容长度
+    if feed_text.is_empty() {
+        return Err(RssError::FeedError("Empty response from server".to_string()));
+    }
+
+    // 解析 RSS/Atom feed
     let parsed_feed = parser::parse(feed_text.as_bytes())
-        .map_err(|e| RssError::FeedError(e.to_string()))?;
+        .map_err(|e| {
+            RssError::FeedError(format!("Failed to parse RSS feed: {}", e))
+        })?;
 
     let title = parsed_feed
         .title
@@ -107,6 +128,7 @@ pub fn fetch_feed(url: &str) -> Result<FeedResult> {
                 created_at: now,
             })
         })
+        .take(MAX_ARTICLES_PER_FETCH)  // 限制文章数量
         .collect();
 
     Ok((feed, articles))
