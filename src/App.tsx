@@ -1,8 +1,10 @@
 import { useEffect } from 'react'
 import { RssProvider, useRss } from './contexts/RssContext'
 import { ConfirmProvider } from './components/ui/ConfirmDialog'
+import { ThemeProvider } from './contexts/ThemeContext'
 import { FeedList } from './components/feeds/FeedList'
 import { ArticleList } from './components/articles/ArticleList'
+import './styles/themes/index.css'
 
 function AppContent() {
   const { loadFeeds } = useRss()
@@ -28,11 +30,13 @@ function AppContent() {
 
 function App() {
   return (
-    <ConfirmProvider>
-      <RssProvider>
-        <AppContent />
-      </RssProvider>
-    </ConfirmProvider>
+    <ThemeProvider>
+      <ConfirmProvider>
+        <RssProvider>
+          <AppContent />
+        </RssProvider>
+      </ConfirmProvider>
+    </ThemeProvider>
   )
 }
 

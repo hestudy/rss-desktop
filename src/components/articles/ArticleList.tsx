@@ -85,27 +85,37 @@ export function ArticleList() {
                 <div
                   key={article.id}
                   onClick={() => handleArticleClick(article)}
-                  className={`p-4 rounded-lg border transition-colors cursor-pointer ${
+                  className={`group relative p-4 rounded-xl border transition-all duration-200 cursor-pointer ${
                     article.read
-                      ? 'bg-muted/50 opacity-70'
-                      : 'bg-card hover:bg-accent'
+                      ? 'bg-read-background border-transparent opacity-80'
+                      : 'bg-card border-border shadow-sm hover:shadow-md hover:border-primary/30'
                   }`}
                 >
-                  <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <h3
-                        className={`font-medium mb-1 line-clamp-2 ${
-                          article.read ? 'text-muted-foreground' : ''
+                        className={`mb-2 line-clamp-2 leading-relaxed ${
+                          article.read
+                            ? 'text-read-foreground font-normal'
+                            : 'text-card-foreground font-medium'
                         }`}
                       >
                         {article.title}
                       </h3>
                       {article.description && (
-                        <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
+                        <p className={`text-sm line-clamp-2 mb-2 ${
+                          article.read
+                            ? 'text-read-foreground'
+                            : 'text-muted-foreground'
+                        }`}>
                           {article.description}
                         </p>
                       )}
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <div className={`flex items-center gap-1.5 text-xs ${
+                        article.read
+                          ? 'text-read-foreground'
+                          : 'text-muted-foreground'
+                      }`}>
                         <Clock className="w-3 h-3" />
                         <span>{formatDate(article.published_at)}</span>
                       </div>
@@ -114,7 +124,7 @@ export function ArticleList() {
                       size="sm"
                       variant="ghost"
                       onClick={(e) => handleOpenLink(e, article.link)}
-                      className="flex-shrink-0"
+                      className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
                     >
                       <ExternalLink className="w-4 h-4" />
                     </Button>

@@ -4,6 +4,7 @@ import { Button } from '../ui/Button'
 import { ScrollArea } from '../ui/ScrollArea'
 import { AddFeedDialog } from './AddFeedDialog'
 import { useConfirm } from '../ui/ConfirmDialog'
+import { ThemeSwitcher } from '../ui/ThemeSwitcher'
 import { useRss } from '../../contexts/RssContext'
 
 export function FeedList() {
@@ -60,6 +61,7 @@ export function FeedList() {
               )}
             </div>
             <div className="flex gap-1">
+              <ThemeSwitcher />
               <Button
                 size="sm"
                 variant="ghost"
@@ -83,15 +85,19 @@ export function FeedList() {
           {/* "全部" 选项 */}
           <button
             onClick={() => selectFeed(null)}
-            className={`w-full text-left px-3 py-2 rounded-md transition-colors ${
+            className={`group relative w-full text-left px-3 py-2.5 rounded-md transition-all duration-200 ${
               selectedFeedId === null
-                ? 'bg-accent text-accent-foreground'
-                : 'hover:bg-accent/50'
+                ? 'bg-accent text-accent-foreground border-l-4 border-l-primary'
+                : 'hover:bg-accent/50 border-l-4 border-l-transparent'
             }`}
             >
             <div className="flex items-center justify-between">
-              <span>全部文章</span>
-              <span className="text-sm text-muted-foreground">{globalUnread}</span>
+              <span className="font-medium">全部文章</span>
+              {globalUnread > 0 && (
+                <span className="bg-primary text-primary-foreground text-xs px-2 py-0.5 rounded-full font-medium">
+                  {globalUnread}
+                </span>
+              )}
             </div>
           </button>
         </div>
@@ -102,21 +108,21 @@ export function FeedList() {
             {feeds.map(({ feed, unread_count }) => (
               <div
                 key={feed.id}
-                className={`group rounded-md transition-colors ${
+                className={`group relative rounded-md transition-all duration-200 ${
                   selectedFeedId === feed.id
-                    ? 'bg-accent text-accent-foreground'
-                    : 'hover:bg-accent/50'
+                    ? 'bg-accent text-accent-foreground border-l-4 border-l-primary'
+                    : 'hover:bg-accent/50 border-l-4 border-l-transparent'
                 }`}
               >
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => selectFeed(feed.id)}
-                    className="flex-1 text-left px-3 py-2"
+                    className="flex-1 text-left px-3 py-2.5"
                   >
                     <div className="flex items-center justify-between">
-                      <span className="truncate text-sm">{feed.title}</span>
+                      <span className="truncate text-sm font-medium">{feed.title}</span>
                       {unread_count > 0 && (
-                        <span className="bg-primary text-primary-foreground text-xs px-1.5 py-0.5 rounded-full">
+                        <span className="bg-primary text-primary-foreground text-xs px-2 py-0.5 rounded-full font-medium">
                           {unread_count}
                         </span>
                       )}
@@ -130,15 +136,15 @@ export function FeedList() {
                       disabled={refreshingId === feed.id}
                       className="h-7 w-7 p-0"
                     >
-                      <RefreshCw className={`w-3 h-3 ${refreshingId === feed.id ? 'animate-spin' : ''}`} />
+                      <RefreshCw className={`w-3.5 h-3.5 ${refreshingId === feed.id ? 'animate-spin' : ''}`} />
                     </Button>
                     <Button
                       size="sm"
                       variant="ghost"
                       onClick={() => handleRemoveFeed(feed.id)}
-                      className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                      className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
                     >
-                      <Trash2 className="w-3 h-3" />
+                      <Trash2 className="w-3.5 h-3.5" />
                     </Button>
                   </div>
                 </div>

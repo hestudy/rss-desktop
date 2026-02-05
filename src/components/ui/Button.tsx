@@ -12,14 +12,14 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       <button
         ref={ref}
         className={cn(
-          'inline-flex items-center justify-center rounded-md font-medium transition-colors',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
+          'inline-flex items-center justify-center rounded-lg font-medium transition-all duration-200',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
           'disabled:pointer-events-none disabled:opacity-50',
           {
-            'bg-primary text-primary-foreground hover:bg-primary/90':
+            'bg-primary text-primary-foreground shadow-sm hover:shadow hover:bg-primary/90 active:scale-[0.98]':
               variant === 'default',
-            'hover:bg-accent hover:text-accent-foreground': variant === 'ghost',
-            'border border-input bg-background hover:bg-accent hover:text-accent-foreground':
+            'hover:bg-accent hover:text-accent-foreground active:bg-accent/80': variant === 'ghost',
+            'border border-input bg-background hover:bg-accent hover:text-accent-foreground active:bg-accent/80':
               variant === 'outline',
           },
           {

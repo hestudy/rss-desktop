@@ -78,18 +78,22 @@ export function DialogContent({
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/50" onClick={close} />
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200" onClick={close} />
       <div
         className={cn(
-          'relative z-50 bg-background rounded-lg shadow-lg border max-w-md w-full p-6',
+          'relative z-50 bg-background rounded-xl shadow-xl border max-w-md w-full p-6',
+          'animate-in zoom-in-95 duration-200',
           className
         )}
       >
         {title && (
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">{title}</h2>
-            <button onClick={close} className="text-muted-foreground hover:text-foreground">
+            <button
+              onClick={close}
+              className="text-muted-foreground hover:text-foreground transition-colors rounded-md p-1 hover:bg-accent"
+            >
               ✕
             </button>
           </div>
