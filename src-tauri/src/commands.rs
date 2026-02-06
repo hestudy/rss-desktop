@@ -3,6 +3,7 @@ use crate::fetcher::fetch_feed;
 use crate::storage::MAX_ARTICLES_LIMIT;
 use tauri::State;
 use std::path::PathBuf;
+use fs2::FileExt;
 
 /// 应用状态，包含存储实例
 #[derive(Clone)]
@@ -243,4 +244,93 @@ pub async fn open_link(url: String) -> CommandResult<()> {
     tauri_plugin_opener::open_url(&url, None::<&str>)
         .map_err(|e| format!("Failed to open URL: {}", e))?;
     Ok(())
+}
+
+/// 存储键值对
+///
+/// 使用文件锁确保并发安全
+#[tauri::command]
+pub async fn set_store_value(key: String, value: serde_json::Value, state: State<'_, AppState>) -> CommandResult<()> {
+    use std::collections::HashMap;
+    use std::fs::{self, File, OpenOptions};
+    use std::io::{BufReader, BufWriter, Write};
+
+    let store_path = state.data_dir.join("store.json");
+    let temp_path = store_path.with_extension("tmp");
+
+    // 读取现有存储（使用文件锁）
+    let mut store: HashMap<String, serde_json::Value> = if store_path.exists() {
+        let file = File::open(&store_path)
+            .map_err(|e| format!("Failed to open store file: {}", e))?;
+        file.lock_shared()
+            .map_err(|e| format!("Failed to lock store file for reading: {}", e))?;
+
+        let reader = BufReader::new(file);
+        let store_result: Result<HashMap<String, serde_json::Value>, _> = serde_json::from_reader(reader);
+        // 锁在文件 drop 时自动释放
+        store_result.unwrap_or_default()
+    } else {
+        HashMap::new()
+    };
+
+    // 设置值
+    store.insert(key, value);
+
+    // 写入临时文件（使用独占锁）
+    {
+        let file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(&temp_path)
+            .map_err(|e| format!("Failed to create temp file: {}", e))?;
+        file.lock_exclusive()
+            .map_err(|e| format!("Failed to lock temp file for writing: {}", e))?;
+
+        let json = serde_json::to_string_pretty(&store)
+            .map_err(|e| format!("Failed to serialize store: {}", e))?;
+
+        {
+            let mut writer = BufWriter::new(&file);
+            writer.write_all(json.as_bytes())
+                .map_err(|e| format!("Failed to write store: {}", e))?;
+            writer.flush()
+                .map_err(|e| format!("Failed to flush store: {}", e))?;
+        }
+        // 锁在文件 drop 时自动释放
+    }
+
+    // 原子性重命名
+    fs::rename(&temp_path, &store_path)
+        .map_err(|e| format!("Failed to save store: {}", e))?;
+
+    Ok(())
+}
+
+/// 获取键值对
+///
+/// 使用文件锁确保读取一致性
+#[tauri::command]
+pub async fn get_store_value(key: String, state: State<'_, AppState>) -> CommandResult<Option<serde_json::Value>> {
+    use std::collections::HashMap;
+    use std::fs::File;
+    use std::io::BufReader;
+
+    let store_path = state.data_dir.join("store.json");
+
+    if !store_path.exists() {
+        return Ok(None);
+    }
+
+    let file = File::open(&store_path)
+        .map_err(|e| format!("Failed to open store file: {}", e))?;
+    file.lock_shared()
+        .map_err(|e| format!("Failed to lock store file for reading: {}", e))?;
+
+    let reader = BufReader::new(file);
+    let store: HashMap<String, serde_json::Value> = serde_json::from_reader(reader)
+        .map_err(|e| format!("Failed to parse store: {}", e))?;
+    // 锁在文件 drop 时自动释放
+
+    Ok(store.get(&key).cloned())
 }

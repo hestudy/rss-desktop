@@ -39,7 +39,7 @@ export default defineConfig({
     // Collect trace when retrying the test for debugging
     trace: 'on-first-retry',
 
-    // Take screenshot only on failure
+    // Take screenshot only on failure (but manual screenshots in tests go to artifacts dir)
     screenshot: 'only-on-failure',
 
     // Record video only on failure
@@ -51,6 +51,9 @@ export default defineConfig({
     // Navigation timeout
     navigationTimeout: 30000,
   },
+
+  // Directory for test artifacts (screenshots, videos, traces)
+  outputDir: 'test-results',
 
   // Test projects
   projects: [

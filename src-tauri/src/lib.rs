@@ -49,6 +49,8 @@ pub fn run() {
             commands::mark_all_read,
             commands::get_unread_count,
             commands::open_link,
+            commands::set_store_value,
+            commands::get_store_value,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
