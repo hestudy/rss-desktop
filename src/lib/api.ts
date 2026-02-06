@@ -88,4 +88,33 @@ export class RssApi {
   static async openLink(url: string): Promise<void> {
     await invoke('open_link', { url })
   }
+
+  /**
+   * 获取单个文章
+   */
+  static async getArticle(id: string): Promise<Article | null> {
+    const result = await invoke<Article | null>('get_article', { id })
+    return result
+  }
+
+  /**
+   * 更新阅读进度 (0-100)
+   */
+  static async updateReadingProgress(id: string, progress: number): Promise<void> {
+    await invoke('update_reading_progress', { id, progress })
+  }
+
+  /**
+   * 收藏/取消收藏文章
+   */
+  static async setArticleFavorite(id: string, favorite: boolean): Promise<void> {
+    await invoke('set_article_favorite', { id, favorite })
+  }
+
+  /**
+   * 获取收藏的文章
+   */
+  static async getFavoriteArticles(limit?: number): Promise<Article[]> {
+    return await invoke<Article[]>('get_favorite_articles', { limit })
+  }
 }

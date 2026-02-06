@@ -334,3 +334,51 @@ pub async fn get_store_value(key: String, state: State<'_, AppState>) -> Command
 
     Ok(store.get(&key).cloned())
 }
+
+/// 获取单个文章
+#[tauri::command]
+pub async fn get_article(id: String, state: State<'_, AppState>) -> CommandResult<Option<Article>> {
+    use crate::storage::Storage;
+
+    let storage = Storage::new(&state.data_dir)
+        .map_err(|e| format!("Failed to initialize storage: {}", e))?;
+
+    storage.get_article(&id)
+        .map_err(|e| format!("Failed to get article: {}", e))
+}
+
+/// 更新阅读进度
+#[tauri::command]
+pub async fn update_reading_progress(id: String, progress: f32, state: State<'_, AppState>) -> CommandResult<()> {
+    use crate::storage::Storage;
+
+    let storage = Storage::new(&state.data_dir)
+        .map_err(|e| format!("Failed to initialize storage: {}", e))?;
+
+    storage.update_reading_progress(&id, progress)
+        .map_err(|e| format!("Failed to update reading progress: {}", e))
+}
+
+/// 收藏/取消收藏文章
+#[tauri::command]
+pub async fn set_article_favorite(id: String, favorite: bool, state: State<'_, AppState>) -> CommandResult<()> {
+    use crate::storage::Storage;
+
+    let storage = Storage::new(&state.data_dir)
+        .map_err(|e| format!("Failed to initialize storage: {}", e))?;
+
+    storage.set_article_favorite(&id, favorite)
+        .map_err(|e| format!("Failed to set article favorite: {}", e))
+}
+
+/// 获取收藏的文章
+#[tauri::command]
+pub async fn get_favorite_articles(limit: Option<usize>, state: State<'_, AppState>) -> CommandResult<Vec<Article>> {
+    use crate::storage::Storage;
+
+    let storage = Storage::new(&state.data_dir)
+        .map_err(|e| format!("Failed to initialize storage: {}", e))?;
+
+    storage.get_favorite_articles(limit)
+        .map_err(|e| format!("Failed to get favorite articles: {}", e))
+}

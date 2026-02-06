@@ -188,6 +188,55 @@ impl Storage {
             .count())
     }
 
+    /// 获取单个文章
+    pub fn get_article(&self, id: &str) -> Result<Option<Article>> {
+        let articles = self.load_articles()?;
+        Ok(articles.into_iter().find(|a| a.id == id))
+    }
+
+    /// 更新阅读进度
+    pub fn update_reading_progress(&self, id: &str, progress: f32) -> Result<()> {
+        let clamped_progress = progress.clamp(0.0, 100.0);
+        let mut articles = self.load_articles()?;
+        if let Some(article) = articles.iter_mut().find(|a| a.id == id) {
+            article.reading_progress = clamped_progress;
+            self.save_articles(&articles)?;
+            Ok(())
+        } else {
+            Err(crate::error::RssError::StorageError(format!(
+                "Article not found: {}",
+                id
+            )))
+        }
+    }
+
+    /// 收藏/取消收藏文章
+    pub fn set_article_favorite(&self, id: &str, favorite: bool) -> Result<()> {
+        let mut articles = self.load_articles()?;
+        if let Some(article) = articles.iter_mut().find(|a| a.id == id) {
+            article.favorite = favorite;
+            self.save_articles(&articles)?;
+            Ok(())
+        } else {
+            Err(crate::error::RssError::StorageError(format!(
+                "Article not found: {}",
+                id
+            )))
+        }
+    }
+
+    /// 获取收藏的文章
+    pub fn get_favorite_articles(&self, limit: Option<usize>) -> Result<Vec<Article>> {
+        let mut articles = self.load_articles()?;
+        articles.retain(|a| a.favorite);
+        // 按收藏时间（创建时间）倒序
+        articles.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        if let Some(limit) = limit {
+            articles.truncate(limit);
+        }
+        Ok(articles)
+    }
+
     // 辅助函数 - 使用文件锁保护读写操作
     fn load_feeds(&self) -> Result<Vec<Feed>> {
         let path = self.get_feeds_path();
@@ -322,6 +371,8 @@ mod tests {
             published_at: Some(Utc::now()),
             read: false,
             created_at: Utc::now(),
+            reading_progress: 0.0,
+            favorite: false,
         }
     }
 
@@ -434,6 +485,52 @@ mod tests {
                 .iter()
                 .filter(|a| a.feed_id == feed_id && !a.read)
                 .count())
+        }
+
+        fn get_article(&self, id: &str) -> Result<Option<Article>> {
+            let articles = self.articles.lock().unwrap();
+            Ok(articles.iter().find(|a| a.id == id).cloned())
+        }
+
+        fn update_reading_progress(&self, id: &str, progress: f32) -> Result<()> {
+            let mut articles = self.articles.lock().unwrap();
+            let clamped_progress = progress.clamp(0.0, 100.0);
+            if let Some(article) = articles.iter_mut().find(|a| a.id == id) {
+                article.reading_progress = clamped_progress;
+                Ok(())
+            } else {
+                Err(crate::error::RssError::StorageError(format!(
+                    "Article not found: {}",
+                    id
+                )))
+            }
+        }
+
+        fn set_article_favorite(&self, id: &str, favorite: bool) -> Result<()> {
+            let mut articles = self.articles.lock().unwrap();
+            if let Some(article) = articles.iter_mut().find(|a| a.id == id) {
+                article.favorite = favorite;
+                Ok(())
+            } else {
+                Err(crate::error::RssError::StorageError(format!(
+                    "Article not found: {}",
+                    id
+                )))
+            }
+        }
+
+        fn get_favorite_articles(&self, limit: Option<usize>) -> Result<Vec<Article>> {
+            let articles = self.articles.lock().unwrap();
+            let mut result: Vec<Article> = articles
+                .iter()
+                .filter(|a| a.favorite)
+                .cloned()
+                .collect();
+            result.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+            if let Some(limit) = limit {
+                result.truncate(limit);
+            }
+            Ok(result)
         }
     }
 
@@ -645,5 +742,191 @@ mod tests {
             .expect("Failed to get articles");
         assert_eq!(articles.len(), 1, "Should deduplicate articles by link");
         assert_eq!(articles[0].link, link);
+    }
+
+    // ============= 阅读器功能测试 =============
+
+    #[test]
+    fn test_get_article() {
+        let storage = TestStorage::new();
+        let feed = create_test_feed();
+        let article = create_test_article(&feed.id);
+
+        storage.add_feed(&feed).expect("Failed to add feed");
+        storage.add_article(&article).expect("Failed to add article");
+
+        let retrieved = storage
+            .get_article(&article.id)
+            .expect("Failed to get article");
+        assert!(retrieved.is_some(), "Article should exist");
+        assert_eq!(retrieved.unwrap().id, article.id);
+    }
+
+    #[test]
+    fn test_get_article_not_found() {
+        let storage = TestStorage::new();
+        let retrieved = storage.get_article("nonexistent").expect("Failed to query");
+        assert!(retrieved.is_none(), "Non-existent article should return None");
+    }
+
+    #[test]
+    fn test_update_reading_progress() {
+        let storage = TestStorage::new();
+        let feed = create_test_feed();
+        let article = create_test_article(&feed.id);
+
+        storage.add_feed(&feed).expect("Failed to add feed");
+        storage.add_article(&article).expect("Failed to add article");
+
+        // 更新阅读进度
+        storage
+            .update_reading_progress(&article.id, 50.0)
+            .expect("Failed to update reading progress");
+
+        let retrieved = storage
+            .get_article(&article.id)
+            .expect("Failed to get article");
+        assert_eq!(
+            retrieved.unwrap().reading_progress,
+            50.0,
+            "Reading progress should be 50%"
+        );
+    }
+
+    #[test]
+    fn test_reading_progress_clamping() {
+        let storage = TestStorage::new();
+        let feed = create_test_feed();
+        let article = create_test_article(&feed.id);
+
+        storage.add_feed(&feed).expect("Failed to add feed");
+        storage.add_article(&article).expect("Failed to add article");
+
+        // 测试超出范围的上限
+        storage
+            .update_reading_progress(&article.id, 150.0)
+            .expect("Failed to update reading progress");
+
+        let retrieved = storage
+            .get_article(&article.id)
+            .expect("Failed to get article");
+        assert_eq!(
+            retrieved.unwrap().reading_progress,
+            100.0,
+            "Reading progress should be clamped to 100%"
+        );
+
+        // 测试超出范围的下限
+        storage
+            .update_reading_progress(&article.id, -10.0)
+            .expect("Failed to update reading progress");
+
+        let retrieved = storage
+            .get_article(&article.id)
+            .expect("Failed to get article");
+        assert_eq!(
+            retrieved.unwrap().reading_progress,
+            0.0,
+            "Reading progress should be clamped to 0%"
+        );
+    }
+
+    #[test]
+    fn test_set_article_favorite() {
+        let storage = TestStorage::new();
+        let feed = create_test_feed();
+        let article = create_test_article(&feed.id);
+
+        storage.add_feed(&feed).expect("Failed to add feed");
+        storage.add_article(&article).expect("Failed to add article");
+
+        // 收藏文章
+        storage
+            .set_article_favorite(&article.id, true)
+            .expect("Failed to favorite article");
+
+        let retrieved = storage
+            .get_article(&article.id)
+            .expect("Failed to get article");
+        assert!(retrieved.unwrap().favorite, "Article should be favorited");
+
+        // 取消收藏
+        storage
+            .set_article_favorite(&article.id, false)
+            .expect("Failed to unfavorite article");
+
+        let retrieved = storage
+            .get_article(&article.id)
+            .expect("Failed to get article");
+        assert!(!retrieved.unwrap().favorite, "Article should be unfavorited");
+    }
+
+    #[test]
+    fn test_get_favorite_articles() {
+        let storage = TestStorage::new();
+        let feed = create_test_feed();
+
+        let article1 = create_test_article(&feed.id);
+        let article2 = create_test_article(&feed.id);
+        let article3 = create_test_article(&feed.id);
+
+        storage.add_feed(&feed).expect("Failed to add feed");
+        storage.add_article(&article1).expect("Failed to add article1");
+        storage.add_article(&article2).expect("Failed to add article2");
+        storage.add_article(&article3).expect("Failed to add article3");
+
+        // 收藏 article1 和 article3
+        storage
+            .set_article_favorite(&article1.id, true)
+            .expect("Failed to favorite article1");
+        storage
+            .set_article_favorite(&article3.id, true)
+            .expect("Failed to favorite article3");
+
+        let favorites = storage
+            .get_favorite_articles(None)
+            .expect("Failed to get favorite articles");
+
+        assert_eq!(favorites.len(), 2, "Should have 2 favorite articles");
+        assert!(
+            favorites.iter().all(|a| a.favorite),
+            "All returned articles should be favorited"
+        );
+    }
+
+    #[test]
+    fn test_get_favorite_articles_with_limit() {
+        let storage = TestStorage::new();
+        let feed = create_test_feed();
+
+        storage.add_feed(&feed).expect("Failed to add feed");
+
+        for _ in 0..10 {
+            let article = create_test_article(&feed.id);
+            storage.add_article(&article).expect("Failed to add article");
+            storage
+                .set_article_favorite(&article.id, true)
+                .expect("Failed to favorite article");
+        }
+
+        let favorites = storage
+            .get_favorite_articles(Some(5))
+            .expect("Failed to get favorite articles");
+
+        assert_eq!(favorites.len(), 5, "Should return only 5 favorite articles");
+    }
+
+    #[test]
+    fn test_update_progress_nonexistent_article() {
+        let storage = TestStorage::new();
+        let result = storage.update_reading_progress("nonexistent", 50.0);
+        assert!(result.is_err(), "Should return error for non-existent article");
+    }
+
+    #[test]
+    fn test_set_favorite_nonexistent_article() {
+        let storage = TestStorage::new();
+        let result = storage.set_article_favorite("nonexistent", true);
+        assert!(result.is_err(), "Should return error for non-existent article");
     }
 }

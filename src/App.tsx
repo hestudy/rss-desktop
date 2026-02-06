@@ -1,9 +1,11 @@
 import { useEffect } from "react";
 import { RssProvider, useRss } from "./contexts/RssContext";
+import { ReaderProvider, useReader } from "./contexts/ReaderContext";
 import { ConfirmProvider } from "./components/ui/ConfirmDialog";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { FeedList } from "./components/feeds/FeedList";
 import { ArticleList } from "./components/articles/ArticleList";
+import { ArticleViewer } from "./components/articles/ArticleViewer";
 import { ResizeHandle } from "./components/ui/ResizeHandle";
 import { Group, Panel, type Layout, useGroupRef } from "react-resizable-panels";
 import { invoke } from "@tauri-apps/api/core";
@@ -18,8 +20,31 @@ const MAX_PANEL_SIZE_PERCENT = 40;
 const DEBUG = import.meta.env.DEV;
 
 function AppContent() {
-  const { loadFeeds } = useRss();
+  const { loadFeeds, articles } = useRss();
+  const { selectedArticleId, selectArticle, readerSettings, updateSettings } = useReader();
   const groupRef = useGroupRef();
+
+  // 获取当前选中的文章
+  const selectedArticle = articles.find(a => a.id === selectedArticleId) || null;
+  const currentIndex = selectedArticle ? articles.findIndex(a => a.id === selectedArticle.id) : -1;
+  const hasNext = currentIndex >= 0 && currentIndex < articles.length - 1;
+  const hasPrevious = currentIndex > 0;
+
+  const handleNext = () => {
+    if (hasNext) {
+      selectArticle(articles[currentIndex + 1].id);
+    }
+  };
+
+  const handlePrevious = () => {
+    if (hasPrevious) {
+      selectArticle(articles[currentIndex - 1].id);
+    }
+  };
+
+  const handleCloseReader = () => {
+    selectArticle(null);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -154,14 +179,28 @@ function AppContent() {
       {/* 拖拽手柄 */}
       <ResizeHandle />
 
-      {/* 右侧文章列表 */}
+      {/* 右侧文章列表或阅读器 */}
       <Panel
         id="article-panel"
         minSize={200}
         defaultSize={`${100 - DEFAULT_PANEL_SIZE}%`}
       >
         <div data-testid="article-panel-content" className="h-full">
-          <ArticleList />
+          {selectedArticle ? (
+            <ArticleViewer
+              article={selectedArticle}
+              articles={articles}
+              onClose={handleCloseReader}
+              onNext={handleNext}
+              onPrevious={handlePrevious}
+              hasNext={hasNext}
+              hasPrevious={hasPrevious}
+              readerSettings={readerSettings}
+              onSettingsChange={updateSettings}
+            />
+          ) : (
+            <ArticleList />
+          )}
         </div>
       </Panel>
     </Group>
@@ -173,7 +212,9 @@ function App() {
     <ThemeProvider>
       <ConfirmProvider>
         <RssProvider>
-          <AppContent />
+          <ReaderProvider>
+            <AppContent />
+          </ReaderProvider>
         </RssProvider>
       </ConfirmProvider>
     </ThemeProvider>

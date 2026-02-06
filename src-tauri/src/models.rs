@@ -25,6 +25,12 @@ pub struct Article {
     pub published_at: Option<DateTime<Utc>>,
     pub read: bool,
     pub created_at: DateTime<Utc>,
+    /// 阅读进度 0.0-100.0
+    #[serde(default)]
+    pub reading_progress: f32,
+    /// 是否收藏
+    #[serde(default)]
+    pub favorite: bool,
 }
 
 /// 添加订阅源的请求

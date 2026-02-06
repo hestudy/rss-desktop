@@ -6,6 +6,7 @@ import { zhCN } from 'date-fns/locale'
 import { ScrollArea } from '../ui/ScrollArea'
 import { Button } from '../ui/Button'
 import { useRss } from '../../contexts/RssContext'
+import { useReader } from '../../contexts/ReaderContext'
 
 export function ArticleList() {
   const {
@@ -19,6 +20,8 @@ export function ArticleList() {
     feeds,
   } = useRss()
 
+  const { selectArticle } = useReader()
+
   useEffect(() => {
     if (selectedFeedId) {
       loadArticles(selectedFeedId)
@@ -26,6 +29,9 @@ export function ArticleList() {
   }, [selectedFeedId, loadArticles])
 
   const handleArticleClick = async (article: Article) => {
+    // 选择文章并在阅读器中打开
+    selectArticle(article.id)
+    // 标记为已读
     if (!article.read) {
       await markArticleRead(article.id, true)
     }
