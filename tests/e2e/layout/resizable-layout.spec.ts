@@ -133,12 +133,12 @@ test.describe('Resizable Layout - 视觉反馈', () => {
     await layoutPage.goto()
   })
 
-  test('drag handle should have default width of 4px', async ({ page }) => {
+  test('drag handle should have default width of 6px', async ({ page }) => {
     const handleWidth = await layoutPage.getHandleComputedStyleWidth()
 
-    // Default width should be 4px (allow small margin)
-    expect(handleWidth).toBeGreaterThan(3)
-    expect(handleWidth).toBeLessThan(5)
+    // Default width should be 6px (allow small margin)
+    expect(handleWidth).toBeGreaterThan(5)
+    expect(handleWidth).toBeLessThan(7)
   })
 
   test('drag handle should be visible in light theme', async ({ page }) => {

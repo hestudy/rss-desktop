@@ -1,5 +1,18 @@
 @import "tailwindcss";
 
+/* 确保应用充满整个窗口 */
+html,
+body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+#root {
+  height: 100%;
+}
+
 @theme {
   --color-primary: #3b82f6;
   --color-primary-foreground: #ffffff;
