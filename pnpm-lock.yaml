@@ -84,6 +84,9 @@ importers:
       jsdom:
         specifier: ^28.0.0
         version: 28.0.0
+      mocks:
+        specifier: link:@tauri-apps/api/mocks
+        version: link:@tauri-apps/api/mocks
       tailwindcss:
         specifier: ^4.1.18
         version: 4.1.18

@@ -6,6 +6,13 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
+    include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    exclude: [
+      'node_modules/',
+      'src-tauri/',
+      'tests/',
+      '**/*.config.{ts,js}',
+    ],
     setupFiles: ['./src/test/setup.ts'],
     coverage: {
       provider: 'v8',
@@ -15,8 +22,8 @@ export default defineConfig({
         'src-tauri/',
         'tests/',
         '**/*.test.{ts,tsx}',
+        '**/*.spec.{ts,tsx}',
         '**/*.config.{ts,js}',
-        'src/test/',
       ],
     },
   },

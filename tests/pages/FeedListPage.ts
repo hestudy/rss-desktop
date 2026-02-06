@@ -46,13 +46,36 @@ export class FeedListPage {
   }
 
   /**
-   * Close any open dialog by clicking backdrop
+   * Close any open dialog by clicking backdrop or pressing Escape
    */
   async closeAnyDialog() {
+    // Try multiple times to ensure dialog is closed
+    for (let i = 0; i < 3; i++) {
+      // First try to close with Escape key (works for most dialogs)
+      const dialogTitle = this.page.locator('h2', { hasText: '添加 RSS 订阅' })
+      const isDialogOpen = await dialogTitle.isVisible().catch(() => false)
+
+      if (isDialogOpen) {
+        // Press Escape to close the dialog
+        await this.page.keyboard.press('Escape')
+        await this.page.waitForTimeout(500)
+
+        // Check if dialog closed
+        const stillOpen = await dialogTitle.isVisible().catch(() => false)
+        if (!stillOpen) {
+          break
+        }
+      } else {
+        // No dialog found
+        break
+      }
+    }
+
+    // Fallback: try clicking backdrop if still present
     const backdrop = this.page.locator('div[class*="bg-black/50"]')
     if (await backdrop.isVisible().catch(() => false)) {
       await backdrop.click({ force: true })
-      await this.page.waitForTimeout(200)
+      await this.page.waitForTimeout(500)
     }
   }
 
@@ -79,8 +102,21 @@ export class FeedListPage {
    */
   async clickAllArticles() {
     await this.ensureReady()
-    await this.allArticlesButton.click()
-    await this.page.waitForTimeout(500)
+
+    // Try clicking with retries in case dialog is blocking
+    for (let i = 0; i < 3; i++) {
+      try {
+        await this.allArticlesButton.click({ timeout: 5000 })
+        await this.page.waitForTimeout(300)
+        break
+      } catch (error) {
+        // May be blocked by dialog, try to close it
+        await this.closeAnyDialog()
+        if (i === 2) {
+          throw error // Re-throw on last attempt
+        }
+      }
+    }
   }
 
   /**
