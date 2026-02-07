@@ -7,7 +7,6 @@ import { RssApi } from '../../lib/api'
 
 // Mock lucide-react icons
 vi.mock('lucide-react', () => ({
-  X: () => 'X',
   Star: () => 'Star',
   StarOff: () => 'StarOff',
   ExternalLink: () => 'ExternalLink',
@@ -31,6 +30,18 @@ vi.mock('../../lib/api', () => ({
     setArticleFavorite: vi.fn(),
     openLink: vi.fn(),
   },
+}))
+
+// Mock useReader
+const mockSelectArticle = vi.fn()
+vi.mock('../../contexts/ReaderContext', () => ({
+  useReader: () => ({
+    selectedArticleId: 'article-1',
+    selectArticle: mockSelectArticle,
+    readerSettings: DEFAULT_READER_SETTINGS,
+    updateSettings: vi.fn(),
+    resetSettings: vi.fn(),
+  }),
 }))
 
 const mockArticle: Article = {
@@ -73,7 +84,6 @@ describe('ArticleViewer', () => {
       <ArticleViewer
         article={mockArticle}
         articles={mockArticles}
-        onClose={vi.fn()}
         readerSettings={mockReaderSettings}
         onSettingsChange={vi.fn()}
       />
@@ -87,7 +97,6 @@ describe('ArticleViewer', () => {
       <ArticleViewer
         article={mockArticle}
         articles={mockArticles}
-        onClose={vi.fn()}
         readerSettings={mockReaderSettings}
         onSettingsChange={vi.fn()}
       />
@@ -97,28 +106,18 @@ describe('ArticleViewer', () => {
     expect(screen.getByText('Test content paragraph 2')).toBeInTheDocument()
   })
 
-  it('应该调用 onClose 当点击关闭按钮', () => {
-    const mockOnClose = vi.fn()
-
+  it('应该调用 selectArticle(null) 当按 Escape 键', () => {
     render(
       <ArticleViewer
         article={mockArticle}
         articles={mockArticles}
-        onClose={mockOnClose}
         readerSettings={mockReaderSettings}
         onSettingsChange={vi.fn()}
       />
     )
 
-    const closeButton = screen.getAllByRole('button').find(
-      btn => btn.getAttribute('title') === '关闭 (Esc)'
-    )
-    expect(closeButton).toBeInTheDocument()
-
-    if (closeButton) {
-      fireEvent.click(closeButton)
-      expect(mockOnClose).toHaveBeenCalledTimes(1)
-    }
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(mockSelectArticle).toHaveBeenCalledWith(null)
   })
 
   it('应该显示收藏按钮并可以切换收藏状态', async () => {
@@ -128,7 +127,6 @@ describe('ArticleViewer', () => {
       <ArticleViewer
         article={mockArticle}
         articles={mockArticles}
-        onClose={vi.fn()}
         readerSettings={mockReaderSettings}
         onSettingsChange={vi.fn()}
       />
@@ -153,7 +151,6 @@ describe('ArticleViewer', () => {
       <ArticleViewer
         article={mockArticles[0]}
         articles={mockArticles}
-        onClose={vi.fn()}
         readerSettings={mockReaderSettings}
         onSettingsChange={vi.fn()}
       />
@@ -169,7 +166,6 @@ describe('ArticleViewer', () => {
       <ArticleViewer
         article={mockArticles[0]}
         articles={mockArticles}
-        onClose={vi.fn()}
         onNext={mockOnNext}
         hasNext={true}
         hasPrevious={false}
@@ -196,7 +192,6 @@ describe('ArticleViewer', () => {
       <ArticleViewer
         article={mockArticles[1]}
         articles={mockArticles}
-        onClose={vi.fn()}
         onPrevious={mockOnPrevious}
         hasNext={false}
         hasPrevious={true}
@@ -221,7 +216,6 @@ describe('ArticleViewer', () => {
       <ArticleViewer
         article={mockArticles[0]}
         articles={mockArticles}
-        onClose={vi.fn()}
         hasNext={true}
         hasPrevious={false}
         readerSettings={mockReaderSettings}
@@ -238,7 +232,6 @@ describe('ArticleViewer', () => {
       <ArticleViewer
         article={mockArticles[2]}
         articles={mockArticles}
-        onClose={vi.fn()}
         hasNext={false}
         hasPrevious={true}
         readerSettings={mockReaderSettings}
@@ -255,7 +248,6 @@ describe('ArticleViewer', () => {
       <ArticleViewer
         article={mockArticle}
         articles={mockArticles}
-        onClose={vi.fn()}
         readerSettings={mockReaderSettings}
         onSettingsChange={vi.fn()}
       />
@@ -281,7 +273,6 @@ describe('ArticleViewer', () => {
       <ArticleViewer
         article={mockArticle}
         articles={mockArticles}
-        onClose={vi.fn()}
         readerSettings={mockReaderSettings}
         onSettingsChange={mockOnSettingsChange}
       />
@@ -295,8 +286,9 @@ describe('ArticleViewer', () => {
     if (settingsButton) {
       fireEvent.click(settingsButton)
 
-      // 调整字体大小
-      const fontSizeSlider = screen.getByLabelText(/字体大小/)
+      // 调整字体大小 - 找到字体大小滑块 (range input)
+      const sliders = screen.getAllByRole('slider')
+      const fontSizeSlider = sliders[0] // 第一个 slider 是字体大小
       fireEvent.input(fontSizeSlider, { target: { value: '20' } })
 
       expect(mockOnSettingsChange).toHaveBeenCalledWith(
@@ -317,7 +309,6 @@ describe('ArticleViewer', () => {
       <ArticleViewer
         article={articleWithScript}
         articles={mockArticles}
-        onClose={vi.fn()}
         readerSettings={mockReaderSettings}
         onSettingsChange={vi.fn()}
       />
@@ -332,7 +323,6 @@ describe('ArticleViewer', () => {
       <ArticleViewer
         article={mockArticle}
         articles={mockArticles}
-        onClose={vi.fn()}
         readerSettings={mockReaderSettings}
         onSettingsChange={vi.fn()}
       />
@@ -353,7 +343,6 @@ describe('ArticleViewer', () => {
       <ArticleViewer
         article={mockArticle}
         articles={mockArticles}
-        onClose={vi.fn()}
         readerSettings={settingsWithoutProgress}
         onSettingsChange={vi.fn()}
       />
@@ -362,22 +351,5 @@ describe('ArticleViewer', () => {
     // 进度条容器应该不存在
     const progressContainer = document.querySelector('.h-1.bg-muted')
     expect(progressContainer).not.toBeInTheDocument()
-  })
-
-  it('应该显示快捷键提示', () => {
-    render(
-      <ArticleViewer
-        article={mockArticle}
-        articles={mockArticles}
-        onClose={vi.fn()}
-        readerSettings={mockReaderSettings}
-        onSettingsChange={vi.fn()}
-      />
-    )
-
-    expect(screen.getByText('Esc: 关闭')).toBeInTheDocument()
-    expect(screen.getByText('F: 收藏')).toBeInTheDocument()
-    expect(screen.getByText('P/←: 上一篇')).toBeInTheDocument()
-    expect(screen.getByText('N/→: 下一篇')).toBeInTheDocument()
   })
 })

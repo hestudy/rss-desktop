@@ -26,6 +26,7 @@ export function ThemeSwitcher() {
         variant="ghost"
         onClick={() => setIsOpen(!isOpen)}
         title="主题设置"
+        className="text-sidebar-muted hover:text-sidebar-fg hover:bg-sidebar-hover"
       >
         <Palette className="w-4 h-4" />
       </Button>
@@ -36,7 +37,7 @@ export function ThemeSwitcher() {
             className="fixed inset-0 z-40"
             onClick={() => setIsOpen(false)}
           />
-          <div className="absolute right-0 top-full mt-2 z-50 bg-background border rounded-xl shadow-xl w-64 animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="absolute left-full bottom-0 ml-2 z-50 bg-background text-foreground border rounded-xl shadow-xl w-64 animate-in fade-in slide-in-from-bottom-2 duration-200">
             <div className="p-4">
               {/* 主题预设 */}
               <div className="mb-4">

@@ -8,6 +8,7 @@ interface RssContextType {
   selectedFeedId: string | null
   isLoading: boolean
   error: string | null
+  showFavoritesOnly: boolean
   loadFeeds: () => Promise<void>
   loadArticles: (feedId?: string) => Promise<void>
   addFeed: (url: string) => Promise<Feed>
@@ -15,6 +16,7 @@ interface RssContextType {
   refreshFeed: (id: string) => Promise<void>
   refreshAllFeeds: () => Promise<void>
   selectFeed: (id: string | null) => void
+  selectFavorites: () => void
   markArticleRead: (id: string, read: boolean) => Promise<void>
   markAllRead: (feedId: string) => Promise<void>
   openLink: (url: string) => Promise<void>
@@ -41,6 +43,7 @@ export function RssProvider({ children }: RssProviderProps) {
   const [selectedFeedId, setSelectedFeedId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false)
 
   const loadFeeds = useCallback(async () => {
     setIsLoading(true)
@@ -149,9 +152,25 @@ export function RssProvider({ children }: RssProviderProps) {
 
   const selectFeed = useCallback((id: string | null) => {
     setSelectedFeedId(id)
+    setShowFavoritesOnly(false)
     // 加载文章：指定订阅时加载该订阅的文章，否则加载全部文章
     loadArticles(id || undefined)
   }, [loadArticles])
+
+  const selectFavorites = useCallback(async () => {
+    setSelectedFeedId(null)
+    setShowFavoritesOnly(true)
+    setIsLoading(true)
+    setError(null)
+    try {
+      const data = await RssApi.getFavoriteArticles(100)
+      setArticles(data)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load favorites')
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
 
   const markArticleRead = useCallback(async (id: string, read: boolean) => {
     try {
@@ -199,6 +218,7 @@ export function RssProvider({ children }: RssProviderProps) {
     selectedFeedId,
     isLoading,
     error,
+    showFavoritesOnly,
     loadFeeds,
     loadArticles,
     addFeed,
@@ -206,6 +226,7 @@ export function RssProvider({ children }: RssProviderProps) {
     refreshFeed,
     refreshAllFeeds,
     selectFeed,
+    selectFavorites,
     markArticleRead,
     markAllRead,
     openLink,

@@ -6,18 +6,31 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { FeedList } from "./components/feeds/FeedList";
 import { ArticleList } from "./components/articles/ArticleList";
 import { ArticleViewer } from "./components/articles/ArticleViewer";
+import { EmptyReaderPlaceholder } from "./components/articles/EmptyReaderPlaceholder";
 import { ResizeHandle } from "./components/ui/ResizeHandle";
 import { Group, Panel, type Layout, useGroupRef } from "react-resizable-panels";
 import { invoke } from "@tauri-apps/api/core";
 import "./styles/themes/index.css";
 
-const STORAGE_KEY = "panel-layout";
-const DEFAULT_PANEL_SIZE = 20; // 左侧面板默认大小（百分比数字）
-const MIN_PANEL_SIZE_PERCENT = 15;
-const MAX_PANEL_SIZE_PERCENT = 40;
+const STORAGE_KEY = "panel-layout-v2";
 
-// 仅在开发模式下启用调试日志
-const DEBUG = import.meta.env.DEV;
+// 三栏默认大小（百分比）
+const DEFAULT_SIDEBAR_SIZE = 15;
+const DEFAULT_ARTICLE_LIST_SIZE = 30;
+const DEFAULT_READER_SIZE = 55;
+
+// 面板约束
+const MIN_SIDEBAR_PERCENT = 12;
+const MAX_SIDEBAR_PERCENT = 25;
+const MIN_ARTICLE_LIST_PERCENT = 20;
+const MAX_ARTICLE_LIST_PERCENT = 45;
+const MIN_READER_SIZE = 200; // px
+
+interface ThreePanelLayout {
+  sidebar: number;
+  articleList: number;
+  reader: number;
+}
 
 function AppContent() {
   const { loadFeeds, articles } = useRss();
@@ -42,89 +55,47 @@ function AppContent() {
     }
   };
 
-  const handleCloseReader = () => {
-    selectArticle(null);
-  };
-
   useEffect(() => {
     let cancelled = false;
 
     loadFeeds();
 
-    // 从 Tauri 存储加载面板大小
+    // 从 Tauri 存储加载面板布局
     invoke("get_store_value", { key: STORAGE_KEY })
       .then((value: unknown) => {
         if (cancelled) return;
 
-        if (DEBUG) {
-          console.log(
-            "[Panel Layout] Raw value from storage:",
-            value,
-            "type:",
-            typeof value,
-          );
-        }
+        let layout: ThreePanelLayout | null = null;
 
-        // 处理 serde_json::Value 格式的返回值
-        let numValue: number | null = null;
-
-        if (typeof value === "number") {
-          numValue = value;
-        } else if (value && typeof value === "object") {
-          // serde_json::Value 可能被序列化为对象
+        if (value && typeof value === "object") {
           const record = value as Record<string, unknown>;
-          if (DEBUG) {
-            console.log(
-              "[Panel Layout] Value is object, keys:",
-              Object.keys(record),
-            );
-          }
-          if ("n" in record && typeof record.n === "number") {
-            numValue = record.n;
+          const sidebar = typeof record.sidebar === "number" ? record.sidebar : null;
+          const articleList = typeof record.articleList === "number" ? record.articleList : null;
+          const reader = typeof record.reader === "number" ? record.reader : null;
+
+          if (
+            sidebar !== null &&
+            articleList !== null &&
+            reader !== null &&
+            sidebar >= MIN_SIDEBAR_PERCENT &&
+            sidebar <= MAX_SIDEBAR_PERCENT &&
+            articleList >= MIN_ARTICLE_LIST_PERCENT &&
+            articleList <= MAX_ARTICLE_LIST_PERCENT
+          ) {
+            layout = { sidebar, articleList, reader };
           }
         }
 
-        if (DEBUG) {
-          console.log("[Panel Layout] Parsed numValue:", numValue);
-        }
-
-        // 严格的值验证：必须在有效范围内 (15-40)
-        if (
-          numValue !== null &&
-          numValue >= MIN_PANEL_SIZE_PERCENT &&
-          numValue <= MAX_PANEL_SIZE_PERCENT
-        ) {
-          if (DEBUG) {
-            console.log("[Panel Layout] Using valid value:", numValue);
-          }
-          // 使用 imperative API 设置布局
-          if (!cancelled && groupRef.current) {
-            groupRef.current.setLayout({
-              "feed-panel": numValue,
-              "article-panel": 100 - numValue,
-            });
-          }
-        } else {
-          // 值无效，使用默认值
-          if (DEBUG) {
-            console.log(
-              "[Panel Layout] Invalid value, using default:",
-              DEFAULT_PANEL_SIZE,
-            );
-          }
-          if (!cancelled && groupRef.current) {
-            groupRef.current.setLayout({
-              "feed-panel": DEFAULT_PANEL_SIZE,
-              "article-panel": 100 - DEFAULT_PANEL_SIZE,
-            });
-          }
+        if (layout && !cancelled && groupRef.current) {
+          groupRef.current.setLayout({
+            "sidebar-panel": layout.sidebar,
+            "article-list-panel": layout.articleList,
+            "reader-panel": layout.reader,
+          });
         }
       })
-      .catch((error) => {
-        if (cancelled) return;
-        if (DEBUG) {
-          console.debug("Failed to load panel layout from storage:", error);
-        }
+      .catch(() => {
+        // 存储加载失败时使用默认布局
       });
 
     return () => {
@@ -133,21 +104,24 @@ function AppContent() {
   }, [loadFeeds, groupRef]);
 
   const handleLayoutChange = (newLayout: Layout) => {
-    // 保存左侧面板的大小
-    const feedPanelSize = newLayout["feed-panel"];
-    // 更严格的验证，与读取逻辑保持一致 (15-40)
+    const sidebar = newLayout["sidebar-panel"];
+    const articleList = newLayout["article-list-panel"];
+    const reader = newLayout["reader-panel"];
+
     if (
-      feedPanelSize &&
-      typeof feedPanelSize === "number" &&
-      feedPanelSize >= MIN_PANEL_SIZE_PERCENT &&
-      feedPanelSize <= MAX_PANEL_SIZE_PERCENT
+      typeof sidebar === "number" &&
+      typeof articleList === "number" &&
+      typeof reader === "number" &&
+      sidebar >= MIN_SIDEBAR_PERCENT &&
+      sidebar <= MAX_SIDEBAR_PERCENT &&
+      articleList >= MIN_ARTICLE_LIST_PERCENT &&
+      articleList <= MAX_ARTICLE_LIST_PERCENT
     ) {
       invoke("set_store_value", {
         key: STORAGE_KEY,
-        value: feedPanelSize,
-      }).catch((error) => {
-        // 存储失败时记录日志
-        console.warn("Failed to save panel layout:", error);
+        value: { sidebar, articleList, reader },
+      }).catch(() => {
+        // 存储保存失败时静默忽略
       });
     }
   };
@@ -159,17 +133,18 @@ function AppContent() {
       orientation="horizontal"
       className="h-screen"
       defaultLayout={{
-        "feed-panel": DEFAULT_PANEL_SIZE,
-        "article-panel": 100 - DEFAULT_PANEL_SIZE,
+        "sidebar-panel": DEFAULT_SIDEBAR_SIZE,
+        "article-list-panel": DEFAULT_ARTICLE_LIST_SIZE,
+        "reader-panel": DEFAULT_READER_SIZE,
       }}
       onLayoutChange={handleLayoutChange}
     >
       {/* 左侧订阅列表 */}
       <Panel
-        id="feed-panel"
-        minSize={`${MIN_PANEL_SIZE_PERCENT}%`}
-        maxSize={`${MAX_PANEL_SIZE_PERCENT}%`}
-        defaultSize={`${DEFAULT_PANEL_SIZE}%`}
+        id="sidebar-panel"
+        minSize={`${MIN_SIDEBAR_PERCENT}%`}
+        maxSize={`${MAX_SIDEBAR_PERCENT}%`}
+        defaultSize={`${DEFAULT_SIDEBAR_SIZE}%`}
       >
         <div data-testid="feed-panel-content" className="h-full">
           <FeedList />
@@ -177,20 +152,34 @@ function AppContent() {
       </Panel>
 
       {/* 拖拽手柄 */}
-      <ResizeHandle />
+      <ResizeHandle id="resize-handle-1" />
 
-      {/* 右侧文章列表或阅读器 */}
+      {/* 中间文章列表 */}
       <Panel
-        id="article-panel"
-        minSize={200}
-        defaultSize={`${100 - DEFAULT_PANEL_SIZE}%`}
+        id="article-list-panel"
+        minSize={`${MIN_ARTICLE_LIST_PERCENT}%`}
+        maxSize={`${MAX_ARTICLE_LIST_PERCENT}%`}
+        defaultSize={`${DEFAULT_ARTICLE_LIST_SIZE}%`}
       >
-        <div data-testid="article-panel-content" className="h-full">
+        <div data-testid="article-list-panel-content" className="h-full">
+          <ArticleList />
+        </div>
+      </Panel>
+
+      {/* 拖拽手柄 */}
+      <ResizeHandle id="resize-handle-2" />
+
+      {/* 右侧阅读器 */}
+      <Panel
+        id="reader-panel"
+        minSize={MIN_READER_SIZE}
+        defaultSize={`${DEFAULT_READER_SIZE}%`}
+      >
+        <div data-testid="reader-panel-content" className="h-full">
           {selectedArticle ? (
             <ArticleViewer
               article={selectedArticle}
               articles={articles}
-              onClose={handleCloseReader}
               onNext={handleNext}
               onPrevious={handlePrevious}
               hasNext={hasNext}
@@ -199,7 +188,7 @@ function AppContent() {
               onSettingsChange={updateSettings}
             />
           ) : (
-            <ArticleList />
+            <EmptyReaderPlaceholder />
           )}
         </div>
       </Panel>

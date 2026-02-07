@@ -1,16 +1,16 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { X, Star, StarOff, ExternalLink, ChevronLeft, ChevronRight, Settings } from 'lucide-react'
+import { Star, StarOff, ExternalLink, ChevronLeft, ChevronRight, Settings } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
 import DOMPurify from 'dompurify'
 import { RssApi } from '../../lib/api'
 import type { Article, ReaderSettings } from '../../types'
 import { DEFAULT_READER_SETTINGS } from '../../types'
+import { useReader } from '../../contexts/ReaderContext'
 
 interface ArticleViewerProps {
   article: Article
   articles: Article[]
-  onClose: () => void
   onNext?: () => void
   onPrevious?: () => void
   hasNext?: boolean
@@ -22,14 +22,13 @@ interface ArticleViewerProps {
 // 允许的 HTML 标签和属性
 const SANITIZE_CONFIG = {
   ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'u', 's', 'a', 'img', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'blockquote', 'code', 'pre', 'div', 'span'],
-  ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'class', 'id'],
+  ALLOWED_ATTR: ['href', 'src', 'alt', 'title'],
   ALLOW_DATA_ATTR: false,
 }
 
 export function ArticleViewer({
   article,
   articles,
-  onClose,
   onNext,
   onPrevious,
   hasNext = false,
@@ -41,6 +40,7 @@ export function ArticleViewer({
   const [isFavorite, setIsFavorite] = useState(article.favorite ?? false)
   const [showSettings, setShowSettings] = useState(false)
   const [scrollProgress, setScrollProgress] = useState(article.reading_progress ?? 0)
+  const { selectArticle } = useReader()
 
   // 处理滚动并更新阅读进度
   const handleScroll = useCallback(() => {
@@ -77,7 +77,7 @@ export function ArticleViewer({
     setIsFavorite(newFavorite)
     try {
       await RssApi.setArticleFavorite(article.id, newFavorite)
-    } catch (error) {
+    } catch {
       // 回滚状态
       setIsFavorite(!newFavorite)
     }
@@ -93,7 +93,7 @@ export function ArticleViewer({
 
       switch (e.key) {
         case 'Escape':
-          onClose()
+          selectArticle(null)
           break
         case 'f':
           handleToggleFavorite()
@@ -115,7 +115,7 @@ export function ArticleViewer({
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [hasNext, hasPrevious, handleToggleFavorite, onClose, onNext, onPrevious])
+  }, [hasNext, hasPrevious, handleToggleFavorite, selectArticle, onNext, onPrevious])
 
   // 清理 HTML 内容 - 使用 DOMPurify
   const sanitizeHtml = useCallback((html?: string): string => {
@@ -190,15 +190,6 @@ export function ArticleViewer({
             title="阅读设置"
           >
             <Settings className="w-5 h-5" />
-          </button>
-
-          {/* 关闭按钮 */}
-          <button
-            onClick={onClose}
-            className="p-2 rounded hover:bg-muted transition-colors text-muted-foreground"
-            title="关闭 (Esc)"
-          >
-            <X className="w-5 h-5" />
           </button>
         </div>
       </div>
@@ -379,14 +370,6 @@ export function ArticleViewer({
             </button>
           </div>
         )}
-      </div>
-
-      {/* 快捷键提示 */}
-      <div className="px-4 py-2 border-t border-border bg-muted/30 text-xs text-muted-foreground flex justify-center gap-4">
-        <span>Esc: 关闭</span>
-        <span>F: 收藏</span>
-        <span>P/←: 上一篇</span>
-        <span>N/→: 下一篇</span>
       </div>
     </div>
   )

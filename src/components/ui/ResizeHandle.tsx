@@ -21,7 +21,7 @@ export function ResizeHandle({ className = '', id = 'resize-handle' }: ResizeHan
       data-testid="resize-handle"
       className={`bg-border hover:bg-muted-foreground/50 transition-colors ${className}`}
       style={{
-        width: '6px',
+        width: '4px',
       }}
     />
   )

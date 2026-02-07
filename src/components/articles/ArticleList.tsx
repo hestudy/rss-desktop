@@ -18,9 +18,10 @@ export function ArticleList() {
     loadArticles,
     markAllRead,
     feeds,
+    showFavoritesOnly,
   } = useRss()
 
-  const { selectArticle } = useReader()
+  const { selectedArticleId, selectArticle } = useReader()
 
   useEffect(() => {
     if (selectedFeedId) {
@@ -59,18 +60,30 @@ export function ArticleList() {
     })
   }
 
+  // 获取文章来源 feed 名称
+  const getFeedName = (feedId: string): string | undefined => {
+    const found = feeds.find(f => f.feed.id === feedId)
+    return found?.feed.title
+  }
+
   const currentFeed = feeds.find(f => f.feed.id === selectedFeedId)
   const unreadCount = currentFeed?.unread_count || 0
 
+  const headerTitle = showFavoritesOnly
+    ? '收藏文章'
+    : currentFeed
+      ? currentFeed.feed.title
+      : '全部文章'
+
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col border-r border-border">
       {/* 头部 */}
       <div className="p-4 border-b">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold">
-            {currentFeed ? currentFeed.feed.title : '全部文章'}
+            {headerTitle}
           </h2>
-          {unreadCount > 0 && (
+          {unreadCount > 0 && !showFavoritesOnly && (
             <Button size="sm" variant="ghost" onClick={handleMarkAllRead}>
               全部已读
             </Button>
@@ -80,63 +93,76 @@ export function ArticleList() {
 
       {/* 文章列表 */}
       <ScrollArea className="flex-1">
-        <div className="p-2">
+        <div>
           {isLoading ? (
             <div className="text-center py-8 text-muted-foreground">加载中...</div>
           ) : articles.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">暂无文章</div>
+            <div className="text-center py-8 text-muted-foreground">
+              {showFavoritesOnly ? '暂无收藏文章' : '暂无文章'}
+            </div>
           ) : (
-            <div className="space-y-2">
-              {articles.map(article => (
-                <div
-                  key={article.id}
-                  onClick={() => handleArticleClick(article)}
-                  className={`group relative p-4 rounded-xl border transition-all duration-200 cursor-pointer ${
-                    article.read
-                      ? 'bg-read-background border-transparent opacity-80'
-                      : 'bg-card border-border shadow-sm hover:shadow-md hover:border-primary/30'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                      <h3
-                        className={`mb-2 line-clamp-2 leading-relaxed ${
-                          article.read
-                            ? 'text-read-foreground font-normal'
-                            : 'text-card-foreground font-medium'
-                        }`}
-                      >
-                        {article.title}
-                      </h3>
-                      {article.description && (
-                        <p className={`text-sm line-clamp-2 mb-2 ${
+            <div>
+              {articles.map(article => {
+                const isSelected = selectedArticleId === article.id
+                return (
+                  <div
+                    key={article.id}
+                    onClick={() => handleArticleClick(article)}
+                    className={`group relative px-4 py-3 border-b border-border/50 transition-all duration-200 cursor-pointer ${
+                      isSelected
+                        ? 'bg-accent border-l-2 border-l-primary'
+                        : article.read
+                          ? 'bg-read-background opacity-80 hover:opacity-100'
+                          : 'hover:bg-accent/50'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <h3
+                          className={`mb-1 line-clamp-2 leading-snug text-sm ${
+                            article.read
+                              ? 'text-read-foreground font-normal'
+                              : 'text-card-foreground font-medium'
+                          }`}
+                        >
+                          {article.title}
+                        </h3>
+                        {article.description && (
+                          <p className={`text-xs line-clamp-1 mb-1 ${
+                            article.read
+                              ? 'text-read-foreground'
+                              : 'text-muted-foreground'
+                          }`}>
+                            {article.description}
+                          </p>
+                        )}
+                        <div className={`flex items-center gap-1.5 text-xs ${
                           article.read
                             ? 'text-read-foreground'
                             : 'text-muted-foreground'
                         }`}>
-                          {article.description}
-                        </p>
-                      )}
-                      <div className={`flex items-center gap-1.5 text-xs ${
-                        article.read
-                          ? 'text-read-foreground'
-                          : 'text-muted-foreground'
-                      }`}>
-                        <Clock className="w-3 h-3" />
-                        <span>{formatDate(article.published_at)}</span>
+                          {!selectedFeedId && !showFavoritesOnly && (
+                            <>
+                              <span className="truncate max-w-[120px]">{getFeedName(article.feed_id)}</span>
+                              <span>·</span>
+                            </>
+                          )}
+                          <Clock className="w-3 h-3" />
+                          <span>{formatDate(article.published_at)}</span>
+                        </div>
                       </div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={(e) => handleOpenLink(e, article.link)}
+                        className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                      </Button>
                     </div>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={(e) => handleOpenLink(e, article.link)}
-                      className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                    </Button>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>
