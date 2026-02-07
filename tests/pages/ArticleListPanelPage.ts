@@ -38,8 +38,8 @@ export class ArticleListPanelPage {
     this.headerTitle = this.panelContent.locator('h2').first()
     this.markAllReadButton = this.panelContent.locator('button', { hasText: '全部已读' })
 
-    // Article items - clickable rows with border-b
-    this.articleItems = this.panelContent.locator('div.cursor-pointer.border-b')
+    // Article items - using data-testid from ArticleCard component
+    this.articleItems = this.panelContent.locator('[data-testid="article-card"]')
 
     // States
     this.emptyState = this.panelContent.locator('text=暂无文章')

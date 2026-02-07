@@ -30,6 +30,12 @@
   --color-sidebar-active: #FF5722;
   --color-sidebar-hover: #292524;
   --color-sidebar-border: #292524;
+
+  /* 徽章和未读指示器 */
+  --color-badge-bg: #ef4444;
+  --color-badge-fg: #ffffff;
+  --color-unread-dot: #ef4444;
+  --color-card-hover: var(--color-accent);
 }
 
 /* ==================== 护眼主题 (默认) ==================== */

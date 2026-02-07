@@ -17,8 +17,8 @@ export class ArticleListPage {
   constructor(page: Page) {
     this.page = page
     this.container = page.locator('[data-testid="article-list-panel-content"]')
-    // Articles now use list-row style with cursor-pointer
-    this.articleItems = this.container.locator('div.cursor-pointer')
+    // Articles now use ArticleCard component with data-testid
+    this.articleItems = this.container.locator('[data-testid="article-card"]')
     this.markAllReadButton = page.locator('button', { hasText: '全部已读' })
     this.emptyState = page.locator('text=暂无文章')
     this.loadingState = page.locator('text=加载中')

@@ -46,10 +46,10 @@ export class ReaderPanelPage {
     // Use the data-testid for reader panel content
     this.panelContent = page.locator('[data-testid="reader-panel-content"]')
 
-    // Empty placeholder elements
-    this.emptyPlaceholder = this.panelContent.locator('text=选择一篇文章开始阅读')
-    this.emptyPlaceholderTitle = this.panelContent.locator('p').filter({ hasText: '选择一篇文章开始阅读' })
-    this.emptyPlaceholderSubtitle = this.panelContent.locator('p').filter({ hasText: '从左侧列表中选择感兴趣的文章' })
+    // Empty placeholder elements (updated for UI redesign)
+    this.emptyPlaceholder = this.panelContent.locator('text=准备好开始阅读了吗?')
+    this.emptyPlaceholderTitle = this.panelContent.locator('h2').filter({ hasText: '准备好开始阅读了吗?' })
+    this.emptyPlaceholderSubtitle = this.panelContent.locator('p').filter({ hasText: '从左侧选择一篇文章' })
 
     // Article viewer elements
     this.articleTitle = this.panelContent.locator('h1').first()
