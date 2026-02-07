@@ -5,7 +5,7 @@ use std::path::{Path, Component};
 // 存储层实现 - 使用 JSON 文件存储 + 文件锁
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufReader, BufWriter, Write};
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 use fs2::FileExt;
 
 const FEEDS_FILE: &str = "feeds.json";
@@ -45,9 +45,9 @@ fn validate_data_dir(path: &Path) -> Result<()> {
     Ok(())
 }
 
-#[derive(Clone)]
 pub struct Storage {
-    data_dir: Arc<Mutex<std::path::PathBuf>>,
+    data_dir: std::path::PathBuf,
+    write_lock: Mutex<()>,
 }
 
 impl Storage {
@@ -71,26 +71,32 @@ impl Storage {
         }
 
         Ok(Self {
-            data_dir: Arc::new(Mutex::new(data_dir)),
+            data_dir,
+            write_lock: Mutex::new(()),
         })
     }
 
-    fn get_feeds_path(&self) -> Result<std::path::PathBuf> {
-        let dir = self.data_dir
-            .lock()
-            .map_err(|e| crate::error::RssError::LockError(e.to_string()))?;
-        Ok(dir.join(FEEDS_FILE))
+    fn acquire_write_lock(&self) -> Result<std::sync::MutexGuard<'_, ()>> {
+        self.write_lock.lock()
+            .map_err(|e| crate::error::RssError::LockError(e.to_string()))
     }
 
-    fn get_articles_path(&self) -> Result<std::path::PathBuf> {
-        let dir = self.data_dir
-            .lock()
-            .map_err(|e| crate::error::RssError::LockError(e.to_string()))?;
-        Ok(dir.join(ARTICLES_FILE))
+    fn get_feeds_path(&self) -> std::path::PathBuf {
+        self.data_dir.join(FEEDS_FILE)
+    }
+
+    fn get_articles_path(&self) -> std::path::PathBuf {
+        self.data_dir.join(ARTICLES_FILE)
     }
 
     pub fn add_feed(&self, feed: &Feed) -> Result<()> {
+        let _lock = self.acquire_write_lock()?;
         let mut feeds = self.load_feeds()?;
+        if feeds.iter().any(|f| f.url == feed.url) {
+            return Err(crate::error::RssError::StorageError(
+                "Feed with this URL already exists".to_string()
+            ));
+        }
         feeds.push(feed.clone());
         self.save_feeds(&feeds)?;
         Ok(())
@@ -106,6 +112,7 @@ impl Storage {
     }
 
     pub fn update_feed(&self, feed: &Feed) -> Result<()> {
+        let _lock = self.acquire_write_lock()?;
         let mut feeds = self.load_feeds()?;
         if let Some(existing) = feeds.iter_mut().find(|f| f.id == feed.id) {
             *existing = feed.clone();
@@ -117,6 +124,7 @@ impl Storage {
     }
 
     pub fn delete_feed(&self, id: &str) -> Result<()> {
+        let _lock = self.acquire_write_lock()?;
         let mut feeds = self.load_feeds()?;
         let original_len = feeds.len();
         feeds.retain(|f| f.id != id);
@@ -133,6 +141,7 @@ impl Storage {
     }
 
     pub fn add_article(&self, article: &Article) -> Result<()> {
+        let _lock = self.acquire_write_lock()?;
         let mut articles = self.load_articles()?;
         // 检查是否已存在（通过链接去重）
         if !articles.iter().any(|a| a.link == article.link) {
@@ -149,9 +158,9 @@ impl Storage {
         }
         // 按发布时间倒序排列
         articles.sort_by(|a, b| {
-            b.published_at
-                .unwrap_or(a.created_at)
-                .cmp(&a.published_at.unwrap_or(b.created_at))
+            let a_time = a.published_at.unwrap_or(a.created_at);
+            let b_time = b.published_at.unwrap_or(b.created_at);
+            b_time.cmp(&a_time)
         });
         if let Some(limit) = limit {
             articles.truncate(limit);
@@ -160,6 +169,7 @@ impl Storage {
     }
 
     pub fn mark_article_read(&self, id: &str, read: bool) -> Result<()> {
+        let _lock = self.acquire_write_lock()?;
         let mut articles = self.load_articles()?;
         if let Some(article) = articles.iter_mut().find(|a| a.id == id) {
             article.read = read;
@@ -174,6 +184,7 @@ impl Storage {
     }
 
     pub fn mark_all_read(&self, feed_id: &str) -> Result<()> {
+        let _lock = self.acquire_write_lock()?;
         let mut articles = self.load_articles()?;
         for article in articles.iter_mut() {
             if article.feed_id == feed_id {
@@ -200,6 +211,7 @@ impl Storage {
 
     /// 更新阅读进度
     pub fn update_reading_progress(&self, id: &str, progress: f32) -> Result<()> {
+        let _lock = self.acquire_write_lock()?;
         let clamped_progress = progress.clamp(0.0, 100.0);
         let mut articles = self.load_articles()?;
         if let Some(article) = articles.iter_mut().find(|a| a.id == id) {
@@ -216,6 +228,7 @@ impl Storage {
 
     /// 收藏/取消收藏文章
     pub fn set_article_favorite(&self, id: &str, favorite: bool) -> Result<()> {
+        let _lock = self.acquire_write_lock()?;
         let mut articles = self.load_articles()?;
         if let Some(article) = articles.iter_mut().find(|a| a.id == id) {
             article.favorite = favorite;
@@ -243,7 +256,7 @@ impl Storage {
 
     // 辅助函数 - 使用文件锁保护读写操作
     fn load_feeds(&self) -> Result<Vec<Feed>> {
-        let path = self.get_feeds_path()?;
+        let path = self.get_feeds_path();
 
         // 使用文件锁读取
         let file = File::open(&path)?;
@@ -256,7 +269,7 @@ impl Storage {
     }
 
     fn save_feeds(&self, feeds: &[Feed]) -> Result<()> {
-        let path = self.get_feeds_path()?;
+        let path = self.get_feeds_path();
 
         // 先写入临时文件，然后原子性重命名
         let temp_path = path.with_extension("tmp");
@@ -285,7 +298,7 @@ impl Storage {
     }
 
     fn load_articles(&self) -> Result<Vec<Article>> {
-        let path = self.get_articles_path()?;
+        let path = self.get_articles_path();
 
         let file = File::open(&path)?;
         file.lock_shared()?;
@@ -296,7 +309,7 @@ impl Storage {
     }
 
     fn save_articles(&self, articles: &[Article]) -> Result<()> {
-        let path = self.get_articles_path()?;
+        let path = self.get_articles_path();
         let temp_path = path.with_extension("tmp");
 
         {
@@ -327,6 +340,7 @@ mod tests {
     use chrono::Utc;
     use uuid::Uuid;
     use std::fs;
+    use std::sync::Arc;
 
     #[test]
     fn test_validate_path_safe() {

@@ -53,13 +53,22 @@ pub fn run() {
             // 创建数据目录
             std::fs::create_dir_all(&data_dir)?;
 
+            // 创建共享的 Storage 实例（所有命令和调度器共用同一个实例）
+            let shared_storage = Arc::new(
+                storage::Storage::new(&data_dir)
+                    .expect("Failed to initialize storage")
+            );
+
             // 创建通知管理器
             let notification_manager = NotificationManager::new(app.handle().clone());
 
-            // 设置应用状态（使用旧的状态以保持兼容性）
+            // 设置应用状态
             app.manage(commands::AppState {
                 data_dir: data_dir.clone(),
             });
+
+            // 注册共享 Storage 到 Tauri 状态（所有命令通过 State<Arc<Storage>> 访问）
+            app.manage(shared_storage.clone());
 
             // 将调度器和其他组件存储在应用状态中
             app.manage(scheduler.clone());
@@ -71,19 +80,21 @@ pub fn run() {
 
             // 监听窗口事件以更新未读计数
             let app_handle_for_events = app.handle().clone();
+            let storage_for_events = shared_storage.clone();
             app.listen("mark-article-read", move |_| {
                 // 文章被标记为已读时更新托盘
-                let _ = refresh_unread_count(&app_handle_for_events);
+                let _ = refresh_unread_count(&app_handle_for_events, &storage_for_events);
             });
 
             // 使用 async_runtime 来启动后台调度器
             let scheduler_clone = scheduler.clone();
             let data_dir_clone = data_dir.clone();
+            let storage_for_scheduler = shared_storage.clone();
             let unread_count_clone = unread_count.clone();
 
             tauri::async_runtime::spawn(async move {
                 // 启动调度器
-                if let Err(e) = scheduler_clone.start(data_dir_clone).await {
+                if let Err(e) = scheduler_clone.start(storage_for_scheduler, data_dir_clone).await {
                     error!("Failed to start scheduler: {}", e);
                     return;
                 }
@@ -193,13 +204,7 @@ async fn get_settings_internal() -> std::result::Result<Option<AppSettings>, Str
 }
 
 /// 刷新未读计数
-fn refresh_unread_count(app: &tauri::AppHandle) -> std::result::Result<(), String> {
-    use crate::storage::Storage;
-
-    let data_dir = get_data_dir();
-    let storage = Storage::new(&data_dir)
-        .map_err(|e| format!("Failed to initialize storage: {}", e))?;
-
+fn refresh_unread_count(app: &tauri::AppHandle, storage: &storage::Storage) -> std::result::Result<(), String> {
     let feeds = storage.get_all_feeds()
         .map_err(|e| format!("Failed to get feeds: {}", e))?;
 

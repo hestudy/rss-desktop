@@ -1,5 +1,4 @@
 use crate::settings::{AppSettings, SchedulerState};
-use crate::commands::AppState;
 use crate::storage::Storage;
 use crate::fetcher::fetch_feed;
 use crate::scheduler::{calculate_next_run_time, calculate_retry_backoff, count_new_articles};
@@ -57,7 +56,7 @@ impl BackgroundScheduler {
     }
 
     /// 启动调度器
-    pub async fn start(&self, data_dir: std::path::PathBuf) -> std::result::Result<(), String> {
+    pub async fn start(&self, storage: Arc<Storage>, data_dir: PathBuf) -> std::result::Result<(), String> {
         // 检查是否已在运行
         {
             let status = self.status.read().await;
@@ -77,16 +76,6 @@ impl BackgroundScheduler {
         let status_clone = self.status.clone();
 
         let handle = tokio::spawn(async move {
-            let storage = match Storage::new(&data_dir) {
-                Ok(s) => Arc::new(s),
-                Err(e) => {
-                    error!("Failed to initialize storage: {}", e);
-                    let mut status = status_clone.write().await;
-                    *status = SchedulerStatus::Stopped;
-                    return;
-                }
-            };
-
             let mut interval = tokio::time::interval(Duration::from_secs(60));
             let mut consecutive_errors = 0u32;
 
@@ -102,7 +91,7 @@ impl BackgroundScheduler {
                 interval.tick().await;
 
                 // 获取设置
-                let settings = match Self::get_settings(&storage, &data_dir).await {
+                let settings = match Self::get_settings(&data_dir).await {
                     Ok(Some(s)) => s,
                     Ok(None) => AppSettings::default(),
                     Err(e) => {
@@ -136,7 +125,6 @@ impl BackgroundScheduler {
                 // 执行刷新
                 match Self::refresh_all_feeds(
                     &storage,
-                    &settings,
                     event_tx.clone(),
                 ).await {
                     Ok(_) => {
@@ -196,7 +184,7 @@ impl BackgroundScheduler {
     }
 
     /// 从存储获取设置
-    async fn get_settings(storage: &Arc<Storage>, data_dir: &PathBuf) -> std::result::Result<Option<AppSettings>, String> {
+    async fn get_settings(data_dir: &PathBuf) -> std::result::Result<Option<AppSettings>, String> {
         use std::collections::HashMap;
         use std::fs::File;
         use std::io::BufReader;
@@ -224,7 +212,6 @@ impl BackgroundScheduler {
     /// 刷新所有订阅
     async fn refresh_all_feeds(
         storage: &Arc<Storage>,
-        settings: &AppSettings,
         event_tx: broadcast::Sender<NewArticlesEvent>,
     ) -> std::result::Result<(), String> {
         let feeds = storage.get_all_feeds()
@@ -300,12 +287,13 @@ impl Default for BackgroundScheduler {
 mod tests {
     use super::*;
 
-    // 创建测试用的临时目录
-    fn create_test_data_dir() -> PathBuf {
+    // 创建测试用的临时目录和共享 Storage
+    fn create_test_storage() -> (PathBuf, Arc<Storage>) {
         let mut temp_dir = std::env::temp_dir();
         temp_dir.push(format!("rss-test-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&temp_dir).unwrap();
-        temp_dir
+        let storage = Arc::new(Storage::new(&temp_dir).unwrap());
+        (temp_dir, storage)
     }
 
     // 清理测试目录
@@ -331,19 +319,19 @@ mod tests {
     #[tokio::test]
     async fn test_scheduler_subscribe() {
         let scheduler = BackgroundScheduler::new();
-        let mut receiver = scheduler.subscribe();
+        let _receiver = scheduler.subscribe();
         // 验证可以订阅
-        drop(receiver);
+        drop(_receiver);
     }
 
     // 测试: 启动调度器
     #[tokio::test]
     async fn test_scheduler_start() {
-        let data_dir = create_test_data_dir();
+        let (data_dir, storage) = create_test_storage();
         let scheduler = BackgroundScheduler::new();
 
         // 启动调度器
-        let result = scheduler.start(data_dir.clone()).await;
+        let result = scheduler.start(storage, data_dir.clone()).await;
         assert!(result.is_ok());
 
         // 验证状态
@@ -359,15 +347,15 @@ mod tests {
     // 测试: 重复启动调度器
     #[tokio::test]
     async fn test_scheduler_start_twice() {
-        let data_dir = create_test_data_dir();
+        let (data_dir, storage) = create_test_storage();
         let scheduler = BackgroundScheduler::new();
 
         // 第一次启动
-        let result1 = scheduler.start(data_dir.clone()).await;
+        let result1 = scheduler.start(storage.clone(), data_dir.clone()).await;
         assert!(result1.is_ok());
 
         // 第二次启动应该成功但不重复创建任务
-        let result2 = scheduler.start(data_dir.clone()).await;
+        let result2 = scheduler.start(storage, data_dir.clone()).await;
         assert!(result2.is_ok());
 
         scheduler.stop().await;
@@ -378,10 +366,10 @@ mod tests {
     // 测试: 停止调度器
     #[tokio::test]
     async fn test_scheduler_stop() {
-        let data_dir = create_test_data_dir();
+        let (data_dir, storage) = create_test_storage();
         let scheduler = BackgroundScheduler::new();
 
-        scheduler.start(data_dir.clone()).await.unwrap();
+        scheduler.start(storage, data_dir.clone()).await.unwrap();
         scheduler.stop().await;
 
         // 等待任务结束

@@ -1,8 +1,9 @@
 use crate::models::{Feed, Article, FeedWithUnreadCount};
 use crate::fetcher::fetch_feed;
-use crate::storage::MAX_ARTICLES_LIMIT;
+use crate::storage::{Storage, MAX_ARTICLES_LIMIT};
 use tauri::State;
 use std::path::PathBuf;
+use std::sync::Arc;
 use fs2::FileExt;
 
 /// 应用状态，包含存储实例
@@ -16,29 +17,16 @@ pub type CommandResult<T> = std::result::Result<T, String>;
 
 /// 添加 RSS 订阅
 #[tauri::command]
-pub async fn add_feed(url: String, state: State<'_, AppState>) -> CommandResult<Feed> {
-    use crate::storage::Storage;
-
-    let storage = Storage::new(&state.data_dir)
-        .map_err(|e| format!("Failed to initialize storage: {}", e))?;
-
-    // 检查是否已存在相同 URL 的订阅
-    let existing_feeds = storage.get_all_feeds()
-        .map_err(|e| format!("Failed to check existing feeds: {}", e))?;
-
-    if existing_feeds.iter().any(|f| f.url == url) {
-        return Err("Feed with this URL already exists".to_string());
-    }
-
+pub async fn add_feed(url: String, storage: State<'_, Arc<Storage>>) -> CommandResult<Feed> {
     // 获取并解析 Feed
     let (feed, articles) = fetch_feed(&url)
         .map_err(|e| format!("Failed to fetch feed: {}", e))?;
 
-    // 保存 Feed
+    // 保存 Feed（add_feed 内部会检查 URL 重复）
     storage.add_feed(&feed)
         .map_err(|e| format!("Failed to save feed: {}", e))?;
 
-    // 保存文章 - 现在正确处理错误
+    // 保存文章
     for article in &articles {
         storage.add_article(article)
             .map_err(|e| format!("Failed to save article: {}", e))?;
@@ -49,12 +37,7 @@ pub async fn add_feed(url: String, state: State<'_, AppState>) -> CommandResult<
 
 /// 获取所有订阅（包含未读计数）
 #[tauri::command]
-pub async fn get_feeds(state: State<'_, AppState>) -> CommandResult<Vec<FeedWithUnreadCount>> {
-    use crate::storage::Storage;
-
-    let storage = Storage::new(&state.data_dir)
-        .map_err(|e| format!("Failed to initialize storage: {}", e))?;
-
+pub async fn get_feeds(storage: State<'_, Arc<Storage>>) -> CommandResult<Vec<FeedWithUnreadCount>> {
     let feeds = storage.get_all_feeds()
         .map_err(|e| format!("Failed to get feeds: {}", e))?;
 
@@ -69,12 +52,7 @@ pub async fn get_feeds(state: State<'_, AppState>) -> CommandResult<Vec<FeedWith
 
 /// 删除订阅
 #[tauri::command]
-pub async fn remove_feed(id: String, state: State<'_, AppState>) -> CommandResult<()> {
-    use crate::storage::Storage;
-
-    let storage = Storage::new(&state.data_dir)
-        .map_err(|e| format!("Failed to initialize storage: {}", e))?;
-
+pub async fn remove_feed(id: String, storage: State<'_, Arc<Storage>>) -> CommandResult<()> {
     storage.delete_feed(&id)
         .map_err(|e| format!("Failed to delete feed: {}", e))?;
 
@@ -83,12 +61,7 @@ pub async fn remove_feed(id: String, state: State<'_, AppState>) -> CommandResul
 
 /// 刷新单个订阅
 #[tauri::command]
-pub async fn refresh_feed(id: String, state: State<'_, AppState>) -> CommandResult<FeedWithUnreadCount> {
-    use crate::storage::Storage;
-
-    let storage = Storage::new(&state.data_dir)
-        .map_err(|e| format!("Failed to initialize storage: {}", e))?;
-
+pub async fn refresh_feed(id: String, storage: State<'_, Arc<Storage>>) -> CommandResult<FeedWithUnreadCount> {
     // 获取现有订阅
     let existing_feed = storage.get_feed(&id)
         .map_err(|e| format!("Failed to get feed: {}", e))?
@@ -98,13 +71,13 @@ pub async fn refresh_feed(id: String, state: State<'_, AppState>) -> CommandResu
     let (_feed, articles) = fetch_feed(&existing_feed.url)
         .map_err(|e| format!("Failed to fetch feed: {}", e))?;
 
-    // 保存新文章 - 正确处理错误
+    // 保存新文章
     for article in &articles {
         storage.add_article(article)
             .map_err(|e| format!("Failed to save article: {}", e))?;
     }
 
-    // 更新订阅时间 - 现在正确处理错误
+    // 更新订阅时间
     let mut updated_feed = existing_feed.clone();
     updated_feed.updated_at = chrono::Utc::now();
     storage.update_feed(&updated_feed)
@@ -120,12 +93,7 @@ pub async fn refresh_feed(id: String, state: State<'_, AppState>) -> CommandResu
 
 /// 刷新所有订阅
 #[tauri::command]
-pub async fn refresh_all_feeds(state: State<'_, AppState>) -> CommandResult<Vec<FeedWithUnreadCount>> {
-    use crate::storage::Storage;
-
-    let storage = Storage::new(&state.data_dir)
-        .map_err(|e| format!("Failed to initialize storage: {}", e))?;
-
+pub async fn refresh_all_feeds(storage: State<'_, Arc<Storage>>) -> CommandResult<Vec<FeedWithUnreadCount>> {
     let feeds = storage.get_all_feeds()
         .map_err(|e| format!("Failed to get feeds: {}", e))?;
 
@@ -143,10 +111,10 @@ pub async fn refresh_all_feeds(state: State<'_, AppState>) -> CommandResult<Vec<
             }
         }
 
-        // 更新订阅时间 - 现在正确处理错误
+        // 更新订阅时间
         let mut updated_feed = feed.clone();
         updated_feed.updated_at = chrono::Utc::now();
-        if let Err(_) = storage.update_feed(&updated_feed) {
+        if storage.update_feed(&updated_feed).is_err() {
             // 更新失败时使用原始 feed
             updated_feed = feed.clone();
         }
@@ -167,13 +135,8 @@ pub async fn get_articles(
     feed_id: Option<String>,
     limit: Option<usize>,
     unread_only: Option<bool>,
-    state: State<'_, AppState>,
+    storage: State<'_, Arc<Storage>>,
 ) -> CommandResult<Vec<Article>> {
-    use crate::storage::Storage;
-
-    let storage = Storage::new(&state.data_dir)
-        .map_err(|e| format!("Failed to initialize storage: {}", e))?;
-
     // 验证并限制 limit 参数，防止 DOS
     let limit = limit.unwrap_or(100).min(MAX_ARTICLES_LIMIT);
 
@@ -190,12 +153,7 @@ pub async fn get_articles(
 
 /// 标记文章为已读/未读
 #[tauri::command]
-pub async fn mark_article_read(id: String, read: bool, state: State<'_, AppState>) -> CommandResult<()> {
-    use crate::storage::Storage;
-
-    let storage = Storage::new(&state.data_dir)
-        .map_err(|e| format!("Failed to initialize storage: {}", e))?;
-
+pub async fn mark_article_read(id: String, read: bool, storage: State<'_, Arc<Storage>>) -> CommandResult<()> {
     storage.mark_article_read(&id, read)
         .map_err(|e| format!("Failed to mark article: {}", e))?;
 
@@ -204,12 +162,7 @@ pub async fn mark_article_read(id: String, read: bool, state: State<'_, AppState
 
 /// 标记订阅下所有文章为已读
 #[tauri::command]
-pub async fn mark_all_read(feed_id: String, state: State<'_, AppState>) -> CommandResult<()> {
-    use crate::storage::Storage;
-
-    let storage = Storage::new(&state.data_dir)
-        .map_err(|e| format!("Failed to initialize storage: {}", e))?;
-
+pub async fn mark_all_read(feed_id: String, storage: State<'_, Arc<Storage>>) -> CommandResult<()> {
     storage.mark_all_read(&feed_id)
         .map_err(|e| format!("Failed to mark all read: {}", e))?;
 
@@ -218,12 +171,7 @@ pub async fn mark_all_read(feed_id: String, state: State<'_, AppState>) -> Comma
 
 /// 获取未读文章数量
 #[tauri::command]
-pub async fn get_unread_count(feed_id: Option<String>, state: State<'_, AppState>) -> CommandResult<usize> {
-    use crate::storage::Storage;
-
-    let storage = Storage::new(&state.data_dir)
-        .map_err(|e| format!("Failed to initialize storage: {}", e))?;
-
+pub async fn get_unread_count(feed_id: Option<String>, storage: State<'_, Arc<Storage>>) -> CommandResult<usize> {
     let count = if let Some(fid) = feed_id {
         storage.get_unread_count(&fid).unwrap_or(0)
     } else {
@@ -337,48 +285,28 @@ pub async fn get_store_value(key: String, state: State<'_, AppState>) -> Command
 
 /// 获取单个文章
 #[tauri::command]
-pub async fn get_article(id: String, state: State<'_, AppState>) -> CommandResult<Option<Article>> {
-    use crate::storage::Storage;
-
-    let storage = Storage::new(&state.data_dir)
-        .map_err(|e| format!("Failed to initialize storage: {}", e))?;
-
+pub async fn get_article(id: String, storage: State<'_, Arc<Storage>>) -> CommandResult<Option<Article>> {
     storage.get_article(&id)
         .map_err(|e| format!("Failed to get article: {}", e))
 }
 
 /// 更新阅读进度
 #[tauri::command]
-pub async fn update_reading_progress(id: String, progress: f32, state: State<'_, AppState>) -> CommandResult<()> {
-    use crate::storage::Storage;
-
-    let storage = Storage::new(&state.data_dir)
-        .map_err(|e| format!("Failed to initialize storage: {}", e))?;
-
+pub async fn update_reading_progress(id: String, progress: f32, storage: State<'_, Arc<Storage>>) -> CommandResult<()> {
     storage.update_reading_progress(&id, progress)
         .map_err(|e| format!("Failed to update reading progress: {}", e))
 }
 
 /// 收藏/取消收藏文章
 #[tauri::command]
-pub async fn set_article_favorite(id: String, favorite: bool, state: State<'_, AppState>) -> CommandResult<()> {
-    use crate::storage::Storage;
-
-    let storage = Storage::new(&state.data_dir)
-        .map_err(|e| format!("Failed to initialize storage: {}", e))?;
-
+pub async fn set_article_favorite(id: String, favorite: bool, storage: State<'_, Arc<Storage>>) -> CommandResult<()> {
     storage.set_article_favorite(&id, favorite)
         .map_err(|e| format!("Failed to set article favorite: {}", e))
 }
 
 /// 获取收藏的文章
 #[tauri::command]
-pub async fn get_favorite_articles(limit: Option<usize>, state: State<'_, AppState>) -> CommandResult<Vec<Article>> {
-    use crate::storage::Storage;
-
-    let storage = Storage::new(&state.data_dir)
-        .map_err(|e| format!("Failed to initialize storage: {}", e))?;
-
+pub async fn get_favorite_articles(limit: Option<usize>, storage: State<'_, Arc<Storage>>) -> CommandResult<Vec<Article>> {
     storage.get_favorite_articles(limit)
         .map_err(|e| format!("Failed to get favorite articles: {}", e))
 }
