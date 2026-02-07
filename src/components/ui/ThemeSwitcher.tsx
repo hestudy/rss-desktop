@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { Sun, Moon, Palette } from 'lucide-react'
 import { useTheme, type ThemePreset, type ThemeMode } from '../../contexts/ThemeContext'
 import { Button } from './Button'
@@ -18,10 +19,22 @@ const modeLabels: Record<ThemeMode, string> = {
 export function ThemeSwitcher() {
   const { mode, preset, setMode, setPreset, isDark } = useTheme()
   const [isOpen, setIsOpen] = useState(false)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const [menuPos, setMenuPos] = useState({ bottom: 0, left: 0 })
+
+  useEffect(() => {
+    if (!isOpen || !buttonRef.current) return
+    const rect = buttonRef.current.getBoundingClientRect()
+    setMenuPos({
+      bottom: window.innerHeight - rect.bottom,
+      left: rect.right + 8,
+    })
+  }, [isOpen])
 
   return (
-    <div className="relative">
+    <div>
       <Button
+        ref={buttonRef}
         size="sm"
         variant="ghost"
         onClick={() => setIsOpen(!isOpen)}
@@ -31,13 +44,16 @@ export function ThemeSwitcher() {
         <Palette className="w-4 h-4" />
       </Button>
 
-      {isOpen && (
+      {isOpen && createPortal(
         <>
           <div
             className="fixed inset-0 z-40"
             onClick={() => setIsOpen(false)}
           />
-          <div className="absolute left-full bottom-0 ml-2 z-50 bg-background text-foreground border rounded-xl shadow-xl w-64 animate-in fade-in slide-in-from-bottom-2 duration-200">
+          <div
+            className="fixed z-50 bg-background text-foreground border rounded-xl shadow-xl w-64 animate-in fade-in slide-in-from-bottom-2 duration-200"
+            style={{ bottom: menuPos.bottom, left: menuPos.left }}
+          >
             <div className="p-4">
               {/* 主题预设 */}
               <div className="mb-4">
@@ -91,7 +107,8 @@ export function ThemeSwitcher() {
               </div>
             </div>
           </div>
-        </>
+        </>,
+        document.body
       )}
     </div>
   )
