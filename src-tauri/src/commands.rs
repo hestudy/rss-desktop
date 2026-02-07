@@ -26,9 +26,11 @@ pub async fn add_feed(url: String, storage: State<'_, Arc<Storage>>) -> CommandR
     storage.add_feed(&feed)
         .map_err(|e| format!("Failed to save feed: {}", e))?;
 
-    // 保存文章
+    // 保存文章（显式使用已保存 feed 的 id，确保一致性）
     for article in &articles {
-        storage.add_article(article)
+        let mut article = article.clone();
+        article.feed_id = feed.id.clone();
+        storage.add_article(&article)
             .map_err(|e| format!("Failed to save article: {}", e))?;
     }
 
@@ -71,9 +73,11 @@ pub async fn refresh_feed(id: String, storage: State<'_, Arc<Storage>>) -> Comma
     let (_feed, articles) = fetch_feed(&existing_feed.url)
         .map_err(|e| format!("Failed to fetch feed: {}", e))?;
 
-    // 保存新文章
+    // 保存新文章（使用现有订阅的 feed_id，而非 fetch_feed 生成的新 ID）
     for article in &articles {
-        storage.add_article(article)
+        let mut article = article.clone();
+        article.feed_id = id.clone();
+        storage.add_article(&article)
             .map_err(|e| format!("Failed to save article: {}", e))?;
     }
 
@@ -105,9 +109,11 @@ pub async fn refresh_all_feeds(storage: State<'_, Arc<Storage>>) -> CommandResul
 
         // 获取最新内容
         if let Ok((_feed, articles)) = fetch_feed(&feed_url) {
-            // 保存新文章
+            // 保存新文章（使用现有订阅的 feed_id）
             for article in &articles {
-                let _ = storage.add_article(article);
+                let mut article = article.clone();
+                article.feed_id = feed_id.clone();
+                let _ = storage.add_article(&article);
             }
         }
 

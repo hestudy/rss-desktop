@@ -136,7 +136,7 @@ export function FeedList() {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => selectFeed(feed.id)}
-                    className="flex-1 text-left px-3 py-2.5 flex items-center gap-2.5"
+                    className="flex-1 min-w-0 text-left px-3 py-2.5 flex items-center gap-2.5"
                   >
                     <FeedIcon iconUrl={feed.icon_url} title={feed.title} size={18} />
                     <div className="flex items-center justify-between flex-1 min-w-0">

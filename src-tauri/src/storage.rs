@@ -143,8 +143,8 @@ impl Storage {
     pub fn add_article(&self, article: &Article) -> Result<()> {
         let _lock = self.acquire_write_lock()?;
         let mut articles = self.load_articles()?;
-        // 检查是否已存在（通过链接去重）
-        if !articles.iter().any(|a| a.link == article.link) {
+        // 检查是否已存在（通过链接+订阅源去重）
+        if !articles.iter().any(|a| a.link == article.link && a.feed_id == article.feed_id) {
             articles.push(article.clone());
             self.save_articles(&articles)?;
         }
@@ -450,7 +450,7 @@ mod tests {
         fn add_article(&self, article: &Article) -> Result<()> {
             let mut articles = self.articles.lock().unwrap();
             // 检查是否已存在
-            if !articles.iter().any(|a| a.link == article.link) {
+            if !articles.iter().any(|a| a.link == article.link && a.feed_id == article.feed_id) {
                 articles.push(article.clone());
             }
             Ok(())

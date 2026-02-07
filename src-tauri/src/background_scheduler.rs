@@ -1,7 +1,7 @@
 use crate::settings::{AppSettings, SchedulerState};
 use crate::storage::Storage;
 use crate::fetcher::fetch_feed;
-use crate::scheduler::{calculate_next_run_time, calculate_retry_backoff, count_new_articles};
+use crate::scheduler::{calculate_next_run_time, calculate_retry_backoff};
 use chrono::Utc;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -222,28 +222,28 @@ impl BackgroundScheduler {
             let feed_url = feed.url.clone();
             let feed_title = feed.title.clone();
 
-            // 获取刷新前的文章 ID
-            let existing_ids: Vec<String> = storage.get_articles(Some(&feed_id), None)
+            // 获取刷新前的文章链接（用于检测新文章，不能用 ID 因为 fetch_feed 每次生成新 UUID）
+            let existing_links: Vec<String> = storage.get_articles(Some(&feed_id), None)
                 .unwrap_or_default()
                 .into_iter()
-                .map(|a| a.id)
+                .map(|a| a.link)
                 .collect();
 
             // 获取最新内容
             let (_feed, articles) = fetch_feed(&feed_url)
                 .map_err(|e| format!("Failed to fetch {}: {}", feed_title, e))?;
 
-            // 统计新文章
-            let new_article_ids: Vec<String> = articles.iter()
-                .map(|a| a.id.clone())
-                .collect();
-
-            let new_count = count_new_articles(&existing_ids, &new_article_ids);
+            // 统计新文章（按链接比较）
+            let new_count = articles.iter()
+                .filter(|a| !existing_links.contains(&a.link))
+                .count();
 
             if new_count > 0 {
-                // 保存新文章
+                // 保存新文章（使用现有订阅的 feed_id）
                 for article in &articles {
-                    let _ = storage.add_article(article);
+                    let mut article = article.clone();
+                    article.feed_id = feed_id.clone();
+                    let _ = storage.add_article(&article);
                 }
 
                 // 更新订阅时间
@@ -253,7 +253,7 @@ impl BackgroundScheduler {
 
                 // 发送事件
                 let summaries: Vec<ArticleSummary> = articles.iter()
-                    .filter(|a| !existing_ids.contains(&a.id))
+                    .filter(|a| !existing_links.contains(&a.link))
                     .map(|a| ArticleSummary {
                         id: a.id.clone(),
                         title: a.title.clone(),
