@@ -100,3 +100,43 @@ export const DEFAULT_READER_SETTINGS: ReaderSettings = {
   maxWidth: 80,
   showProgress: true,
 }
+
+/**
+ * 轮询间隔配置
+ */
+export type PollInterval = '5m' | '15m' | '30m' | '1h' | '2h' | '6h' | '12h' | '24h'
+
+/**
+ * 通知类型
+ */
+export type NotificationType = 'system' | 'none'
+
+/**
+ * 应用设置
+ */
+export interface AppSettings {
+  /** 轮询间隔 */
+  pollInterval: PollInterval
+  /** 通知类型 */
+  notificationType: NotificationType
+  /** 是否启用通知 */
+  enableNotifications: boolean
+  /** 每批次最大通知数量 */
+  maxNotificationsPerBatch: number
+  /** 是否启用后台刷新 */
+  enableBackgroundRefresh: boolean
+}
+
+/**
+ * 调度器状态
+ */
+export interface SchedulerState {
+  /** 是否正在运行 */
+  isRunning: boolean
+  /** 上次运行时间 (ISO 字符串或 null) */
+  lastRunAt: string | null
+  /** 下次运行时间 (ISO 字符串或 null) */
+  nextRunAt: string | null
+  /** 连续错误次数 */
+  consecutiveErrors: number
+}

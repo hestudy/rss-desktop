@@ -22,6 +22,9 @@ pub enum RssError {
 
     #[error("Storage error: {0}")]
     StorageError(String),
+
+    #[error("Lock error: {0}")]
+    LockError(String),
 }
 
 pub type Result<T> = std::result::Result<T, RssError>;

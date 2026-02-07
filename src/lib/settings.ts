@@ -1,0 +1,201 @@
+import { invoke } from '@tauri-apps/api/core'
+import { z } from 'zod'
+
+/**
+ * 轮询间隔配置
+ */
+export type PollInterval = '5m' | '15m' | '30m' | '1h' | '2h' | '6h' | '12h' | '24h'
+
+/**
+ * 通知类型
+ */
+export type NotificationType = 'system' | 'none'
+
+/**
+ * 应用设置
+ */
+export interface AppSettings {
+  /** 轮询间隔 */
+  pollInterval: PollInterval
+  /** 通知类型 */
+  notificationType: NotificationType
+  /** 是否启用通知 */
+  enableNotifications: boolean
+  /** 每批次最大通知数量 */
+  maxNotificationsPerBatch: number
+  /** 是否启用后台刷新 */
+  enableBackgroundRefresh: boolean
+}
+
+/**
+ * 调度器状态
+ */
+export interface SchedulerState {
+  /** 是否正在运行 */
+  isRunning: boolean
+  /** 上次运行时间 (ISO 字符串或 null) */
+  lastRunAt: string | null
+  /** 下次运行时间 (ISO 字符串或 null) */
+  nextRunAt: string | null
+  /** 连续错误次数 */
+  consecutiveErrors: number
+}
+
+/**
+ * AppSettings 的部分更新类型
+ */
+export type PartialAppSettings = Partial<Omit<AppSettings, 'pollInterval'>> & {
+  pollInterval?: PollInterval
+}
+
+/**
+ * Zod schema for AppSettings validation
+ */
+export const AppSettingsSchema = z.object({
+  pollInterval: z.enum(['5m', '15m', '30m', '1h', '2h', '6h', '12h', '24h']).default('30m'),
+  notificationType: z.enum(['system', 'none']).default('system'),
+  enableNotifications: z.boolean().default(true),
+  maxNotificationsPerBatch: z.number().int().min(0).max(100).default(5),
+  enableBackgroundRefresh: z.boolean().default(false),
+})
+
+/**
+ * Zod schema for SchedulerState validation
+ */
+export const SchedulerStateSchema = z.object({
+  isRunning: z.boolean().default(false),
+  lastRunAt: z.string().nullable().default(null),
+  nextRunAt: z.string().nullable().default(null),
+  consecutiveErrors: z.number().int().min(0).default(0),
+})
+
+/**
+ * 默认设置
+ */
+export const DEFAULT_SETTINGS: AppSettings = {
+  pollInterval: '30m',
+  notificationType: 'system',
+  enableNotifications: true,
+  maxNotificationsPerBatch: 5,
+  enableBackgroundRefresh: false,
+}
+
+// ============= API 函数 =============
+
+/**
+ * 获取应用设置
+ */
+export async function getSettings(): Promise<AppSettings> {
+  const result = await invoke<AppSettings>('get_settings')
+  return AppSettingsSchema.parse(result)
+}
+
+/**
+ * 更新应用设置
+ *
+ * @param settings - 要更新的设置（支持部分更新）
+ */
+export async function updateSettings(
+  settings: PartialAppSettings
+): Promise<AppSettings> {
+  // 先获取当前设置
+  const current = await getSettings()
+
+  // 合并设置
+  const merged: AppSettings = {
+    ...current,
+    ...settings,
+  }
+
+  // 验证
+  const validated = AppSettingsSchema.parse(merged)
+
+  // 发送到后端
+  const result = await invoke<AppSettings>('update_settings', {
+    settings: validated,
+  })
+
+  return AppSettingsSchema.parse(result)
+}
+
+/**
+ * 获取调度器状态
+ */
+export async function getSchedulerState(): Promise<SchedulerState> {
+  const result = await invoke<SchedulerState>('get_scheduler_state')
+  return SchedulerStateSchema.parse(result)
+}
+
+// ============= 辅助函数 =============
+
+/**
+ * 将轮询间隔转换为分钟数
+ */
+export function pollIntervalToMinutes(interval: PollInterval): number {
+  const map: Record<PollInterval, number> = {
+    '5m': 5,
+    '15m': 15,
+    '30m': 30,
+    '1h': 60,
+    '2h': 120,
+    '6h': 360,
+    '12h': 720,
+    '24h': 1440,
+  }
+  return map[interval]
+}
+
+/**
+ * 格式化轮询间隔为人类可读文本
+ */
+export function formatPollInterval(interval: PollInterval): string {
+  const minutes = pollIntervalToMinutes(interval)
+
+  if (minutes < 60) {
+    return `${minutes} 分钟`
+  }
+
+  const hours = minutes / 60
+  if (hours === 1) {
+    return '1 小时'
+  }
+
+  return `${hours} 小时`
+}
+
+/**
+ * 计算下次运行时间
+ */
+export function calculateNextRunTime(
+  lastRun: Date | string | null,
+  interval: PollInterval
+): Date | null {
+  if (!lastRun) return null
+
+  const base = typeof lastRun === 'string' ? new Date(lastRun) : lastRun
+  const minutes = pollIntervalToMinutes(interval)
+
+  return new Date(base.getTime() + minutes * 60 * 1000)
+}
+
+/**
+ * 获取可用的轮询间隔选项
+ */
+export const POLL_INTERVAL_OPTIONS: { value: PollInterval; label: string }[] = [
+  { value: '5m', label: '5 分钟' },
+  { value: '15m', label: '15 分钟' },
+  { value: '30m', label: '30 分钟' },
+  { value: '1h', label: '1 小时' },
+  { value: '2h', label: '2 小时' },
+  { value: '6h', label: '6 小时' },
+  { value: '12h', label: '12 小时' },
+  { value: '24h', label: '24 小时' },
+]
+
+/**
+ * 获取可用的通知类型选项
+ */
+export const NOTIFICATION_TYPE_OPTIONS: { value: NotificationType; label: string }[] = [
+  { value: 'system', label: '系统通知' },
+  { value: 'none', label: '不通知' },
+]

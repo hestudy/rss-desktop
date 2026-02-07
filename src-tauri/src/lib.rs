@@ -4,16 +4,29 @@ mod error;
 mod storage;
 mod fetcher;
 mod commands;
+mod settings;
+mod scheduler;
+mod scheduler_commands;
+mod background_scheduler;
+mod notifications;
+mod tray;
 
 // 导出常用类型
 pub use models::{Feed, Article, AddFeedRequest, UpdateFeedRequest, GetArticlesRequest, ApiResponse, FeedWithUnreadCount};
 pub use error::{RssError, Result};
 pub use commands::AppState;
+pub use settings::{AppSettings, SchedulerState, PollInterval, NotificationType};
+pub use background_scheduler::{BackgroundScheduler, NewArticlesEvent, ArticleSummary};
+pub use notifications::NotificationManager;
+pub use tray::TrayManager;
 
 use std::path::PathBuf;
-use tauri::Manager;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use tauri::{Manager, Emitter, Listener};
+use log::{error, info};
 
-// 初始化数据目录
+/// 初始化数据目录
 fn get_data_dir() -> PathBuf {
     // 获取应用数据目录
     let mut data_dir = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
@@ -23,17 +36,104 @@ fn get_data_dir() -> PathBuf {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // 初始化日志记录器
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
+        .init();
+
     let data_dir = get_data_dir();
+
+    // 初始化组件
+    let scheduler = Arc::new(BackgroundScheduler::new());
+    let unread_count = Arc::new(AtomicUsize::new(0));
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
         .setup(move |app| {
             // 创建数据目录
             std::fs::create_dir_all(&data_dir)?;
 
-            // 设置应用状态
+            // 创建通知管理器
+            let notification_manager = NotificationManager::new(app.handle().clone());
+
+            // 设置应用状态（使用旧的状态以保持兼容性）
             app.manage(commands::AppState {
                 data_dir: data_dir.clone(),
+            });
+
+            // 将调度器和其他组件存储在应用状态中
+            app.manage(scheduler.clone());
+            app.manage(unread_count.clone());
+            app.manage(Arc::new(notification_manager));
+
+            // 获取 app handle 用于异步任务
+            let app_handle = app.handle().clone();
+
+            // 监听窗口事件以更新未读计数
+            let app_handle_for_events = app.handle().clone();
+            app.listen("mark-article-read", move |_| {
+                // 文章被标记为已读时更新托盘
+                let _ = refresh_unread_count(&app_handle_for_events);
+            });
+
+            // 使用 async_runtime 来启动后台调度器
+            let scheduler_clone = scheduler.clone();
+            let data_dir_clone = data_dir.clone();
+            let unread_count_clone = unread_count.clone();
+
+            tauri::async_runtime::spawn(async move {
+                // 启动调度器
+                if let Err(e) = scheduler_clone.start(data_dir_clone).await {
+                    error!("Failed to start scheduler: {}", e);
+                    return;
+                }
+                info!("Background scheduler started successfully");
+
+                // 订阅新文章事件
+                let mut receiver = scheduler_clone.subscribe();
+
+                // 监听新文章事件并发送通知
+                while let Ok(event) = receiver.recv().await {
+                    // 获取设置
+                    let settings = match get_settings_internal().await {
+                        Ok(Some(s)) => s,
+                        Ok(None) => AppSettings::default(),
+                        Err(e) => {
+                            error!("Failed to get settings: {}", e);
+                            AppSettings::default()
+                        }
+                    };
+
+                    info!(
+                        "New articles event: {} new articles from {}",
+                        event.new_count, event.feed_title
+                    );
+
+                    // 发送事件到前端更新 UI
+                    let _ = app_handle.emit("new-articles", &event);
+
+                    // 如果启用了通知，发送通知事件
+                    if settings.enable_notifications && settings.notification_type == NotificationType::System {
+                        let notification_data = serde_json::json!({
+                            "title": if event.new_count == 1 {
+                                format!("来自 {} 的新文章", event.feed_title)
+                            } else {
+                                format!("来自 {} 的 {} 篇新文章", event.feed_title, event.new_count)
+                            },
+                            "body": event.articles.iter()
+                                .take(settings.max_notifications_per_batch)
+                                .map(|a| a.title.as_str())
+                                .collect::<Vec<_>>()
+                                .join("\n"),
+                            "feed_id": event.feed_id,
+                            "count": event.new_count,
+                        });
+                        let _ = app_handle.emit("show-notification", &notification_data);
+                    }
+
+                    // 更新未读计数
+                    unread_count_clone.fetch_add(event.new_count, Ordering::SeqCst);
+                }
             });
 
             Ok(())
@@ -55,9 +155,62 @@ pub fn run() {
             commands::update_reading_progress,
             commands::set_article_favorite,
             commands::get_favorite_articles,
+            scheduler_commands::get_settings,
+            scheduler_commands::update_settings,
+            scheduler_commands::get_scheduler_state,
+            scheduler_commands::set_scheduler_state,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+/// 内部函数：获取设置
+async fn get_settings_internal() -> std::result::Result<Option<AppSettings>, String> {
+    use std::collections::HashMap;
+    use std::fs::File;
+    use std::io::BufReader;
+
+    let data_dir = get_data_dir();
+    let store_path = data_dir.join("store.json");
+
+    if !store_path.exists() {
+        return Ok(None);
+    }
+
+    let file = File::open(&store_path)
+        .map_err(|e| format!("Failed to open store: {}", e))?;
+    let reader = BufReader::new(file);
+    let store: HashMap<String, serde_json::Value> = serde_json::from_reader(reader)
+        .map_err(|e| format!("Failed to parse store: {}", e))?;
+
+    if let Some(value) = store.get("app_settings") {
+        let settings: AppSettings = serde_json::from_value(value.clone())
+            .map_err(|e| format!("Failed to parse settings: {}", e))?;
+        Ok(Some(settings))
+    } else {
+        Ok(None)
+    }
+}
+
+/// 刷新未读计数
+fn refresh_unread_count(app: &tauri::AppHandle) -> std::result::Result<(), String> {
+    use crate::storage::Storage;
+
+    let data_dir = get_data_dir();
+    let storage = Storage::new(&data_dir)
+        .map_err(|e| format!("Failed to initialize storage: {}", e))?;
+
+    let feeds = storage.get_all_feeds()
+        .map_err(|e| format!("Failed to get feeds: {}", e))?;
+
+    let total_unread: usize = feeds.iter()
+        .map(|f| storage.get_unread_count(&f.id).unwrap_or(0))
+        .sum();
+
+    // 发送未读计数到前端
+    let _ = app.emit("unread-count-updated", total_unread);
+
+    Ok(())
 }
 
 // ============= 测试 =============
@@ -69,5 +222,18 @@ mod tests {
     fn test_get_data_dir() {
         let dir = get_data_dir();
         assert!(dir.ends_with("rss-desktop"));
+    }
+
+    #[test]
+    fn test_extended_app_state_components() {
+        let _scheduler = BackgroundScheduler::new();
+        let _count = AtomicUsize::new(0);
+        assert_eq!(_count.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn test_background_scheduler_integration() {
+        let scheduler = BackgroundScheduler::new();
+        let _receiver = scheduler.subscribe();
     }
 }

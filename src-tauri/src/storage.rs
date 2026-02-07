@@ -75,14 +75,18 @@ impl Storage {
         })
     }
 
-    fn get_feeds_path(&self) -> std::path::PathBuf {
-        let dir = self.data_dir.lock().unwrap();
-        dir.join(FEEDS_FILE)
+    fn get_feeds_path(&self) -> Result<std::path::PathBuf> {
+        let dir = self.data_dir
+            .lock()
+            .map_err(|e| crate::error::RssError::LockError(e.to_string()))?;
+        Ok(dir.join(FEEDS_FILE))
     }
 
-    fn get_articles_path(&self) -> std::path::PathBuf {
-        let dir = self.data_dir.lock().unwrap();
-        dir.join(ARTICLES_FILE)
+    fn get_articles_path(&self) -> Result<std::path::PathBuf> {
+        let dir = self.data_dir
+            .lock()
+            .map_err(|e| crate::error::RssError::LockError(e.to_string()))?;
+        Ok(dir.join(ARTICLES_FILE))
     }
 
     pub fn add_feed(&self, feed: &Feed) -> Result<()> {
@@ -239,7 +243,7 @@ impl Storage {
 
     // 辅助函数 - 使用文件锁保护读写操作
     fn load_feeds(&self) -> Result<Vec<Feed>> {
-        let path = self.get_feeds_path();
+        let path = self.get_feeds_path()?;
 
         // 使用文件锁读取
         let file = File::open(&path)?;
@@ -252,7 +256,7 @@ impl Storage {
     }
 
     fn save_feeds(&self, feeds: &[Feed]) -> Result<()> {
-        let path = self.get_feeds_path();
+        let path = self.get_feeds_path()?;
 
         // 先写入临时文件，然后原子性重命名
         let temp_path = path.with_extension("tmp");
@@ -281,7 +285,7 @@ impl Storage {
     }
 
     fn load_articles(&self) -> Result<Vec<Article>> {
-        let path = self.get_articles_path();
+        let path = self.get_articles_path()?;
 
         let file = File::open(&path)?;
         file.lock_shared()?;
@@ -292,7 +296,7 @@ impl Storage {
     }
 
     fn save_articles(&self, articles: &[Article]) -> Result<()> {
-        let path = self.get_articles_path();
+        let path = self.get_articles_path()?;
         let temp_path = path.with_extension("tmp");
 
         {

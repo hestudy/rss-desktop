@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { Rss, RefreshCw, Plus, Trash2 } from 'lucide-react'
+import { Rss, RefreshCw, Plus, Trash2, Settings } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { ScrollArea } from '../ui/ScrollArea'
 import { AddFeedDialog } from './AddFeedDialog'
+import { SettingsDialog } from '../settings/SettingsDialog'
 import { useConfirm } from '../ui/ConfirmDialog'
 import { ThemeSwitcher } from '../ui/ThemeSwitcher'
 import { useRss } from '../../contexts/RssContext'
@@ -21,6 +22,7 @@ export function FeedList() {
 
   const { confirm } = useConfirm()
   const [showAddDialog, setShowAddDialog] = useState(false)
+  const [showSettingsDialog, setShowSettingsDialog] = useState(false)
   const [refreshingId, setRefreshingId] = useState<string | null>(null)
 
   const handleRefreshAll = async () => {
@@ -62,6 +64,14 @@ export function FeedList() {
             </div>
             <div className="flex gap-1">
               <ThemeSwitcher />
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setShowSettingsDialog(true)}
+                title="设置"
+              >
+                <Settings className="w-4 h-4" />
+              </Button>
               <Button
                 size="sm"
                 variant="ghost"
@@ -162,6 +172,7 @@ export function FeedList() {
       </div>
 
       <AddFeedDialog isOpen={showAddDialog} onClose={() => setShowAddDialog(false)} />
+      <SettingsDialog open={showSettingsDialog} onClose={() => setShowSettingsDialog(false)} />
     </>
   )
 }
