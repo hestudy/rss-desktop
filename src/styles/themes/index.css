@@ -12,6 +12,7 @@
   --font-serif: "Source Serif Pro", Georgia, serif;
 
   /* 圆角 */
+  --radius: 0.5rem;
   --radius-sm: 0.25rem;
   --radius-md: 0.5rem;
   --radius-lg: 0.75rem;
@@ -35,6 +36,27 @@
   --color-badge-bg: #ef4444;
   --color-badge-fg: #ffffff;
   --color-unread-dot: #ef4444;
+
+  /* 核心颜色变量 - 默认值（会被主题选择器覆盖） */
+  --color-background: #faf9f7;
+  --color-foreground: #2d3748;
+  --color-card: #ffffff;
+  --color-card-foreground: #2d3748;
+  --color-primary: #FF5722;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #7b8fa1;
+  --color-secondary-foreground: #ffffff;
+  --color-muted: #f0efe9;
+  --color-muted-foreground: #718096;
+  --color-accent: #FFF3E0;
+  --color-accent-foreground: #2d3748;
+  --color-destructive: #e57373;
+  --color-destructive-foreground: #ffffff;
+  --color-border: #e2e8f0;
+  --color-input: #e2e8f0;
+  --color-ring: #FF5722;
+  --color-read-background: #f7f6f3;
+  --color-read-foreground: #a0aec0;
   --color-card-hover: var(--color-accent);
 }
 

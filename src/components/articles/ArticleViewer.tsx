@@ -7,6 +7,7 @@ import { RssApi } from '../../lib/api'
 import type { Article, ReaderSettings } from '../../types'
 import { useReader } from '../../contexts/ReaderContext'
 import { useUnifiedSettings } from '../settings/UnifiedSettings'
+import { useTheme } from '../../contexts/ThemeContext'
 
 interface ArticleViewerProps {
   article: Article
@@ -39,6 +40,7 @@ export function ArticleViewer({
   const [scrollProgress, setScrollProgress] = useState(article.reading_progress ?? 0)
   const { selectArticle } = useReader()
   const { openSettings } = useUnifiedSettings()
+  const { isDark } = useTheme()
 
   // 处理滚动并更新阅读进度
   const handleScroll = useCallback(() => {
@@ -229,7 +231,7 @@ export function ArticleViewer({
 
           {/* 文章内容 */}
           <div
-            className="prose prose-slate dark:prose-invert max-w-none"
+            className={`prose max-w-none ${isDark ? 'prose-invert' : 'prose-slate'}`}
             dangerouslySetInnerHTML={{
               __html: sanitizeHtml(article.content || article.description || ''),
             }}

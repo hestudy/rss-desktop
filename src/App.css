@@ -13,49 +13,5 @@ body {
   height: 100%;
 }
 
-@theme {
-  --color-primary: #FF5722;
-  --color-primary-foreground: #ffffff;
-  --color-secondary: #64748b;
-  --color-secondary-foreground: #ffffff;
-  --color-background: #ffffff;
-  --color-foreground: #0f172a;
-  --color-card: #ffffff;
-  --color-card-foreground: #0f172a;
-  --color-muted: #f1f5f9;
-  --color-muted-foreground: #64748b;
-  --color-accent: #FFF3E0;
-  --color-accent-foreground: #0f172a;
-  --color-destructive: #ef4444;
-  --color-destructive-foreground: #ffffff;
-  --color-border: #e2e8f0;
-  --color-input: #e2e8f0;
-  --color-ring: #FF5722;
-
-  --radius: 0.5rem;
-
-  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
-
-  /* 侧边栏颜色 */
-  --color-sidebar-bg: #1C1917;
-  --color-sidebar-fg: #D6D3D1;
-  --color-sidebar-muted: #78716C;
-  --color-sidebar-active: #FF5722;
-  --color-sidebar-hover: #292524;
-  --color-sidebar-border: #292524;
-}
-
-@media (prefers-color-scheme: dark) {
-  @theme {
-    --color-background: #0f172a;
-    --color-foreground: #f8fafc;
-    --color-card: #1e293b;
-    --color-card-foreground: #f8fafc;
-    --color-muted: #1e293b;
-    --color-muted-foreground: #94a3b8;
-    --color-accent: #3E2723;
-    --color-accent-foreground: #f8fafc;
-    --color-border: #334155;
-    --color-input: #334155;
-  }
-}
+/* 主题颜色变量在 styles/themes/index.css 中定义 */
+/* 暗黑模式通过 data-mode 属性控制 */
