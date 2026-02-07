@@ -175,30 +175,43 @@ export function RssProvider({ children }: RssProviderProps) {
   const markArticleRead = useCallback(async (id: string, read: boolean) => {
     try {
       await RssApi.markArticleRead(id, read)
-      // 更新文章状态
-      setArticles(prev => prev.map(a =>
-        a.id === id ? { ...a, read } : a
-      ))
-      // 重新加载订阅列表以更新未读计数
-      await loadFeeds()
+      let feedId: string | undefined
+      setArticles(prev => {
+        const next = prev.map(a => {
+          if (a.id === id) {
+            feedId = a.feed_id
+            return { ...a, read }
+          }
+          return a
+        })
+        return next
+      })
+      if (feedId) {
+        const delta = read ? -1 : 1
+        setFeeds(prev => prev.map(f =>
+          f.feed.id === feedId
+            ? { ...f, unread_count: Math.max(0, f.unread_count + delta) }
+            : f
+        ))
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to mark article')
     }
-  }, [loadFeeds])
+  }, [])
 
   const markAllRead = useCallback(async (feedId: string) => {
     try {
       await RssApi.markAllRead(feedId)
-      // 更新文章状态
       setArticles(prev => prev.map(a =>
         a.feed_id === feedId ? { ...a, read: true } : a
       ))
-      // 重新加载订阅列表以更新未读计数
-      await loadFeeds()
+      setFeeds(prev => prev.map(f =>
+        f.feed.id === feedId ? { ...f, unread_count: 0 } : f
+      ))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to mark all read')
     }
-  }, [loadFeeds])
+  }, [])
 
   const openLink = useCallback(async (url: string) => {
     try {
