@@ -135,12 +135,12 @@ export function ArticleViewer({
   return (
     <div className="flex flex-col h-full bg-background">
       {/* 顶部工具栏 */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-card">
         <div className="flex items-center gap-2">
           {hasPrevious && (
             <button
               onClick={onPrevious}
-              className="p-2 rounded hover:bg-muted transition-colors"
+              className="p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
               title="上一篇文章 (P 或 ←)"
             >
               <ChevronLeft className="w-5 h-5" />
@@ -149,7 +149,7 @@ export function ArticleViewer({
           {hasNext && (
             <button
               onClick={onNext}
-              className="p-2 rounded hover:bg-muted transition-colors"
+              className="p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
               title="下一篇文章 (N 或 →)"
             >
               <ChevronRight className="w-5 h-5" />
@@ -160,12 +160,12 @@ export function ArticleViewer({
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           {/* 收藏按钮 */}
           <button
             onClick={handleToggleFavorite}
-            className={`p-2 rounded hover:bg-muted transition-colors ${
-              isFavorite ? 'text-yellow-500' : 'text-muted-foreground'
+            className={`p-2 rounded-lg hover:bg-muted transition-colors ${
+              isFavorite ? 'text-yellow-500' : 'text-muted-foreground hover:text-foreground'
             }`}
             title={isFavorite ? '取消收藏 (F)' : '收藏 (F)'}
           >
@@ -175,7 +175,7 @@ export function ArticleViewer({
           {/* 在浏览器中打开 */}
           <button
             onClick={() => RssApi.openLink(article.link)}
-            className="p-2 rounded hover:bg-muted transition-colors text-muted-foreground"
+            className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
             title="在浏览器中打开"
           >
             <ExternalLink className="w-5 h-5" />
@@ -184,7 +184,7 @@ export function ArticleViewer({
           {/* 设置按钮 */}
           <button
             onClick={() => openSettings('reading')}
-            className="p-2 rounded hover:bg-muted transition-colors text-muted-foreground"
+            className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
             title="阅读设置"
           >
             <Settings className="w-5 h-5" />
@@ -209,7 +209,7 @@ export function ArticleViewer({
           <h1 className="text-2xl font-bold mb-4 text-foreground">{article.title}</h1>
 
           {/* 文章元信息 */}
-          <div className="flex items-center gap-4 text-sm text-muted-foreground mb-8 pb-4 border-b border-border">
+          <div className="flex items-center gap-4 text-sm text-muted-foreground mb-8 pb-4 border-b border-border/60">
             <span>
               {article.published_at
                 ? formatDistanceToNow(new Date(article.published_at), {
@@ -218,12 +218,12 @@ export function ArticleViewer({
                   })
                 : '未知时间'}
             </span>
-            <span>·</span>
+            <span className="text-border">·</span>
             <a
               href={article.link}
               target="_blank"
               rel="noopener noreferrer"
-              className="hover:text-primary transition-colors"
+              className="text-primary hover:text-primary/80 transition-colors"
             >
               查看原文
             </a>
@@ -231,7 +231,7 @@ export function ArticleViewer({
 
           {/* 文章内容 */}
           <div
-            className={`prose max-w-none ${isDark ? 'prose-invert' : 'prose-slate'}`}
+            className={`prose max-w-none ${isDark ? 'prose-invert' : ''}`}
             dangerouslySetInnerHTML={{
               __html: sanitizeHtml(article.content || article.description || ''),
             }}

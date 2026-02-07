@@ -9,7 +9,7 @@ export interface EmptyReaderPlaceholderProps {
 export function EmptyReaderPlaceholder({ className }: EmptyReaderPlaceholderProps) {
   return (
     <div className={cn(
-      'h-full flex flex-col items-center justify-center',
+      'h-full flex flex-col items-center justify-center bg-background',
       className
     )}>
       <Compass

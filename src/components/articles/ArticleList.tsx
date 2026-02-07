@@ -75,7 +75,7 @@ export function ArticleList() {
       : '全部文章'
 
   return (
-    <div className="h-full flex flex-col border-r border-border">
+    <div className="h-full flex flex-col border-r border-border bg-card">
       {/* 顶部工具栏 */}
       <ArticleListHeader
         title={headerTitle}

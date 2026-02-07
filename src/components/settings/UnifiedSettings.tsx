@@ -101,9 +101,9 @@ function UnifiedSettingsPanel({ initialTab, onClose }: UnifiedSettingsPanelProps
       />
 
       {/* 设置面板 */}
-      <div className="relative z-50 bg-background rounded-xl shadow-2xl border border-border w-full max-w-2xl h-[80vh] flex overflow-hidden animate-in zoom-in-95 duration-200">
+      <div className="relative z-50 bg-card rounded-xl shadow-2xl border border-border w-full max-w-2xl h-[80vh] flex overflow-hidden animate-in zoom-in-95 duration-200">
         {/* 左侧导航 */}
-        <nav className="w-48 flex-shrink-0 border-r border-border bg-muted/30 flex flex-col">
+        <nav className="w-48 flex-shrink-0 border-r border-border bg-background flex flex-col">
           {/* Logo */}
           <div className="px-4 py-5 border-b border-border">
             <div className="flex items-center gap-2">
@@ -121,7 +121,7 @@ function UnifiedSettingsPanel({ initialTab, onClose }: UnifiedSettingsPanelProps
                 className={cn(
                   'w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
                   activeTab === key
-                    ? 'bg-primary text-primary-foreground'
+                    ? 'bg-accent text-primary'
                     : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                 )}
               >
@@ -135,7 +135,7 @@ function UnifiedSettingsPanel({ initialTab, onClose }: UnifiedSettingsPanelProps
         {/* 右侧内容 */}
         <div className="flex-1 flex flex-col min-w-0">
           {/* 标题栏 */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-card">
             <div className="flex items-center gap-2">
               {NAV_ITEMS.find(n => n.key === activeTab)?.icon}
               <h2 className="text-lg font-semibold">
@@ -144,14 +144,14 @@ function UnifiedSettingsPanel({ initialTab, onClose }: UnifiedSettingsPanelProps
             </div>
             <button
               onClick={onClose}
-              className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
 
           {/* 设置内容 */}
-          <div className="flex-1 overflow-y-auto px-6 py-5">
+          <div className="flex-1 overflow-y-auto px-6 py-5 bg-card">
             {activeTab === 'appearance' && <AppearanceSection />}
             {activeTab === 'reading' && <ReadingSection />}
             {activeTab === 'notification' && <NotificationSection />}
@@ -195,8 +195,8 @@ function AppearanceSection() {
               className={cn(
                 'w-full flex items-center justify-between px-4 py-3 rounded-lg border transition-colors text-left',
                 preset === key
-                  ? 'border-primary bg-primary/5'
-                  : 'border-border hover:border-primary/30 hover:bg-muted/50'
+                  ? 'border-primary/60 bg-accent'
+                  : 'border-border hover:border-muted-foreground/30 hover:bg-muted/50'
               )}
             >
               <div>
@@ -223,8 +223,8 @@ function AppearanceSection() {
               className={cn(
                 'flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors',
                 mode === key
-                  ? 'border-primary bg-primary text-primary-foreground'
-                  : 'border-border hover:border-primary/30 hover:bg-muted/50 text-muted-foreground'
+                  ? 'border-primary/60 bg-accent text-primary'
+                  : 'border-border hover:border-muted-foreground/30 hover:bg-muted/50 text-muted-foreground'
               )}
             >
               {icon}
@@ -298,7 +298,7 @@ function ReadingSection() {
               className={cn(
                 'flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors border',
                 readerSettings.textAlign === align
-                  ? 'bg-primary text-primary-foreground border-primary'
+                  ? 'bg-accent text-primary border-primary/60'
                   : 'border-border hover:bg-muted/50 text-muted-foreground'
               )}
             >
@@ -374,7 +374,7 @@ function NotificationSection() {
           value={settings.pollInterval}
           onChange={(e) => handleChange({ pollInterval: e.target.value as AppSettings['pollInterval'] })}
           disabled={saving}
-          className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
+          className="w-full px-3 py-2 rounded-lg border border-border bg-card text-foreground text-sm"
         >
           {POLL_INTERVAL_OPTIONS.map((option) => (
             <option key={option.value} value={option.value}>
@@ -401,7 +401,7 @@ function NotificationSection() {
             value={settings.notificationType}
             onChange={(e) => handleChange({ notificationType: e.target.value as AppSettings['notificationType'] })}
             disabled={saving}
-            className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
+            className="w-full px-3 py-2 rounded-lg border border-border bg-card text-foreground text-sm"
           >
             {NOTIFICATION_TYPE_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
