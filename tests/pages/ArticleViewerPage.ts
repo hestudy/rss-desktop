@@ -8,6 +8,7 @@ import { type Page, type Locator, expect } from '@playwright/test'
  * - Close button removed (Escape deselects article instead)
  * - Keyboard shortcuts hint bar removed
  * - Viewer is always visible in the right panel (shows placeholder when no article selected)
+ * - Settings panel is now a unified dialog (not embedded in ArticleViewer)
  */
 export class ArticleViewerPage {
   readonly page: Page
@@ -21,10 +22,14 @@ export class ArticleViewerPage {
   readonly contentArea: Locator
   readonly articleTitle: Locator
   readonly progressBar: Locator
-  readonly settingsPanel: Locator
   readonly articleCounter: Locator
 
-  // Settings controls
+  // Unified Settings Dialog
+  readonly settingsDialog: Locator
+  readonly settingsCloseButton: Locator
+  readonly settingsNavReading: Locator
+
+  // Settings controls (in unified settings dialog)
   readonly fontSizeSlider: Locator
   readonly lineHeightSlider: Locator
   readonly letterSpacingSlider: Locator
@@ -32,7 +37,7 @@ export class ArticleViewerPage {
   readonly textAlignLeft: Locator
   readonly textAlignCenter: Locator
   readonly textAlignJustify: Locator
-  readonly showProgressCheckbox: Locator
+  readonly showProgressToggle: Locator
   readonly resetSettingsButton: Locator
 
   constructor(page: Page) {
@@ -61,26 +66,29 @@ export class ArticleViewerPage {
     // The inner bar may have width: 0% initially, making it invisible to Playwright
     this.progressBar = this.readerPanel.locator('div.h-1.bg-muted')
 
-    // Settings panel (side panel with controls)
-    this.settingsPanel = this.readerPanel.locator('div.border-l').filter({ hasText: '阅读设置' })
-
-    // Settings controls
-    this.fontSizeSlider = this.settingsPanel.locator('input[type="range"]').nth(0)
-    this.lineHeightSlider = this.settingsPanel.locator('input[type="range"]').nth(1)
-    this.letterSpacingSlider = this.settingsPanel.locator('input[type="range"]').nth(2)
-    this.maxWidthSlider = this.settingsPanel.locator('input[type="range"]').nth(3)
-
-    // Text alignment buttons
-    this.textAlignLeft = page.locator('button', { hasText: '左对齐' })
-    this.textAlignCenter = page.locator('button', { hasText: '居中' })
-    this.textAlignJustify = page.locator('button', { hasText: '两端' })
-
-    // Progress checkbox and reset button
-    this.showProgressCheckbox = this.settingsPanel.locator('input[type="checkbox"]')
-    this.resetSettingsButton = this.settingsPanel.locator('button', { hasText: '重置为默认设置' })
-
     // Article counter (e.g., "1 / 3") - target the specific counter div with ml-2
     this.articleCounter = this.readerPanel.locator('div.text-sm.text-muted-foreground.ml-2')
+
+    // Unified Settings Dialog (rendered via Portal to body)
+    this.settingsDialog = page.locator('div.fixed.inset-0.z-50').filter({ has: page.locator('text=RSS Reader') })
+    this.settingsCloseButton = this.settingsDialog.locator('button').filter({ has: page.locator('svg') }).last()
+    this.settingsNavReading = this.settingsDialog.locator('button', { hasText: '阅读' })
+
+    // Settings controls (in unified settings dialog - reading section)
+    // The sliders are in order: fontSize, lineHeight, letterSpacing, maxWidth
+    this.fontSizeSlider = this.settingsDialog.locator('input[type="range"]').nth(0)
+    this.lineHeightSlider = this.settingsDialog.locator('input[type="range"]').nth(1)
+    this.letterSpacingSlider = this.settingsDialog.locator('input[type="range"]').nth(2)
+    this.maxWidthSlider = this.settingsDialog.locator('input[type="range"]').nth(3)
+
+    // Text alignment buttons (in unified settings dialog)
+    this.textAlignLeft = this.settingsDialog.locator('button', { hasText: '左对齐' })
+    this.textAlignCenter = this.settingsDialog.locator('button', { hasText: '居中' })
+    this.textAlignJustify = this.settingsDialog.locator('button', { hasText: '两端对齐' })
+
+    // Progress toggle (custom toggle button, not checkbox)
+    this.showProgressToggle = this.settingsDialog.locator('button.rounded-full').filter({ has: page.locator('span.rounded-full') }).first()
+    this.resetSettingsButton = this.settingsDialog.locator('button', { hasText: '重置为默认设置' })
   }
 
   /**
@@ -213,26 +221,29 @@ export class ArticleViewerPage {
   }
 
   /**
-   * Open the settings panel
+   * Open the unified settings dialog (navigates to Reading tab)
    */
   async openSettings() {
     await this.settingsButton.click()
     await this.page.waitForTimeout(300)
+    // Wait for the dialog to appear
+    await expect(this.settingsDialog).toBeVisible({ timeout: 3000 })
   }
 
   /**
-   * Close the settings panel
+   * Close the unified settings dialog
    */
   async closeSettings() {
-    await this.settingsButton.click()
+    // Click the X button or press Escape
+    await this.page.keyboard.press('Escape')
     await this.page.waitForTimeout(300)
   }
 
   /**
-   * Check if settings panel is visible
+   * Check if settings dialog is visible
    */
   async isSettingsPanelVisible(): Promise<boolean> {
-    return await this.settingsPanel.isVisible().catch(() => false)
+    return await this.settingsDialog.isVisible().catch(() => false)
   }
 
   /**
@@ -316,20 +327,21 @@ export class ArticleViewerPage {
    * Get current text alignment
    */
   async getTextAlign(): Promise<'left' | 'center' | 'justify'> {
-    const leftActive = await this.page.locator('button.bg-primary').filter({ hasText: '左对齐' }).isVisible().catch(() => false)
+    // Check which button has the primary background color
+    const leftActive = await this.settingsDialog.locator('button.bg-primary').filter({ hasText: '左对齐' }).isVisible().catch(() => false)
     if (leftActive) return 'left'
 
-    const centerActive = await this.page.locator('button.bg-primary').filter({ hasText: '居中' }).isVisible().catch(() => false)
+    const centerActive = await this.settingsDialog.locator('button.bg-primary').filter({ hasText: '居中' }).isVisible().catch(() => false)
     if (centerActive) return 'center'
 
     return 'justify'
   }
 
   /**
-   * Toggle show progress checkbox
+   * Toggle show progress toggle
    */
   async toggleShowProgress() {
-    await this.showProgressCheckbox.click()
+    await this.showProgressToggle.click()
     await this.page.waitForTimeout(200)
   }
 

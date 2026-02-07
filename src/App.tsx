@@ -3,6 +3,7 @@ import { RssProvider, useRss } from "./contexts/RssContext";
 import { ReaderProvider, useReader } from "./contexts/ReaderContext";
 import { ConfirmProvider } from "./components/ui/ConfirmDialog";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import { UnifiedSettingsProvider } from "./components/settings/UnifiedSettings";
 import { FeedList } from "./components/feeds/FeedList";
 import { ArticleList } from "./components/articles/ArticleList";
 import { ArticleViewer } from "./components/articles/ArticleViewer";
@@ -34,7 +35,7 @@ interface ThreePanelLayout {
 
 function AppContent() {
   const { loadFeeds, articles } = useRss();
-  const { selectedArticleId, selectArticle, readerSettings, updateSettings } = useReader();
+  const { selectedArticleId, selectArticle, readerSettings } = useReader();
   const groupRef = useGroupRef();
 
   // 获取当前选中的文章
@@ -185,7 +186,6 @@ function AppContent() {
               hasNext={hasNext}
               hasPrevious={hasPrevious}
               readerSettings={readerSettings}
-              onSettingsChange={updateSettings}
             />
           ) : (
             <EmptyReaderPlaceholder />
@@ -202,7 +202,9 @@ function App() {
       <ConfirmProvider>
         <RssProvider>
           <ReaderProvider>
-            <AppContent />
+            <UnifiedSettingsProvider>
+              <AppContent />
+            </UnifiedSettingsProvider>
           </ReaderProvider>
         </RssProvider>
       </ConfirmProvider>

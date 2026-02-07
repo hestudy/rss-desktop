@@ -9,7 +9,7 @@ import { type Page, type Locator, expect } from '@playwright/test'
  * - "全部文章" (All Articles) navigation button
  * - "收藏文章" (Favorites) navigation button
  * - Feed subscription list
- * - Bottom area: Settings button + Theme switcher
+ * - Bottom area: Settings button (theme settings now in unified settings dialog)
  */
 export class SidebarPage {
   readonly page: Page
@@ -33,7 +33,10 @@ export class SidebarPage {
   // Bottom area
   readonly bottomArea: Locator
   readonly settingsButton: Locator
-  readonly themeSwitcherButton: Locator
+
+  // Unified Settings Dialog
+  readonly settingsDialog: Locator
+  readonly settingsNavAppearance: Locator
 
   constructor(page: Page) {
     this.page = page
@@ -56,11 +59,14 @@ export class SidebarPage {
     // Empty state text
     this.emptyState = this.panelContent.locator('text=还没有订阅')
 
-    // Bottom area with settings and theme switcher
+    // Bottom area with settings button
     this.bottomArea = this.panelContent.locator('div.border-t').last()
-    // Use exact title matching to avoid "设置" matching "主题设置"
+    // Use exact title matching
     this.settingsButton = this.panelContent.getByTitle('设置', { exact: true })
-    this.themeSwitcherButton = this.panelContent.getByTitle('主题设置')
+
+    // Unified Settings Dialog (rendered via Portal to body)
+    this.settingsDialog = page.locator('div.fixed.inset-0.z-50').filter({ has: page.locator('text=RSS Reader') })
+    this.settingsNavAppearance = this.settingsDialog.locator('button', { hasText: '外观' })
   }
 
   /**
@@ -120,18 +126,36 @@ export class SidebarPage {
   }
 
   /**
-   * Open the theme switcher popup
-   */
-  async openThemeSwitcher() {
-    await this.themeSwitcherButton.click()
-    await this.page.waitForTimeout(300)
-  }
-
-  /**
    * Open settings dialog
    */
   async openSettings() {
     await this.settingsButton.click()
+    await this.page.waitForTimeout(300)
+    // Wait for the dialog to appear
+    await expect(this.settingsDialog).toBeVisible({ timeout: 3000 })
+  }
+
+  /**
+   * Open settings dialog and navigate to appearance tab
+   */
+  async openAppearanceSettings() {
+    await this.openSettings()
+    await this.settingsNavAppearance.click()
+    await this.page.waitForTimeout(200)
+  }
+
+  /**
+   * Check if settings dialog is visible
+   */
+  async isSettingsDialogVisible(): Promise<boolean> {
+    return await this.settingsDialog.isVisible().catch(() => false)
+  }
+
+  /**
+   * Close settings dialog
+   */
+  async closeSettings() {
+    await this.page.keyboard.press('Escape')
     await this.page.waitForTimeout(300)
   }
 

@@ -44,6 +44,16 @@ vi.mock('../../contexts/ReaderContext', () => ({
   }),
 }))
 
+// Mock useUnifiedSettings
+const mockOpenSettings = vi.fn()
+vi.mock('../settings/UnifiedSettings', () => ({
+  useUnifiedSettings: () => ({
+    open: false,
+    openSettings: mockOpenSettings,
+    closeSettings: vi.fn(),
+  }),
+}))
+
 const mockArticle: Article = {
   id: 'article-1',
   feed_id: 'feed-1',
@@ -85,7 +95,6 @@ describe('ArticleViewer', () => {
         article={mockArticle}
         articles={mockArticles}
         readerSettings={mockReaderSettings}
-        onSettingsChange={vi.fn()}
       />
     )
 
@@ -98,7 +107,6 @@ describe('ArticleViewer', () => {
         article={mockArticle}
         articles={mockArticles}
         readerSettings={mockReaderSettings}
-        onSettingsChange={vi.fn()}
       />
     )
 
@@ -112,7 +120,6 @@ describe('ArticleViewer', () => {
         article={mockArticle}
         articles={mockArticles}
         readerSettings={mockReaderSettings}
-        onSettingsChange={vi.fn()}
       />
     )
 
@@ -128,7 +135,6 @@ describe('ArticleViewer', () => {
         article={mockArticle}
         articles={mockArticles}
         readerSettings={mockReaderSettings}
-        onSettingsChange={vi.fn()}
       />
     )
 
@@ -152,7 +158,6 @@ describe('ArticleViewer', () => {
         article={mockArticles[0]}
         articles={mockArticles}
         readerSettings={mockReaderSettings}
-        onSettingsChange={vi.fn()}
       />
     )
 
@@ -170,7 +175,6 @@ describe('ArticleViewer', () => {
         hasNext={true}
         hasPrevious={false}
         readerSettings={mockReaderSettings}
-        onSettingsChange={vi.fn()}
       />
     )
 
@@ -196,7 +200,6 @@ describe('ArticleViewer', () => {
         hasNext={false}
         hasPrevious={true}
         readerSettings={mockReaderSettings}
-        onSettingsChange={vi.fn()}
       />
     )
 
@@ -219,7 +222,6 @@ describe('ArticleViewer', () => {
         hasNext={true}
         hasPrevious={false}
         readerSettings={mockReaderSettings}
-        onSettingsChange={vi.fn()}
       />
     )
 
@@ -235,7 +237,6 @@ describe('ArticleViewer', () => {
         hasNext={false}
         hasPrevious={true}
         readerSettings={mockReaderSettings}
-        onSettingsChange={vi.fn()}
       />
     )
 
@@ -243,18 +244,14 @@ describe('ArticleViewer', () => {
     expect(nextButton).not.toBeInTheDocument()
   })
 
-  it('应该显示设置面板当点击设置按钮', () => {
+  it('应该调用 openSettings 当点击设置按钮', () => {
     render(
       <ArticleViewer
         article={mockArticle}
         articles={mockArticles}
         readerSettings={mockReaderSettings}
-        onSettingsChange={vi.fn()}
       />
     )
-
-    // 初始状态设置面板隐藏
-    expect(screen.queryByText('阅读设置')).not.toBeInTheDocument()
 
     const settingsButton = screen.getAllByRole('button').find(
       btn => btn.getAttribute('title') === '阅读设置'
@@ -262,40 +259,7 @@ describe('ArticleViewer', () => {
 
     if (settingsButton) {
       fireEvent.click(settingsButton)
-      expect(screen.getByText('阅读设置')).toBeInTheDocument()
-    }
-  })
-
-  it('应该更新阅读器设置', () => {
-    const mockOnSettingsChange = vi.fn()
-
-    render(
-      <ArticleViewer
-        article={mockArticle}
-        articles={mockArticles}
-        readerSettings={mockReaderSettings}
-        onSettingsChange={mockOnSettingsChange}
-      />
-    )
-
-    // 打开设置面板
-    const settingsButton = screen.getAllByRole('button').find(
-      btn => btn.getAttribute('title') === '阅读设置'
-    )
-
-    if (settingsButton) {
-      fireEvent.click(settingsButton)
-
-      // 调整字体大小 - 找到字体大小滑块 (range input)
-      const sliders = screen.getAllByRole('slider')
-      const fontSizeSlider = sliders[0] // 第一个 slider 是字体大小
-      fireEvent.input(fontSizeSlider, { target: { value: '20' } })
-
-      expect(mockOnSettingsChange).toHaveBeenCalledWith(
-        expect.objectContaining({
-          fontSize: 20,
-        })
-      )
+      expect(mockOpenSettings).toHaveBeenCalledWith('reading')
     }
   })
 
@@ -310,7 +274,6 @@ describe('ArticleViewer', () => {
         article={articleWithScript}
         articles={mockArticles}
         readerSettings={mockReaderSettings}
-        onSettingsChange={vi.fn()}
       />
     )
 
@@ -324,7 +287,6 @@ describe('ArticleViewer', () => {
         article={mockArticle}
         articles={mockArticles}
         readerSettings={mockReaderSettings}
-        onSettingsChange={vi.fn()}
       />
     )
 
@@ -344,7 +306,6 @@ describe('ArticleViewer', () => {
         article={mockArticle}
         articles={mockArticles}
         readerSettings={settingsWithoutProgress}
-        onSettingsChange={vi.fn()}
       />
     )
 

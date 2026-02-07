@@ -9,8 +9,7 @@ import { buildTauriMockScript } from '../../fixtures/tauri-mock'
  * Verifies the sidebar navigation elements work correctly:
  * - "全部文章" (All Articles) button visible and clickable
  * - "收藏文章" (Favorites) button visible and clickable
- * - Theme switcher in the bottom area
- * - Settings button in the bottom area
+ * - Settings button in the bottom area (opens unified settings dialog)
  * - Navigation triggers article list updates
  * - Feed subscription items are displayed
  */
@@ -113,31 +112,18 @@ test.describe('Journey 2: Sidebar Navigation', () => {
     })
   })
 
-  test.describe('Theme Switcher', () => {
-    test('should be visible in the sidebar bottom area', async () => {
-      await expect(sidebar.themeSwitcherButton).toBeVisible()
+  test.describe('Appearance Settings (via Unified Settings)', () => {
+    test('should open settings dialog when settings button is clicked', async () => {
+      await sidebar.openSettings()
+      expect(await sidebar.isSettingsDialogVisible()).toBe(true)
     })
 
-    test('should be positioned in the bottom section with border-t', async () => {
-      await expect(sidebar.bottomArea).toBeVisible()
+    test('should show appearance options in settings dialog', async ({ page }) => {
+      await sidebar.openSettings()
 
-      // Theme switcher button should be within the bottom area
-      const bottomBox = await sidebar.bottomArea.boundingBox()
-      const themeBox = await sidebar.themeSwitcherButton.boundingBox()
-
-      expect(bottomBox).toBeTruthy()
-      expect(themeBox).toBeTruthy()
-
-      // Theme switcher should be within the bottom area bounds
-      expect(themeBox!.y).toBeGreaterThanOrEqual(bottomBox!.y)
-    })
-
-    test('should open theme popup when clicked', async ({ page }) => {
-      await sidebar.openThemeSwitcher()
-
-      // Theme popup should appear with theme options
-      const themePopup = page.locator('text=主题风格')
-      await expect(themePopup).toBeVisible()
+      // Settings dialog should appear with theme options
+      const themeSection = page.locator('text=主题风格')
+      await expect(themeSection).toBeVisible()
 
       // Should show theme presets
       await expect(page.locator('text=护眼模式')).toBeVisible()
@@ -148,6 +134,14 @@ test.describe('Journey 2: Sidebar Navigation', () => {
       await expect(page.locator('text=明暗模式')).toBeVisible()
       await expect(page.locator('text=浅色')).toBeVisible()
       await expect(page.locator('text=深色')).toBeVisible()
+    })
+
+    test('should close settings dialog when pressing Escape', async () => {
+      await sidebar.openSettings()
+      expect(await sidebar.isSettingsDialogVisible()).toBe(true)
+
+      await sidebar.closeSettings()
+      expect(await sidebar.isSettingsDialogVisible()).toBe(false)
     })
   })
 

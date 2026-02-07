@@ -5,8 +5,8 @@ import { zhCN } from 'date-fns/locale'
 import DOMPurify from 'dompurify'
 import { RssApi } from '../../lib/api'
 import type { Article, ReaderSettings } from '../../types'
-import { DEFAULT_READER_SETTINGS } from '../../types'
 import { useReader } from '../../contexts/ReaderContext'
+import { useUnifiedSettings } from '../settings/UnifiedSettings'
 
 interface ArticleViewerProps {
   article: Article
@@ -16,7 +16,6 @@ interface ArticleViewerProps {
   hasNext?: boolean
   hasPrevious?: boolean
   readerSettings: ReaderSettings
-  onSettingsChange: (settings: ReaderSettings) => void
 }
 
 // 允许的 HTML 标签和属性
@@ -34,13 +33,12 @@ export function ArticleViewer({
   hasNext = false,
   hasPrevious = false,
   readerSettings,
-  onSettingsChange,
 }: ArticleViewerProps) {
   const contentRef = useRef<HTMLDivElement>(null)
   const [isFavorite, setIsFavorite] = useState(article.favorite ?? false)
-  const [showSettings, setShowSettings] = useState(false)
   const [scrollProgress, setScrollProgress] = useState(article.reading_progress ?? 0)
   const { selectArticle } = useReader()
+  const { openSettings } = useUnifiedSettings()
 
   // 处理滚动并更新阅读进度
   const handleScroll = useCallback(() => {
@@ -183,10 +181,8 @@ export function ArticleViewer({
 
           {/* 设置按钮 */}
           <button
-            onClick={() => setShowSettings(!showSettings)}
-            className={`p-2 rounded hover:bg-muted transition-colors ${
-              showSettings ? 'bg-muted' : 'text-muted-foreground'
-            }`}
+            onClick={() => openSettings('reading')}
+            className="p-2 rounded hover:bg-muted transition-colors text-muted-foreground"
             title="阅读设置"
           >
             <Settings className="w-5 h-5" />
@@ -205,171 +201,40 @@ export function ArticleViewer({
       )}
 
       {/* 内容区域 */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* 文章内容 */}
-        <div
-          ref={contentRef}
-          onScroll={handleScroll}
-          className="flex-1 overflow-y-auto px-8 py-6 scroll-smooth"
-        >
-          <article className="mx-auto" style={getContentStyle()}>
-            {/* 文章标题 */}
-            <h1 className="text-2xl font-bold mb-4 text-foreground">{article.title}</h1>
+      <div className="flex-1 overflow-y-auto px-8 py-6 scroll-smooth" ref={contentRef} onScroll={handleScroll}>
+        <article className="mx-auto" style={getContentStyle()}>
+          {/* 文章标题 */}
+          <h1 className="text-2xl font-bold mb-4 text-foreground">{article.title}</h1>
 
-            {/* 文章元信息 */}
-            <div className="flex items-center gap-4 text-sm text-muted-foreground mb-8 pb-4 border-b border-border">
-              <span>
-                {article.published_at
-                  ? formatDistanceToNow(new Date(article.published_at), {
-                      addSuffix: true,
-                      locale: zhCN,
-                    })
-                  : '未知时间'}
-              </span>
-              <span>·</span>
-              <a
-                href={article.link}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:text-primary transition-colors"
-              >
-                查看原文
-              </a>
-            </div>
-
-            {/* 文章内容 */}
-            <div
-              className="prose prose-slate dark:prose-invert max-w-none"
-              dangerouslySetInnerHTML={{
-                __html: sanitizeHtml(article.content || article.description || ''),
-              }}
-            />
-          </article>
-        </div>
-
-        {/* 设置面板 */}
-        {showSettings && (
-          <div className="w-72 border-l border-border bg-muted/20 p-4 overflow-y-auto">
-            <h3 className="font-semibold mb-4">阅读设置</h3>
-
-            {/* 字体大小 */}
-            <div className="mb-6">
-              <label className="block text-sm font-medium mb-2">
-                字体大小: {readerSettings.fontSize}px
-              </label>
-              <input
-                type="range"
-                min="12"
-                max="24"
-                step="1"
-                value={readerSettings.fontSize}
-                onChange={(e) =>
-                  onSettingsChange({ ...readerSettings, fontSize: Number(e.target.value) })
-                }
-                className="w-full"
-              />
-            </div>
-
-            {/* 行间距 */}
-            <div className="mb-6">
-              <label className="block text-sm font-medium mb-2">
-                行间距: {readerSettings.lineHeight}
-              </label>
-              <input
-                type="range"
-                min="1"
-                max="2.5"
-                step="0.1"
-                value={readerSettings.lineHeight}
-                onChange={(e) =>
-                  onSettingsChange({ ...readerSettings, lineHeight: Number(e.target.value) })
-                }
-                className="w-full"
-              />
-            </div>
-
-            {/* 字间距 */}
-            <div className="mb-6">
-              <label className="block text-sm font-medium mb-2">
-                字间距: {readerSettings.letterSpacing}px
-              </label>
-              <input
-                type="range"
-                min="0"
-                max="5"
-                step="0.5"
-                value={readerSettings.letterSpacing}
-                onChange={(e) =>
-                  onSettingsChange({ ...readerSettings, letterSpacing: Number(e.target.value) })
-                }
-                className="w-full"
-              />
-            </div>
-
-            {/* 内容宽度 */}
-            <div className="mb-6">
-              <label className="block text-sm font-medium mb-2">
-                内容宽度: {readerSettings.maxWidth}ch
-              </label>
-              <input
-                type="range"
-                min="50"
-                max="120"
-                step="5"
-                value={readerSettings.maxWidth}
-                onChange={(e) =>
-                  onSettingsChange({ ...readerSettings, maxWidth: Number(e.target.value) })
-                }
-                className="w-full"
-              />
-            </div>
-
-            {/* 文本对齐 */}
-            <div className="mb-6">
-              <label className="block text-sm font-medium mb-2">文本对齐</label>
-              <div className="flex gap-2">
-                {(['left', 'center', 'justify'] as const).map((align) => (
-                  <button
-                    key={align}
-                    onClick={() => onSettingsChange({ ...readerSettings, textAlign: align })}
-                    className={`flex-1 py-2 px-3 rounded text-sm transition-colors ${
-                      readerSettings.textAlign === align
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted hover:bg-muted/70'
-                    }`}
-                  >
-                    {align === 'left' && '左对齐'}
-                    {align === 'center' && '居中'}
-                    {align === 'justify' && '两端'}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* 显示进度 */}
-            <div className="mb-6">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={readerSettings.showProgress}
-                  onChange={(e) =>
-                    onSettingsChange({ ...readerSettings, showProgress: e.target.checked })
-                  }
-                  className="rounded"
-                />
-                <span className="text-sm font-medium">显示阅读进度</span>
-              </label>
-            </div>
-
-            {/* 重置按钮 */}
-            <button
-              onClick={() => onSettingsChange(DEFAULT_READER_SETTINGS)}
-              className="w-full py-2 px-4 bg-muted hover:bg-muted/70 rounded transition-colors text-sm"
+          {/* 文章元信息 */}
+          <div className="flex items-center gap-4 text-sm text-muted-foreground mb-8 pb-4 border-b border-border">
+            <span>
+              {article.published_at
+                ? formatDistanceToNow(new Date(article.published_at), {
+                    addSuffix: true,
+                    locale: zhCN,
+                  })
+                : '未知时间'}
+            </span>
+            <span>·</span>
+            <a
+              href={article.link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-primary transition-colors"
             >
-              重置为默认设置
-            </button>
+              查看原文
+            </a>
           </div>
-        )}
+
+          {/* 文章内容 */}
+          <div
+            className="prose prose-slate dark:prose-invert max-w-none"
+            dangerouslySetInnerHTML={{
+              __html: sanitizeHtml(article.content || article.description || ''),
+            }}
+          />
+        </article>
       </div>
     </div>
   )
