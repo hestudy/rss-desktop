@@ -1,13 +1,14 @@
 import { type Page, type Locator, expect } from '@playwright/test'
 
 /**
- * Page Object Model for the Article List component
+ * Page Object Model for the Article List component (middle panel)
  * Handles interactions with the article list view
+ *
+ * Updated for the new 3-panel layout with list-row style articles.
  */
 export class ArticleListPage {
   readonly page: Page
   readonly container: Locator
-  readonly header: Locator
   readonly articleItems: Locator
   readonly markAllReadButton: Locator
   readonly emptyState: Locator
@@ -15,8 +16,9 @@ export class ArticleListPage {
 
   constructor(page: Page) {
     this.page = page
-    this.container = page.locator('div').nth(1) // Right panel
-    this.articleItems = page.locator('[class*="p-4 rounded-lg border"]')
+    this.container = page.locator('[data-testid="article-list-panel-content"]')
+    // Articles now use list-row style with cursor-pointer
+    this.articleItems = this.container.locator('div.cursor-pointer')
     this.markAllReadButton = page.locator('button', { hasText: '全部已读' })
     this.emptyState = page.locator('text=暂无文章')
     this.loadingState = page.locator('text=加载中')
@@ -26,7 +28,6 @@ export class ArticleListPage {
    * Wait for articles to load
    */
   async waitForLoaded() {
-    // Wait for either articles or empty state
     await Promise.race([
       this.articleItems.first().waitFor({ state: 'visible' }).catch(() => {}),
       this.emptyState.waitFor({ state: 'visible' }).catch(() => {}),
@@ -56,7 +57,6 @@ export class ArticleListPage {
   async clickArticle(index: number) {
     const article = this.articleItems.nth(index)
     await article.click()
-    // Wait for state update
     await this.page.waitForTimeout(500)
   }
 
@@ -66,11 +66,11 @@ export class ArticleListPage {
   async isArticleRead(index: number): Promise<boolean> {
     const article = this.articleItems.nth(index)
     const classList = await article.getAttribute('class')
-    return classList?.includes('opacity-70') || classList?.includes('bg-muted/50') || false
+    return classList?.includes('opacity-80') || classList?.includes('bg-read-background') || false
   }
 
   /**
-   * Get the article title by searching for it
+   * Find an article by title
    */
   async findArticleByTitle(title: string): Promise<Locator | null> {
     const articles = await this.articleItems.all()
@@ -103,7 +103,7 @@ export class ArticleListPage {
    * Get the current feed title from the header
    */
   async getCurrentFeedTitle(): Promise<string | null> {
-    const header = this.page.locator('h2').first()
+    const header = this.container.locator('h2').first()
     return await header.textContent()
   }
 
@@ -126,16 +126,7 @@ export class ArticleListPage {
    */
   async getArticleDescription(index: number): Promise<string | null> {
     const article = this.articleItems.nth(index)
-    const desc = article.locator('p[class*="text-muted-foreground"]')
+    const desc = article.locator('p').first()
     return await desc.textContent()
-  }
-
-  /**
-   * Click the external link button on an article
-   */
-  async clickExternalLink(index: number) {
-    const article = this.articleItems.nth(index)
-    const linkButton = article.locator('button').last() // ExternalLink button
-    await linkButton.click()
   }
 }

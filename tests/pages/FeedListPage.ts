@@ -1,8 +1,10 @@
 import { type Page, type Locator, expect } from '@playwright/test'
 
 /**
- * Page Object Model for the Feed List component
+ * Page Object Model for the Feed List component (sidebar)
  * Handles interactions with the RSS subscription list
+ *
+ * Updated for the new Folo-style sidebar with dark background.
  */
 export class FeedListPage {
   readonly page: Page
@@ -17,15 +19,15 @@ export class FeedListPage {
 
   constructor(page: Page) {
     this.page = page
-    // Feed list is in the left panel
-    this.container = page.locator('div').filter({ hasText: 'RSS 订阅' }).first()
-    this.header = page.locator('text=RSS 订阅').first()
-    this.feedItems = page.locator('[class*="group rounded-md"]')
+    // Feed list is in the sidebar panel
+    this.container = page.locator('[data-testid="feed-panel-content"]')
+    this.header = page.getByRole('heading', { name: 'RSS Reader' })
+    this.feedItems = page.locator('div.group.relative.rounded-md')
     this.addButton = page.getByTitle('添加订阅')
     this.refreshAllButton = page.getByTitle('刷新全部')
-    this.allArticlesButton = page.locator('button', { hasText: '全部文章' })
+    this.allArticlesButton = page.locator('button').filter({ hasText: '全部文章' })
     this.emptyState = page.locator('text=还没有订阅')
-    this.globalUnreadBadge = page.locator('span[class*="bg-primary text-primary-foreground"]')
+    this.globalUnreadBadge = page.locator('span.bg-sidebar-active.text-white').first()
   }
 
   /**
@@ -49,29 +51,23 @@ export class FeedListPage {
    * Close any open dialog by clicking backdrop or pressing Escape
    */
   async closeAnyDialog() {
-    // Try multiple times to ensure dialog is closed
     for (let i = 0; i < 3; i++) {
-      // First try to close with Escape key (works for most dialogs)
       const dialogTitle = this.page.locator('h2', { hasText: '添加 RSS 订阅' })
       const isDialogOpen = await dialogTitle.isVisible().catch(() => false)
 
       if (isDialogOpen) {
-        // Press Escape to close the dialog
         await this.page.keyboard.press('Escape')
         await this.page.waitForTimeout(500)
 
-        // Check if dialog closed
         const stillOpen = await dialogTitle.isVisible().catch(() => false)
         if (!stillOpen) {
           break
         }
       } else {
-        // No dialog found
         break
       }
     }
 
-    // Fallback: try clicking backdrop if still present
     const backdrop = this.page.locator('div[class*="bg-black/50"]')
     if (await backdrop.isVisible().catch(() => false)) {
       await backdrop.click({ force: true })
@@ -93,7 +89,6 @@ export class FeedListPage {
   async clickRefreshAll() {
     await this.ensureReady()
     await this.refreshAllButton.click()
-    // Wait for refresh animation to complete
     await this.page.waitForTimeout(2000)
   }
 
@@ -103,17 +98,15 @@ export class FeedListPage {
   async clickAllArticles() {
     await this.ensureReady()
 
-    // Try clicking with retries in case dialog is blocking
     for (let i = 0; i < 3; i++) {
       try {
         await this.allArticlesButton.click({ timeout: 5000 })
         await this.page.waitForTimeout(300)
         break
       } catch (error) {
-        // May be blocked by dialog, try to close it
         await this.closeAnyDialog()
         if (i === 2) {
-          throw error // Re-throw on last attempt
+          throw error
         }
       }
     }
@@ -131,9 +124,8 @@ export class FeedListPage {
    */
   async selectFeed(title: string) {
     await this.ensureReady()
-    const feedButton = this.page.locator('button', { hasText: title }).first()
+    const feedButton = this.page.locator('button').filter({ hasText: title }).first()
     await feedButton.click()
-    // Wait a bit for the selection to take effect
     await this.page.waitForTimeout(500)
   }
 
@@ -142,7 +134,7 @@ export class FeedListPage {
    */
   async getFeedUnreadCount(title: string): Promise<number> {
     const feedElement = this.page.locator('div').filter({ hasText: title }).first()
-    const badge = feedElement.locator('span[class*="bg-primary text-primary-foreground"]')
+    const badge = feedElement.locator('span.bg-sidebar-active.text-white')
     const text = await badge.textContent()
     return text ? parseInt(text, 10) : 0
   }
@@ -151,7 +143,7 @@ export class FeedListPage {
    * Check if a feed with the given title exists
    */
   async hasFeed(title: string): Promise<boolean> {
-    const count = await this.page.locator('button', { hasText: title }).count()
+    const count = await this.page.locator('button').filter({ hasText: title }).count()
     return count > 0
   }
 
@@ -159,7 +151,7 @@ export class FeedListPage {
    * Get the global unread count from the header
    */
   async getGlobalUnreadCount(): Promise<number> {
-    const badge = this.container.locator('span[class*="bg-primary text-primary-foreground"]').first()
+    const badge = this.container.locator('span.bg-sidebar-active.text-white').first()
     const text = await badge.textContent()
     return text ? parseInt(text, 10) : 0
   }
@@ -178,11 +170,9 @@ export class FeedListPage {
   async deleteFeed(title: string) {
     await this.hoverFeed(title)
 
-    // Find and click the delete button (Trash2 icon)
     const deleteButton = this.page.locator('button').filter({ hasText: '' }).nth(-1)
     await deleteButton.click()
 
-    // Confirm deletion in the dialog
     await this.confirmDelete()
   }
 
@@ -192,12 +182,10 @@ export class FeedListPage {
   async refreshFeed(title: string) {
     await this.hoverFeed(title)
 
-    // Find and click the refresh button (second to last button)
     const feedElement = this.page.locator('div').filter({ hasText: title }).first()
     const refreshButton = feedElement.locator('button').nth(-2)
     await refreshButton.click()
 
-    // Wait for refresh
     await this.page.waitForTimeout(2000)
   }
 
@@ -205,14 +193,11 @@ export class FeedListPage {
    * Confirm delete operation in the confirmation dialog
    */
   private async confirmDelete() {
-    // Wait for confirmation dialog
     await this.page.waitForSelector('text=确定要删除这个订阅吗？', { timeout: 5000 })
 
-    // Click confirm button
     const confirmButton = this.page.locator('button').filter({ hasText: '确定' })
     await confirmButton.click()
 
-    // Wait for dialog to close
     await this.page.waitForSelector('text=确定要删除这个订阅吗？', { state: 'hidden', timeout: 5000 })
   }
 

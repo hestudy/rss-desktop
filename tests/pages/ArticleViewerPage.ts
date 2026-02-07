@@ -1,14 +1,17 @@
 import { type Page, type Locator, expect } from '@playwright/test'
 
 /**
- * Page Object Model for the Article Viewer component
+ * Page Object Model for the Article Viewer component (right panel)
  * Handles interactions with the article reading interface
+ *
+ * Updated for the new 3-panel layout:
+ * - Close button removed (Escape deselects article instead)
+ * - Keyboard shortcuts hint bar removed
+ * - Viewer is always visible in the right panel (shows placeholder when no article selected)
  */
 export class ArticleViewerPage {
   readonly page: Page
-  readonly container: Locator
-  readonly toolbar: Locator
-  readonly closeButton: Locator
+  readonly readerPanel: Locator
   readonly favoriteButton: Locator
   readonly unfavoriteButton: Locator
   readonly previousButton: Locator
@@ -20,7 +23,6 @@ export class ArticleViewerPage {
   readonly progressBar: Locator
   readonly settingsPanel: Locator
   readonly articleCounter: Locator
-  readonly keyboardShortcutsHint: Locator
 
   // Settings controls
   readonly fontSizeSlider: Locator
@@ -36,32 +38,31 @@ export class ArticleViewerPage {
   constructor(page: Page) {
     this.page = page
 
-    // Main container - article viewer replaces article list when article is selected
-    this.container = page.locator('div').filter({ hasText: /Esc: 关闭/ }).first()
-    this.toolbar = page.locator('div').filter({ hasText: /上一篇/ }).first()
+    // Reader panel container
+    this.readerPanel = page.locator('[data-testid="reader-panel-content"]')
 
-    // Navigation buttons
-    this.closeButton = page.locator('button').filter({ hasText: '' }).nth(-1) // X icon
-    this.previousButton = page.locator('button').filter({ hasNotText: '' }).filter({ hasText: /上一篇/ })
-    this.nextButton = page.locator('button').filter({ hasNotText: '' }).filter({ hasText: /下一篇/ })
+    // Navigation buttons - use title attributes
+    this.previousButton = page.locator('button[title*="上一篇"]')
+    this.nextButton = page.locator('button[title*="下一篇"]')
 
-    // Favorite button (can be Star or StarOff icon)
-    this.favoriteButton = page.locator('button').filter({ hasNotText: '' }).filter({ hasText: /收藏/ })
-    this.unfavoriteButton = page.locator('button').filter({ hasNotText: '' }).filter({ hasText: /取消收藏/ })
+    // Favorite button
+    this.favoriteButton = page.locator('button[title="收藏 (F)"]')
+    this.unfavoriteButton = page.locator('button[title="取消收藏 (F)"]')
 
     // Settings and external link
     this.settingsButton = page.getByTitle('阅读设置')
     this.externalLinkButton = page.getByTitle('在浏览器中打开')
 
-    // Content area
-    this.contentArea = page.locator('div').filter({ hasText: /查看原文/ }).first()
-    this.articleTitle = page.locator('h1').first()
+    // Content area - the scrollable div
+    this.contentArea = this.readerPanel.locator('.overflow-y-auto').first()
+    this.articleTitle = this.readerPanel.locator('h1').first()
 
-    // Progress bar
-    this.progressBar = page.locator('div.bg-primary').filter({ hasNotText: '' })
+    // Progress bar - use the outer container (h-1 bg-muted) which is always visible when showProgress is true
+    // The inner bar may have width: 0% initially, making it invisible to Playwright
+    this.progressBar = this.readerPanel.locator('div.h-1.bg-muted')
 
-    // Settings panel
-    this.settingsPanel = page.locator('div').filter({ hasText: /阅读设置/ }).nth(0)
+    // Settings panel (side panel with controls)
+    this.settingsPanel = this.readerPanel.locator('div.border-l').filter({ hasText: '阅读设置' })
 
     // Settings controls
     this.fontSizeSlider = this.settingsPanel.locator('input[type="range"]').nth(0)
@@ -78,15 +79,12 @@ export class ArticleViewerPage {
     this.showProgressCheckbox = this.settingsPanel.locator('input[type="checkbox"]')
     this.resetSettingsButton = this.settingsPanel.locator('button', { hasText: '重置为默认设置' })
 
-    // Article counter (e.g., "1 / 10")
-    this.articleCounter = page.locator('div').filter({ hasText: /\d+ \/ \d+/ })
-
-    // Keyboard shortcuts hint
-    this.keyboardShortcutsHint = page.locator('div').filter({ hasText: /Esc: 关闭/ })
+    // Article counter (e.g., "1 / 3") - target the specific counter div with ml-2
+    this.articleCounter = this.readerPanel.locator('div.text-sm.text-muted-foreground.ml-2')
   }
 
   /**
-   * Wait for the article viewer to be visible
+   * Wait for the article viewer to be visible (article loaded)
    */
   async waitForVisible() {
     await expect(this.articleTitle).toBeVisible({ timeout: 5000 })
@@ -107,16 +105,7 @@ export class ArticleViewerPage {
   }
 
   /**
-   * Click the close button to close the reader
-   */
-  async close() {
-    await this.closeButton.click()
-    // Wait for reader to close
-    await this.page.waitForTimeout(500)
-  }
-
-  /**
-   * Press Escape key to close the reader
+   * Press Escape key to deselect the article (shows placeholder)
    */
   async closeWithEscape() {
     await this.page.keyboard.press('Escape')
@@ -124,22 +113,25 @@ export class ArticleViewerPage {
   }
 
   /**
+   * Deselect the current article by pressing Escape
+   */
+  async deselectArticle() {
+    await this.closeWithEscape()
+  }
+
+  /**
    * Check if the favorite button shows as favorited (filled star)
    */
   async isFavorited(): Promise<boolean> {
-    const button = page => page.locator('button').filter({ hasNotText: '' }).filter({ hasText: /取消收藏/ })
-    return await button(this.page).isVisible().catch(() => false)
+    return await this.unfavoriteButton.isVisible().catch(() => false)
   }
 
   /**
    * Toggle favorite status
    */
   async toggleFavorite() {
-    // Click the favorite button (either Star or StarOff)
-    const favoriteBtn = this.page.locator('button').filter({ hasNotText: '' }).filter({
-      hasText: /收藏|取消收藏/
-    }).first()
-    await favoriteBtn.click()
+    const favBtn = this.page.locator('button[title*="收藏"]').first()
+    await favBtn.click()
     await this.page.waitForTimeout(500)
   }
 
@@ -200,7 +192,7 @@ export class ArticleViewerPage {
   }
 
   /**
-   * Get the article counter text (e.g., "1 / 10")
+   * Get the article counter text (e.g., "1 / 3")
    */
   async getArticleCounter(): Promise<string | null> {
     return await this.articleCounter.textContent()
@@ -321,7 +313,7 @@ export class ArticleViewerPage {
   }
 
   /**
-   * Get current text alignment (by checking which button is active)
+   * Get current text alignment
    */
   async getTextAlign(): Promise<'left' | 'center' | 'justify'> {
     const leftActive = await this.page.locator('button.bg-primary').filter({ hasText: '左对齐' }).isVisible().catch(() => false)
@@ -402,7 +394,7 @@ export class ArticleViewerPage {
    * Get article content HTML
    */
   async getArticleContent(): Promise<string> {
-    const content = this.page.locator('article').first()
+    const content = this.readerPanel.locator('article').first()
     return await content.innerHTML()
   }
 
@@ -410,7 +402,7 @@ export class ArticleViewerPage {
    * Check if content contains XSS (script tags should be sanitized)
    */
   async hasUnsanitizedScript(): Promise<boolean> {
-    const scripts = await this.page.locator('article script').count()
+    const scripts = await this.readerPanel.locator('article script').count()
     return scripts > 0
   }
 
@@ -418,7 +410,7 @@ export class ArticleViewerPage {
    * Get the article link
    */
   async getArticleLink(): Promise<string | null> {
-    const link = this.page.locator('a').filter({ hasText: '查看原文' })
+    const link = this.readerPanel.locator('a').filter({ hasText: '查看原文' })
     return await link.getAttribute('href')
   }
 
@@ -443,22 +435,16 @@ export class ArticleViewerPage {
    * Wait for content to be fully loaded
    */
   async waitForContent() {
-    await this.page.waitForSelector('article', { state: 'attached', timeout: 5000 })
+    await this.readerPanel.locator('article').first().waitFor({ state: 'attached', timeout: 5000 })
     await this.page.waitForTimeout(500)
   }
 
   /**
-   * Get the article meta info (publish time, etc.)
+   * Get the article meta info
    */
   async getArticleMeta(): Promise<string | null> {
-    const meta = this.page.locator('div').filter({ hasText: /查看原文/ })
+    // Target the specific meta div with border-b that contains the "查看原文" link
+    const meta = this.readerPanel.locator('div.border-b').filter({ hasText: /查看原文/ }).last()
     return await meta.textContent()
-  }
-
-  /**
-   * Verify keyboard shortcuts hint is displayed
-   */
-  async isKeyboardShortcutsHintVisible(): Promise<boolean> {
-    return await this.keyboardShortcutsHint.isVisible().catch(() => false)
   }
 }
