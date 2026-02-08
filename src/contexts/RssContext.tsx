@@ -15,6 +15,7 @@ interface RssContextType {
   removeFeed: (id: string) => Promise<void>
   refreshFeed: (id: string) => Promise<void>
   refreshAllFeeds: () => Promise<void>
+  silentRefreshAll: () => Promise<void>
   selectFeed: (id: string | null) => void
   selectFavorites: () => void
   markArticleRead: (id: string, read: boolean) => Promise<void>
@@ -150,6 +151,16 @@ export function RssProvider({ children }: RssProviderProps) {
     }
   }, [loadArticles, selectedFeedId])
 
+  const silentRefreshAll = useCallback(async () => {
+    try {
+      const results = await RssApi.refreshAllFeeds()
+      setFeeds(results)
+    } catch (err) {
+      // 静默刷新失败不影响用户体验，仅记录日志
+      console.warn('Silent refresh failed:', err instanceof Error ? err.message : err)
+    }
+  }, [])
+
   const selectFeed = useCallback((id: string | null) => {
     setSelectedFeedId(id)
     setShowFavoritesOnly(false)
@@ -238,6 +249,7 @@ export function RssProvider({ children }: RssProviderProps) {
     removeFeed,
     refreshFeed,
     refreshAllFeeds,
+    silentRefreshAll,
     selectFeed,
     selectFavorites,
     markArticleRead,

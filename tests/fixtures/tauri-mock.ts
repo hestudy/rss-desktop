@@ -110,8 +110,12 @@ export function buildTauriMockScript(): string {
   const articleState = {};
   articles.forEach(a => { articleState[a.id] = { ...a }; });
 
+  window.__TAURI_MOCK_CALLS__ = [];
+
   // Mock invoke handler
   function mockInvoke(command, args) {
+    window.__TAURI_MOCK_CALLS__.push({ command, args, timestamp: Date.now() });
+
     switch (command) {
       case 'get_feeds':
         return Promise.resolve(feeds);
@@ -147,7 +151,10 @@ export function buildTauriMockScript(): string {
         return Promise.resolve(feeds.find(f => f.feed.id === args.id) || feeds[0]);
 
       case 'refresh_all_feeds':
-        return Promise.resolve(feeds);
+        return Promise.resolve(feeds.map(f => ({
+          ...f,
+          feed: { ...f.feed, updated_at: new Date().toISOString() },
+        })));
 
       case 'mark_article_read': {
         if (articleState[args.id]) {

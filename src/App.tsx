@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { RssProvider, useRss } from "./contexts/RssContext";
 import { ReaderProvider, useReader } from "./contexts/ReaderContext";
 import { ConfirmProvider } from "./components/ui/ConfirmDialog";
@@ -34,9 +34,10 @@ interface ThreePanelLayout {
 }
 
 function AppContent() {
-  const { loadFeeds, articles } = useRss();
+  const { loadFeeds, silentRefreshAll, articles } = useRss();
   const { selectedArticleId, selectArticle, readerSettings } = useReader();
   const groupRef = useGroupRef();
+  const initialRefreshDone = useRef(false);
 
   // 获取当前选中的文章
   const selectedArticle = articles.find(a => a.id === selectedArticleId) || null;
@@ -59,7 +60,12 @@ function AppContent() {
   useEffect(() => {
     let cancelled = false;
 
-    loadFeeds();
+    loadFeeds().then(() => {
+      if (!cancelled && !initialRefreshDone.current) {
+        initialRefreshDone.current = true;
+        silentRefreshAll();
+      }
+    });
 
     // 从 Tauri 存储加载面板布局
     invoke("get_store_value", { key: STORAGE_KEY })
@@ -102,6 +108,7 @@ function AppContent() {
     return () => {
       cancelled = true;
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadFeeds, groupRef]);
 
   const handleLayoutChange = (newLayout: Layout) => {
