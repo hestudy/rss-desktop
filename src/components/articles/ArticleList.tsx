@@ -25,10 +25,10 @@ export function ArticleList() {
   const [isRefreshing, setIsRefreshing] = useState(false)
 
   useEffect(() => {
-    if (selectedFeedId) {
-      loadArticles(selectedFeedId)
+    if (!showFavoritesOnly) {
+      loadArticles(selectedFeedId || undefined)
     }
-  }, [selectedFeedId, loadArticles])
+  }, [selectedFeedId, showFavoritesOnly, loadArticles])
 
   const handleArticleClick = async (article: Article) => {
     selectArticle(article.id)

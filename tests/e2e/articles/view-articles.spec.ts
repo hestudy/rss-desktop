@@ -41,6 +41,13 @@ test.describe('View Articles', () => {
     await expect(feedListPage.allArticlesButton).toBeVisible()
   })
 
+  test('should show all articles on initial load without clicking', async () => {
+    await articleListPage.waitForLoaded()
+
+    const articleCount = await articleListPage.getArticleCount()
+    expect(articleCount).toBeGreaterThan(0)
+  })
+
   test('should click all articles button and show articles', async ({ page }) => {
     await feedListPage.clickAllArticles()
     await articleListPage.waitForLoaded()
