@@ -128,8 +128,16 @@ export function buildTauriMockScript(): string {
         if (args && args.unreadOnly) {
           result = result.filter(a => !a.read);
         }
-        // Sort by published_at descending
-        result.sort((a, b) => new Date(b.published_at || 0).getTime() - new Date(a.published_at || 0).getTime());
+        const isAllFeeds = !args || !args.feedId;
+        result.sort((a, b) => {
+          const aTime = new Date(a.published_at || a.created_at).getTime();
+          const bTime = new Date(b.published_at || b.created_at).getTime();
+          if (isAllFeeds) {
+            const readDiff = Number(a.read) - Number(b.read);
+            return readDiff !== 0 ? readDiff : bTime - aTime;
+          }
+          return bTime - aTime;
+        });
         if (args && args.limit) {
           result = result.slice(0, args.limit);
         }

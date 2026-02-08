@@ -1,12 +1,12 @@
-use crate::models::{Feed, Article};
 use crate::error::Result;
-use std::path::{Path, Component};
+use crate::models::{Article, Feed};
+use std::path::{Component, Path};
 
 // 存储层实现 - 使用 JSON 文件存储 + 文件锁
+use fs2::FileExt;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufReader, BufWriter, Write};
 use std::sync::Mutex;
-use fs2::FileExt;
 
 const FEEDS_FILE: &str = "feeds.json";
 const ARTICLES_FILE: &str = "articles.json";
@@ -20,7 +20,7 @@ fn validate_data_dir(path: &Path) -> Result<()> {
     for component in path.components() {
         if matches!(component, Component::ParentDir) {
             return Err(crate::error::RssError::StorageError(
-                "Path cannot contain parent directory references (..)".to_string()
+                "Path cannot contain parent directory references (..)".to_string(),
             ));
         }
     }
@@ -32,7 +32,7 @@ fn validate_data_dir(path: &Path) -> Result<()> {
             for component in canonical.components() {
                 if matches!(component, Component::ParentDir) {
                     return Err(crate::error::RssError::StorageError(
-                        "Path cannot contain parent directory references".to_string()
+                        "Path cannot contain parent directory references".to_string(),
                     ));
                 }
             }
@@ -77,7 +77,8 @@ impl Storage {
     }
 
     fn acquire_write_lock(&self) -> Result<std::sync::MutexGuard<'_, ()>> {
-        self.write_lock.lock()
+        self.write_lock
+            .lock()
             .map_err(|e| crate::error::RssError::LockError(e.to_string()))
     }
 
@@ -94,7 +95,7 @@ impl Storage {
         let mut feeds = self.load_feeds()?;
         if feeds.iter().any(|f| f.url == feed.url) {
             return Err(crate::error::RssError::StorageError(
-                "Feed with this URL already exists".to_string()
+                "Feed with this URL already exists".to_string(),
             ));
         }
         feeds.push(feed.clone());
@@ -144,23 +145,34 @@ impl Storage {
         let _lock = self.acquire_write_lock()?;
         let mut articles = self.load_articles()?;
         // 检查是否已存在（通过链接+订阅源去重）
-        if !articles.iter().any(|a| a.link == article.link && a.feed_id == article.feed_id) {
+        if !articles
+            .iter()
+            .any(|a| a.link == article.link && a.feed_id == article.feed_id)
+        {
             articles.push(article.clone());
             self.save_articles(&articles)?;
         }
         Ok(())
     }
 
-    pub fn get_articles(&self, feed_id: Option<&str>, limit: Option<usize>) -> Result<Vec<Article>> {
+    pub fn get_articles(
+        &self,
+        feed_id: Option<&str>,
+        limit: Option<usize>,
+    ) -> Result<Vec<Article>> {
         let mut articles = self.load_articles()?;
         if let Some(feed_id) = feed_id {
             articles.retain(|a| a.feed_id == feed_id);
         }
-        // 按发布时间倒序排列
+        let is_all_feeds = feed_id.is_none();
         articles.sort_by(|a, b| {
             let a_time = a.published_at.unwrap_or(a.created_at);
             let b_time = b.published_at.unwrap_or(b.created_at);
-            b_time.cmp(&a_time)
+            if is_all_feeds {
+                a.read.cmp(&b.read).then_with(|| b_time.cmp(&a_time))
+            } else {
+                b_time.cmp(&a_time)
+            }
         });
         if let Some(limit) = limit {
             articles.truncate(limit);
@@ -260,7 +272,7 @@ impl Storage {
 
         // 使用文件锁读取
         let file = File::open(&path)?;
-        file.lock_shared()?;  // 共享锁（读取锁）
+        file.lock_shared()?; // 共享锁（读取锁）
 
         let reader = BufReader::new(file);
         let feeds: Vec<Feed> = serde_json::from_reader(reader)?;
@@ -281,7 +293,7 @@ impl Storage {
                 .create(true)
                 .truncate(true)
                 .open(&temp_path)?;
-            file.lock_exclusive()?;  // 独占锁（写入锁）
+            file.lock_exclusive()?; // 独占锁（写入锁）
 
             let json = serde_json::to_string_pretty(feeds)?;
             {
@@ -338,9 +350,9 @@ impl Storage {
 mod tests {
     use super::*;
     use chrono::Utc;
-    use uuid::Uuid;
     use std::fs;
     use std::sync::Arc;
+    use uuid::Uuid;
 
     #[test]
     fn test_validate_path_safe() {
@@ -450,23 +462,35 @@ mod tests {
         fn add_article(&self, article: &Article) -> Result<()> {
             let mut articles = self.articles.lock().unwrap();
             // 检查是否已存在
-            if !articles.iter().any(|a| a.link == article.link && a.feed_id == article.feed_id) {
+            if !articles
+                .iter()
+                .any(|a| a.link == article.link && a.feed_id == article.feed_id)
+            {
                 articles.push(article.clone());
             }
             Ok(())
         }
 
-        fn get_articles(&self, feed_id: Option<&str>, limit: Option<usize>) -> Result<Vec<Article>> {
+        fn get_articles(
+            &self,
+            feed_id: Option<&str>,
+            limit: Option<usize>,
+        ) -> Result<Vec<Article>> {
             let articles = self.articles.lock().unwrap();
             let mut result: Vec<Article> = articles
                 .iter()
                 .filter(|a| feed_id.map_or(true, |fid| a.feed_id == fid))
                 .cloned()
                 .collect();
+            let is_all_feeds = feed_id.is_none();
             result.sort_by(|a, b| {
-                b.published_at
-                    .unwrap_or(a.created_at)
-                    .cmp(&a.published_at.unwrap_or(b.created_at))
+                let a_time = a.published_at.unwrap_or(a.created_at);
+                let b_time = b.published_at.unwrap_or(b.created_at);
+                if is_all_feeds {
+                    a.read.cmp(&b.read).then_with(|| b_time.cmp(&a_time))
+                } else {
+                    b_time.cmp(&a_time)
+                }
             });
             if let Some(limit) = limit {
                 result.truncate(limit);
@@ -539,11 +563,8 @@ mod tests {
 
         fn get_favorite_articles(&self, limit: Option<usize>) -> Result<Vec<Article>> {
             let articles = self.articles.lock().unwrap();
-            let mut result: Vec<Article> = articles
-                .iter()
-                .filter(|a| a.favorite)
-                .cloned()
-                .collect();
+            let mut result: Vec<Article> =
+                articles.iter().filter(|a| a.favorite).cloned().collect();
             result.sort_by(|a, b| b.created_at.cmp(&a.created_at));
             if let Some(limit) = limit {
                 result.truncate(limit);
@@ -602,7 +623,9 @@ mod tests {
         let feed = create_test_feed();
 
         storage.add_feed(&feed).expect("Failed to add feed");
-        storage.delete_feed(&feed.id).expect("Failed to delete feed");
+        storage
+            .delete_feed(&feed.id)
+            .expect("Failed to delete feed");
 
         let retrieved = storage.get_feed(&feed.id).expect("Failed to get feed");
         assert!(retrieved.is_none(), "Feed should be deleted");
@@ -618,8 +641,12 @@ mod tests {
         let article1 = create_test_article(&feed.id);
         let article2 = create_test_article(&feed.id);
 
-        storage.add_article(&article1).expect("Failed to add article1");
-        storage.add_article(&article2).expect("Failed to add article2");
+        storage
+            .add_article(&article1)
+            .expect("Failed to add article1");
+        storage
+            .add_article(&article2)
+            .expect("Failed to add article2");
 
         let articles = storage
             .get_articles(Some(&feed.id), None)
@@ -634,7 +661,9 @@ mod tests {
         let article = create_test_article(&feed.id);
 
         storage.add_feed(&feed).expect("Failed to add feed");
-        storage.add_article(&article).expect("Failed to add article");
+        storage
+            .add_article(&article)
+            .expect("Failed to add article");
 
         storage
             .mark_article_read(&article.id, true)
@@ -655,10 +684,16 @@ mod tests {
         let article2 = create_test_article(&feed.id);
 
         storage.add_feed(&feed).expect("Failed to add feed");
-        storage.add_article(&article1).expect("Failed to add article1");
-        storage.add_article(&article2).expect("Failed to add article2");
+        storage
+            .add_article(&article1)
+            .expect("Failed to add article1");
+        storage
+            .add_article(&article2)
+            .expect("Failed to add article2");
 
-        storage.mark_all_read(&feed.id).expect("Failed to mark all as read");
+        storage
+            .mark_all_read(&feed.id)
+            .expect("Failed to mark all as read");
 
         let articles = storage
             .get_articles(Some(&feed.id), None)
@@ -679,9 +714,15 @@ mod tests {
         let article3 = create_test_article(&feed.id);
 
         storage.add_feed(&feed).expect("Failed to add feed");
-        storage.add_article(&article1).expect("Failed to add article1");
-        storage.add_article(&article2).expect("Failed to add article2");
-        storage.add_article(&article3).expect("Failed to add article3");
+        storage
+            .add_article(&article1)
+            .expect("Failed to add article1");
+        storage
+            .add_article(&article2)
+            .expect("Failed to add article2");
+        storage
+            .add_article(&article3)
+            .expect("Failed to add article3");
 
         // Mark one as read
         storage
@@ -703,7 +744,9 @@ mod tests {
 
         for _ in 0..10 {
             let article = create_test_article(&feed.id);
-            storage.add_article(&article).expect("Failed to add article");
+            storage
+                .add_article(&article)
+                .expect("Failed to add article");
         }
 
         let articles = storage
@@ -732,12 +775,10 @@ mod tests {
             .add_article(&create_test_article(&feed2.id))
             .expect("Failed to add article");
 
-        let articles = storage.get_articles(None, None).expect("Failed to get articles");
-        assert_eq!(
-            articles.len(),
-            3,
-            "Should have 3 articles from all feeds"
-        );
+        let articles = storage
+            .get_articles(None, None)
+            .expect("Failed to get articles");
+        assert_eq!(articles.len(), 3, "Should have 3 articles from all feeds");
     }
 
     #[test]
@@ -749,11 +790,15 @@ mod tests {
         let link = article.link.clone();
 
         storage.add_feed(&feed).expect("Failed to add feed");
-        storage.add_article(&article).expect("Failed to add article");
+        storage
+            .add_article(&article)
+            .expect("Failed to add article");
 
         // 尝试添加相同链接的文章
         article.id = Uuid::new_v4().to_string(); // 改变 ID
-        storage.add_article(&article).expect("Failed to add article");
+        storage
+            .add_article(&article)
+            .expect("Failed to add article");
 
         let articles = storage
             .get_articles(Some(&feed.id), None)
@@ -771,7 +816,9 @@ mod tests {
         let article = create_test_article(&feed.id);
 
         storage.add_feed(&feed).expect("Failed to add feed");
-        storage.add_article(&article).expect("Failed to add article");
+        storage
+            .add_article(&article)
+            .expect("Failed to add article");
 
         let retrieved = storage
             .get_article(&article.id)
@@ -784,7 +831,10 @@ mod tests {
     fn test_get_article_not_found() {
         let storage = TestStorage::new();
         let retrieved = storage.get_article("nonexistent").expect("Failed to query");
-        assert!(retrieved.is_none(), "Non-existent article should return None");
+        assert!(
+            retrieved.is_none(),
+            "Non-existent article should return None"
+        );
     }
 
     #[test]
@@ -794,7 +844,9 @@ mod tests {
         let article = create_test_article(&feed.id);
 
         storage.add_feed(&feed).expect("Failed to add feed");
-        storage.add_article(&article).expect("Failed to add article");
+        storage
+            .add_article(&article)
+            .expect("Failed to add article");
 
         // 更新阅读进度
         storage
@@ -818,7 +870,9 @@ mod tests {
         let article = create_test_article(&feed.id);
 
         storage.add_feed(&feed).expect("Failed to add feed");
-        storage.add_article(&article).expect("Failed to add article");
+        storage
+            .add_article(&article)
+            .expect("Failed to add article");
 
         // 测试超出范围的上限
         storage
@@ -856,7 +910,9 @@ mod tests {
         let article = create_test_article(&feed.id);
 
         storage.add_feed(&feed).expect("Failed to add feed");
-        storage.add_article(&article).expect("Failed to add article");
+        storage
+            .add_article(&article)
+            .expect("Failed to add article");
 
         // 收藏文章
         storage
@@ -876,7 +932,10 @@ mod tests {
         let retrieved = storage
             .get_article(&article.id)
             .expect("Failed to get article");
-        assert!(!retrieved.unwrap().favorite, "Article should be unfavorited");
+        assert!(
+            !retrieved.unwrap().favorite,
+            "Article should be unfavorited"
+        );
     }
 
     #[test]
@@ -889,9 +948,15 @@ mod tests {
         let article3 = create_test_article(&feed.id);
 
         storage.add_feed(&feed).expect("Failed to add feed");
-        storage.add_article(&article1).expect("Failed to add article1");
-        storage.add_article(&article2).expect("Failed to add article2");
-        storage.add_article(&article3).expect("Failed to add article3");
+        storage
+            .add_article(&article1)
+            .expect("Failed to add article1");
+        storage
+            .add_article(&article2)
+            .expect("Failed to add article2");
+        storage
+            .add_article(&article3)
+            .expect("Failed to add article3");
 
         // 收藏 article1 和 article3
         storage
@@ -921,7 +986,9 @@ mod tests {
 
         for _ in 0..10 {
             let article = create_test_article(&feed.id);
-            storage.add_article(&article).expect("Failed to add article");
+            storage
+                .add_article(&article)
+                .expect("Failed to add article");
             storage
                 .set_article_favorite(&article.id, true)
                 .expect("Failed to favorite article");
@@ -938,13 +1005,105 @@ mod tests {
     fn test_update_progress_nonexistent_article() {
         let storage = TestStorage::new();
         let result = storage.update_reading_progress("nonexistent", 50.0);
-        assert!(result.is_err(), "Should return error for non-existent article");
+        assert!(
+            result.is_err(),
+            "Should return error for non-existent article"
+        );
     }
 
     #[test]
     fn test_set_favorite_nonexistent_article() {
         let storage = TestStorage::new();
         let result = storage.set_article_favorite("nonexistent", true);
-        assert!(result.is_err(), "Should return error for non-existent article");
+        assert!(
+            result.is_err(),
+            "Should return error for non-existent article"
+        );
+    }
+
+    #[test]
+    fn test_all_articles_unread_first_then_time_desc() {
+        use chrono::Duration;
+
+        let storage = TestStorage::new();
+        let feed1 = create_test_feed();
+        let feed2 = create_test_feed();
+        storage.add_feed(&feed1).unwrap();
+        storage.add_feed(&feed2).unwrap();
+
+        let now = Utc::now();
+
+        // 创建文章：混合已读/未读，不同时间
+        // 已读文章 - 最新
+        let mut a_read_new = create_test_article(&feed1.id);
+        a_read_new.published_at = Some(now);
+        a_read_new.read = true;
+        storage.add_article(&a_read_new).unwrap();
+
+        // 未读文章 - 较旧
+        let mut a_unread_old = create_test_article(&feed2.id);
+        a_unread_old.published_at = Some(now - Duration::hours(5));
+        a_unread_old.read = false;
+        storage.add_article(&a_unread_old).unwrap();
+
+        // 未读文章 - 最新
+        let mut a_unread_new = create_test_article(&feed1.id);
+        a_unread_new.published_at = Some(now - Duration::hours(1));
+        a_unread_new.read = false;
+        storage.add_article(&a_unread_new).unwrap();
+
+        // 已读文章 - 较旧
+        let mut a_read_old = create_test_article(&feed2.id);
+        a_read_old.published_at = Some(now - Duration::hours(10));
+        a_read_old.read = true;
+        storage.add_article(&a_read_old).unwrap();
+
+        // feed_id=None → 全部文章，期望：未读优先 + 各组内时间倒序
+        let articles = storage.get_articles(None, None).unwrap();
+        assert_eq!(articles.len(), 4);
+
+        // 前两篇应为未读，按时间倒序
+        assert!(!articles[0].read, "First article should be unread");
+        assert!(!articles[1].read, "Second article should be unread");
+        assert_eq!(articles[0].id, a_unread_new.id, "Newest unread first");
+        assert_eq!(articles[1].id, a_unread_old.id, "Older unread second");
+
+        // 后两篇应为已读，按时间倒序
+        assert!(articles[2].read, "Third article should be read");
+        assert!(articles[3].read, "Fourth article should be read");
+        assert_eq!(articles[2].id, a_read_new.id, "Newest read third");
+        assert_eq!(articles[3].id, a_read_old.id, "Oldest read last");
+    }
+
+    #[test]
+    fn test_single_feed_keeps_pure_time_order() {
+        use chrono::Duration;
+
+        let storage = TestStorage::new();
+        let feed = create_test_feed();
+        storage.add_feed(&feed).unwrap();
+
+        let now = Utc::now();
+
+        // 已读 - 最新
+        let mut a_read = create_test_article(&feed.id);
+        a_read.published_at = Some(now);
+        a_read.read = true;
+        storage.add_article(&a_read).unwrap();
+
+        // 未读 - 较旧
+        let mut a_unread = create_test_article(&feed.id);
+        a_unread.published_at = Some(now - Duration::hours(2));
+        a_unread.read = false;
+        storage.add_article(&a_unread).unwrap();
+
+        // feed_id=Some → 单个 feed，期望：纯时间倒序（不区分已读/未读）
+        let articles = storage.get_articles(Some(&feed.id), None).unwrap();
+        assert_eq!(articles.len(), 2);
+        assert_eq!(
+            articles[0].id, a_read.id,
+            "Newest article first regardless of read status"
+        );
+        assert_eq!(articles[1].id, a_unread.id, "Older article second");
     }
 }
