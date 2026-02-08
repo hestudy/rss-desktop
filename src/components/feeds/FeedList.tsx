@@ -166,7 +166,10 @@ export function FeedList() {
                       )}
                     </div>
                   </button>
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity pr-2">
+                  <div
+                    data-testid="feed-actions"
+                    className="absolute right-0 top-0 bottom-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity pr-2 pl-4 bg-gradient-to-l from-sidebar-hover from-70% to-transparent"
+                  >
                     <Button
                       size="sm"
                       variant="ghost"

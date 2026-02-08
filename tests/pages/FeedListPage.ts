@@ -16,10 +16,10 @@ export class FeedListPage {
   readonly allArticlesButton: Locator
   readonly emptyState: Locator
   readonly globalUnreadBadge: Locator
+  readonly feedActionButtons: Locator
 
   constructor(page: Page) {
     this.page = page
-    // Feed list is in the sidebar panel
     this.container = page.locator('[data-testid="feed-panel-content"]')
     this.header = page.getByRole('heading', { name: 'RSS Reader' })
     this.feedItems = page.locator('div.group.relative.rounded-md')
@@ -28,6 +28,7 @@ export class FeedListPage {
     this.allArticlesButton = page.locator('button').filter({ hasText: '全部文章' })
     this.emptyState = page.locator('text=还没有订阅')
     this.globalUnreadBadge = page.locator('span.bg-sidebar-active.text-white').first()
+    this.feedActionButtons = page.locator('[data-testid="feed-actions"]')
   }
 
   /**
@@ -160,8 +161,15 @@ export class FeedListPage {
    * Hover over a feed to reveal action buttons
    */
   async hoverFeed(title: string) {
-    const feedElement = this.page.locator('div').filter({ hasText: title }).first()
+    const feedElement = this.page.locator('div.group.relative.rounded-md').filter({ hasText: title }).first()
     await feedElement.hover()
+  }
+
+  getFeedActions(title: string): Locator {
+    return this.page
+      .locator('div.group.relative.rounded-md')
+      .filter({ hasText: title })
+      .locator('[data-testid="feed-actions"]')
   }
 
   /**
