@@ -19,6 +19,8 @@ export class ArticleViewerPage {
   readonly nextButton: Locator
   readonly settingsButton: Locator
   readonly externalLinkButton: Locator
+  readonly fetchFullContentButton: Locator
+  readonly fetchErrorBanner: Locator
   readonly contentArea: Locator
   readonly articleTitle: Locator
   readonly progressBar: Locator
@@ -57,6 +59,9 @@ export class ArticleViewerPage {
     // Settings and external link
     this.settingsButton = page.getByTitle('阅读设置')
     this.externalLinkButton = page.getByTitle('在浏览器中打开')
+    this.fetchFullContentButton = page.getByTitle('抓取全文')
+
+    this.fetchErrorBanner = page.locator('.bg-destructive\\/10')
 
     // Content area - the scrollable div
     this.contentArea = this.readerPanel.locator('.overflow-y-auto').first()
@@ -455,8 +460,28 @@ export class ArticleViewerPage {
    * Get the article meta info
    */
   async getArticleMeta(): Promise<string | null> {
-    // Target the specific meta div with border-b that contains the "查看原文" link
     const meta = this.readerPanel.locator('div.border-b').filter({ hasText: /查看原文/ }).last()
     return await meta.textContent()
+  }
+
+  async clickFetchFullContent() {
+    await this.fetchFullContentButton.click()
+  }
+
+  async isFetchFullContentButtonVisible(): Promise<boolean> {
+    return await this.fetchFullContentButton.isVisible().catch(() => false)
+  }
+
+  async isFetchingContent(): Promise<boolean> {
+    const spinner = this.fetchFullContentButton.locator('.animate-spin')
+    return await spinner.isVisible().catch(() => false)
+  }
+
+  async isFetchErrorVisible(): Promise<boolean> {
+    return await this.fetchErrorBanner.isVisible().catch(() => false)
+  }
+
+  async getFetchErrorText(): Promise<string | null> {
+    return await this.fetchErrorBanner.textContent()
   }
 }

@@ -215,6 +215,20 @@ export function buildTauriMockScript(): string {
         return Promise.resolve(result);
       }
 
+      case 'fetch_full_content': {
+        const art = articleState[args.id];
+        if (!art) {
+          return Promise.reject('Article not found');
+        }
+        const fullContent =
+          '<h2>Full Article Content</h2>' +
+          '<p>This is the full article content fetched from the original website.</p>' +
+          '<p>It contains much more detail than the RSS summary.</p>' +
+          '<p>The readability algorithm extracted only the main content.</p>';
+        art.content = fullContent;
+        return Promise.resolve({ ...art });
+      }
+
       case 'update_feed_info': {
         const feed = feeds.find(f => f.feed.id === args.id);
         if (!feed) {
