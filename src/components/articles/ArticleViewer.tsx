@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { Star, StarOff, ExternalLink, ChevronLeft, ChevronRight, Settings } from 'lucide-react'
+import { Star, StarOff, ExternalLink, ChevronLeft, ChevronRight, Settings, FileText, Loader2 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
 import DOMPurify from 'dompurify'
@@ -38,11 +38,42 @@ export function ArticleViewer({
   const contentRef = useRef<HTMLDivElement>(null)
   const [isFavorite, setIsFavorite] = useState(article.favorite ?? false)
   const [scrollProgress, setScrollProgress] = useState(article.reading_progress ?? 0)
+  const [isFetchingContent, setIsFetchingContent] = useState(false)
+  const [displayContent, setDisplayContent] = useState<string | null>(null)
+  const [fetchError, setFetchError] = useState<string | null>(null)
   const { selectArticle } = useReader()
   const { openSettings } = useUnifiedSettings()
   const { isDark } = useTheme()
 
   // 处理滚动并更新阅读进度
+  useEffect(() => {
+    setDisplayContent(null)
+    setFetchError(null)
+  }, [article.id])
+
+  useEffect(() => {
+    setIsFavorite(article.favorite ?? false)
+  }, [article.id, article.favorite])
+
+  useEffect(() => {
+    if (!fetchError) return
+    const timer = setTimeout(() => setFetchError(null), 5000)
+    return () => clearTimeout(timer)
+  }, [fetchError])
+
+  const handleFetchFullContent = useCallback(async () => {
+    setIsFetchingContent(true)
+    setFetchError(null)
+    try {
+      const updated = await RssApi.fetchFullContent(article.id)
+      setDisplayContent(updated.content ?? null)
+    } catch (err) {
+      setFetchError(err instanceof Error ? err.message : '抓取全文失败，请稍后重试')
+    } finally {
+      setIsFetchingContent(false)
+    }
+  }, [article.id])
+
   const handleScroll = useCallback(() => {
     if (!contentRef.current) return
 
@@ -181,6 +212,16 @@ export function ArticleViewer({
             <ExternalLink className="w-5 h-5" />
           </button>
 
+          {/* 抓取全文 */}
+          <button
+            onClick={handleFetchFullContent}
+            disabled={isFetchingContent}
+            className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground disabled:opacity-50"
+            title="抓取全文"
+          >
+            {isFetchingContent ? <Loader2 className="w-5 h-5 animate-spin" /> : <FileText className="w-5 h-5" />}
+          </button>
+
           {/* 设置按钮 */}
           <button
             onClick={() => openSettings('reading')}
@@ -199,6 +240,12 @@ export function ArticleViewer({
             className="h-full bg-primary transition-all duration-300"
             style={{ width: `${scrollProgress}%` }}
           />
+        </div>
+      )}
+
+      {fetchError && (
+        <div className="px-4 py-2 bg-destructive/10 text-destructive text-sm border-b border-destructive/20">
+          {fetchError}
         </div>
       )}
 
@@ -233,7 +280,7 @@ export function ArticleViewer({
           <div
             className={`prose max-w-none ${isDark ? 'prose-invert' : ''}`}
             dangerouslySetInnerHTML={{
-              __html: sanitizeHtml(article.content || article.description || ''),
+              __html: sanitizeHtml(displayContent || article.content || article.description || ''),
             }}
           />
         </article>

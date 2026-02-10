@@ -1,5 +1,6 @@
 use crate::models::{Feed, Article, FeedWithUnreadCount};
 use crate::fetcher::fetch_feed;
+use crate::content_extractor::fetch_and_extract_content;
 use crate::storage::{Storage, MAX_ARTICLES_LIMIT};
 use tauri::State;
 use std::path::PathBuf;
@@ -367,4 +368,21 @@ pub async fn update_feed_info(
         feed,
         unread_count,
     })
+}
+
+#[tauri::command]
+pub async fn fetch_full_content(id: String, storage: State<'_, Arc<Storage>>) -> CommandResult<Article> {
+    let article = storage.get_article(&id)
+        .map_err(|e| format!("Failed to get article: {}", e))?
+        .ok_or_else(|| "Article not found".to_string())?;
+
+    let content = fetch_and_extract_content(&article.link)
+        .map_err(|e| format!("Failed to fetch full content: {}", e))?;
+
+    storage.update_article_content(&id, &content)
+        .map_err(|e| format!("Failed to save content: {}", e))?;
+
+    storage.get_article(&id)
+        .map_err(|e| format!("Failed to get updated article: {}", e))?
+        .ok_or_else(|| "Article not found after update".to_string())
 }

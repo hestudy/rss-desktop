@@ -254,6 +254,21 @@ impl Storage {
         }
     }
 
+    pub fn update_article_content(&self, id: &str, content: &str) -> Result<()> {
+        let _lock = self.acquire_write_lock()?;
+        let mut articles = self.load_articles()?;
+        if let Some(article) = articles.iter_mut().find(|a| a.id == id) {
+            article.content = Some(content.to_string());
+            self.save_articles(&articles)?;
+            Ok(())
+        } else {
+            Err(crate::error::RssError::StorageError(format!(
+                "Article not found: {}",
+                id
+            )))
+        }
+    }
+
     /// 获取收藏的文章
     pub fn get_favorite_articles(&self, limit: Option<usize>) -> Result<Vec<Article>> {
         let mut articles = self.load_articles()?;
@@ -552,6 +567,19 @@ mod tests {
             let mut articles = self.articles.lock().unwrap();
             if let Some(article) = articles.iter_mut().find(|a| a.id == id) {
                 article.favorite = favorite;
+                Ok(())
+            } else {
+                Err(crate::error::RssError::StorageError(format!(
+                    "Article not found: {}",
+                    id
+                )))
+            }
+        }
+
+        fn update_article_content(&self, id: &str, content: &str) -> Result<()> {
+            let mut articles = self.articles.lock().unwrap();
+            if let Some(article) = articles.iter_mut().find(|a| a.id == id) {
+                article.content = Some(content.to_string());
                 Ok(())
             } else {
                 Err(crate::error::RssError::StorageError(format!(
@@ -1015,6 +1043,42 @@ mod tests {
     fn test_set_favorite_nonexistent_article() {
         let storage = TestStorage::new();
         let result = storage.set_article_favorite("nonexistent", true);
+        assert!(
+            result.is_err(),
+            "Should return error for non-existent article"
+        );
+    }
+
+    #[test]
+    fn test_update_article_content() {
+        let storage = TestStorage::new();
+        let feed = create_test_feed();
+        let article = create_test_article(&feed.id);
+
+        storage.add_feed(&feed).expect("Failed to add feed");
+        storage
+            .add_article(&article)
+            .expect("Failed to add article");
+
+        let new_content = "<p>Full article content fetched from web</p>";
+        storage
+            .update_article_content(&article.id, new_content)
+            .expect("Failed to update article content");
+
+        let retrieved = storage
+            .get_article(&article.id)
+            .expect("Failed to get article");
+        assert_eq!(
+            retrieved.unwrap().content,
+            Some(new_content.to_string()),
+            "Article content should be updated"
+        );
+    }
+
+    #[test]
+    fn test_update_content_nonexistent_article() {
+        let storage = TestStorage::new();
+        let result = storage.update_article_content("nonexistent", "content");
         assert!(
             result.is_err(),
             "Should return error for non-existent article"

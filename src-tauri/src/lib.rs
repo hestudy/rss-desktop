@@ -4,6 +4,7 @@ mod error;
 mod storage;
 mod fetcher;
 mod commands;
+mod content_extractor;
 mod settings;
 mod scheduler;
 mod scheduler_commands;
@@ -167,6 +168,7 @@ pub fn run() {
             commands::set_article_favorite,
             commands::get_favorite_articles,
             commands::update_feed_info,
+            commands::fetch_full_content,
             scheduler_commands::get_settings,
             scheduler_commands::update_settings,
             scheduler_commands::get_scheduler_state,

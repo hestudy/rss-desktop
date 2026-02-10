@@ -1,10 +1,10 @@
 use crate::error::Result;
-use crate::models::{Feed, Article};
 use crate::error::RssError;
-use feed_rs::parser;
+use crate::models::{Article, Feed};
 use chrono::Utc;
-use uuid::Uuid;
+use feed_rs::parser;
 use std::time::Duration;
+use uuid::Uuid;
 
 /// 最大允许的文章数量限制
 pub const MAX_ARTICLES_PER_FETCH: usize = 500;
@@ -13,21 +13,24 @@ pub const MAX_ARTICLES_PER_FETCH: usize = 500;
 type FeedResult = (Feed, Vec<Article>);
 
 /// 验证 URL 并防止 SSRF 攻击
-fn validate_url(url: &str) -> Result<bool> {
+pub fn validate_url(url: &str) -> Result<bool> {
     // 基本 URL 格式验证
     if !url.starts_with("http://") && !url.starts_with("https://") {
         return Err(RssError::InvalidUrl(
-            "Only HTTP and HTTPS URLs are allowed".to_string()
+            "Only HTTP and HTTPS URLs are allowed".to_string(),
         ));
     }
 
     // 检查是否包含 localhost 或私有 IP
     let url_lower = url.to_lowercase();
-    if url_lower.contains("localhost") || url_lower.contains("127.0.0.1")
-        || url_lower.contains("192.168.") || url_lower.contains("10.")
-        || url_lower.contains("172.16.") {
+    if url_lower.contains("localhost")
+        || url_lower.contains("127.0.0.1")
+        || url_lower.contains("192.168.")
+        || url_lower.contains("10.")
+        || url_lower.contains("172.16.")
+    {
         return Err(RssError::InvalidUrl(
-            "Access to private hosts is not allowed".to_string()
+            "Access to private hosts is not allowed".to_string(),
         ));
     }
 
@@ -42,12 +45,12 @@ pub fn fetch_feed(url: &str) -> Result<FeedResult> {
     // 使用 ureq 获取内容 - 增加超时时间以支持大型 RSS feeds
     let response = ureq::get(url)
         .set("User-Agent", "RSS-Desktop/0.1.0")
-        .timeout(Duration::from_secs(60))  // 增加到 60 秒
+        .timeout(Duration::from_secs(60)) // 增加到 60 秒
         .call()
         .map_err(|e| {
             RssError::IoError(std::io::Error::new(
                 std::io::ErrorKind::Other,
-                format!("Network error: {}", e)
+                format!("Network error: {}", e),
             ))
         })?;
 
@@ -55,29 +58,29 @@ pub fn fetch_feed(url: &str) -> Result<FeedResult> {
     let status = response.status();
     if status < 200 || status >= 300 {
         return Err(RssError::InvalidUrl(format!(
-            "HTTP error: {} - Server returned non-success status", status
+            "HTTP error: {} - Server returned non-success status",
+            status
         )));
     }
 
     // 获取响应内容 - 捕获读取错误
-    let feed_text = response.into_string()
-        .map_err(|e| {
-            RssError::IoError(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to read response: {}", e)
-            ))
-        })?;
+    let feed_text = response.into_string().map_err(|e| {
+        RssError::IoError(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Failed to read response: {}", e),
+        ))
+    })?;
 
     // 检查内容长度
     if feed_text.is_empty() {
-        return Err(RssError::FeedError("Empty response from server".to_string()));
+        return Err(RssError::FeedError(
+            "Empty response from server".to_string(),
+        ));
     }
 
     // 解析 RSS/Atom feed
     let parsed_feed = parser::parse(feed_text.as_bytes())
-        .map_err(|e| {
-            RssError::FeedError(format!("Failed to parse RSS feed: {}", e))
-        })?;
+        .map_err(|e| RssError::FeedError(format!("Failed to parse RSS feed: {}", e)))?;
 
     let title = parsed_feed
         .title
@@ -130,7 +133,7 @@ pub fn fetch_feed(url: &str) -> Result<FeedResult> {
                 favorite: false,
             })
         })
-        .take(MAX_ARTICLES_PER_FETCH)  // 限制文章数量
+        .take(MAX_ARTICLES_PER_FETCH) // 限制文章数量
         .collect();
 
     Ok((feed, articles))

@@ -125,4 +125,8 @@ export class RssApi {
   ): Promise<FeedWithUnreadCount> {
     return await invoke<FeedWithUnreadCount>('update_feed_info', { id, title, url })
   }
+
+  static async fetchFullContent(id: string): Promise<Article> {
+    return await invoke<Article>('fetch_full_content', { id })
+  }
 }

@@ -25,6 +25,9 @@ pub enum RssError {
 
     #[error("Lock error: {0}")]
     LockError(String),
+
+    #[error("Content extraction failed: {0}")]
+    ContentExtractionError(String),
 }
 
 pub type Result<T> = std::result::Result<T, RssError>;
