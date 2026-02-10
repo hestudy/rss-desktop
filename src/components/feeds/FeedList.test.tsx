@@ -7,17 +7,18 @@ const mockSelectFavorites = vi.fn()
 const mockRemoveFeed = vi.fn()
 const mockRefreshFeed = vi.fn()
 const mockRefreshAllFeeds = vi.fn()
+const mockUpdateFeed = vi.fn()
 const mockGetGlobalUnreadCount = vi.fn(() => 3)
 
 vi.mock('../../contexts/RssContext', () => ({
   useRss: () => ({
     feeds: [
       {
-        feed: { id: 'feed-1', title: 'Tech Blog', icon_url: null, site_url: 'https://example.com' },
+        feed: { id: 'feed-1', title: 'Tech Blog', url: 'https://example.com/feed.xml', icon_url: null, site_url: 'https://example.com' },
         unread_count: 3,
       },
       {
-        feed: { id: 'feed-2', title: 'News Feed', icon_url: null, site_url: 'https://news.com' },
+        feed: { id: 'feed-2', title: 'News Feed', url: 'https://news.com/rss', icon_url: null, site_url: 'https://news.com' },
         unread_count: 0,
       },
     ],
@@ -26,6 +27,7 @@ vi.mock('../../contexts/RssContext', () => ({
     removeFeed: mockRemoveFeed,
     refreshFeed: mockRefreshFeed,
     refreshAllFeeds: mockRefreshAllFeeds,
+    updateFeed: mockUpdateFeed,
     selectFeed: mockSelectFeed,
     selectFavorites: mockSelectFavorites,
     showFavoritesOnly: false,
@@ -57,6 +59,7 @@ vi.mock('lucide-react', () => ({
   Inbox: (props: Record<string, unknown>) => <svg data-testid="inbox-icon" {...props} />,
   Mail: (props: Record<string, unknown>) => <svg data-testid="mail-icon" {...props} />,
   Calendar: (props: Record<string, unknown>) => <svg data-testid="calendar-icon" {...props} />,
+  Pencil: (props: Record<string, unknown>) => <svg data-testid="pencil-icon" {...props} />,
 }))
 
 describe('FeedList', () => {
@@ -96,6 +99,18 @@ describe('FeedList', () => {
         const classList = Array.from(container.classList)
         const hasBg = classList.some(c => c.startsWith('bg-'))
         expect(hasBg).toBe(true)
+      })
+    })
+  })
+
+  describe('edit feed button', () => {
+    it('renders an edit button for each feed in the action area', () => {
+      render(<FeedList />)
+
+      const actionContainers = document.querySelectorAll('[data-testid="feed-actions"]')
+      actionContainers.forEach((container) => {
+        const editButton = container.querySelector('[data-testid="pencil-icon"]')
+        expect(editButton).toBeTruthy()
       })
     })
   })

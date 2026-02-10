@@ -13,6 +13,7 @@ interface RssContextType {
   loadArticles: (feedId?: string) => Promise<void>
   addFeed: (url: string) => Promise<Feed>
   removeFeed: (id: string) => Promise<void>
+  updateFeed: (id: string, title?: string, url?: string) => Promise<void>
   refreshFeed: (id: string) => Promise<void>
   refreshAllFeeds: () => Promise<void>
   silentRefreshAll: () => Promise<void>
@@ -111,6 +112,23 @@ export function RssProvider({ children }: RssProviderProps) {
       setIsLoading(false)
     }
   }, [loadFeeds, selectedFeedId])
+
+  const updateFeed = useCallback(async (id: string, title?: string, url?: string) => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const result = await RssApi.updateFeed(id, title, url)
+      setFeeds(prev => prev.map(f =>
+        f.feed.id === id ? result : f
+      ))
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to update feed'
+      setError(errorMsg)
+      throw err
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
 
   const refreshFeed = useCallback(async (id: string) => {
     setIsLoading(true)
@@ -247,6 +265,7 @@ export function RssProvider({ children }: RssProviderProps) {
     loadArticles,
     addFeed,
     removeFeed,
+    updateFeed,
     refreshFeed,
     refreshAllFeeds,
     silentRefreshAll,

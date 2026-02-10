@@ -117,4 +117,12 @@ export class RssApi {
   static async getFavoriteArticles(limit?: number): Promise<Article[]> {
     return await invoke<Article[]>('get_favorite_articles', { limit })
   }
+
+  static async updateFeed(
+    id: string,
+    title?: string,
+    url?: string,
+  ): Promise<FeedWithUnreadCount> {
+    return await invoke<FeedWithUnreadCount>('update_feed_info', { id, title, url })
+  }
 }

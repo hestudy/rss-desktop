@@ -166,6 +166,7 @@ pub fn run() {
             commands::update_reading_progress,
             commands::set_article_favorite,
             commands::get_favorite_articles,
+            commands::update_feed_info,
             scheduler_commands::get_settings,
             scheduler_commands::update_settings,
             scheduler_commands::get_scheduler_state,

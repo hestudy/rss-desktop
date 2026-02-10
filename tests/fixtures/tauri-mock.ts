@@ -215,6 +215,21 @@ export function buildTauriMockScript(): string {
         return Promise.resolve(result);
       }
 
+      case 'update_feed_info': {
+        const feed = feeds.find(f => f.feed.id === args.id);
+        if (!feed) {
+          return Promise.reject('Feed not found');
+        }
+        if (args.title) {
+          feed.feed.title = args.title;
+        }
+        if (args.url) {
+          feed.feed.url = args.url;
+        }
+        feed.feed.updated_at = new Date().toISOString();
+        return Promise.resolve(feed);
+      }
+
       case 'get_store_value':
         return Promise.resolve(null);
 

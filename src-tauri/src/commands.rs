@@ -316,3 +316,55 @@ pub async fn get_favorite_articles(limit: Option<usize>, storage: State<'_, Arc<
     storage.get_favorite_articles(limit)
         .map_err(|e| format!("Failed to get favorite articles: {}", e))
 }
+
+/// 更新订阅信息（标题、URL）
+#[tauri::command]
+pub async fn update_feed_info(
+    id: String,
+    title: Option<String>,
+    url: Option<String>,
+    storage: State<'_, Arc<Storage>>,
+) -> CommandResult<FeedWithUnreadCount> {
+    // 获取现有订阅
+    let mut feed = storage.get_feed(&id)
+        .map_err(|e| format!("Failed to get feed: {}", e))?
+        .ok_or_else(|| "Feed not found".to_string())?;
+
+    // 如果提供了新 URL，检查是否与其他订阅重复
+    if let Some(ref new_url) = url {
+        if new_url.trim().is_empty() {
+            return Err("URL cannot be empty".to_string());
+        }
+        if url::Url::parse(new_url).is_err() {
+            return Err("Invalid URL format".to_string());
+        }
+        let all_feeds = storage.get_all_feeds()
+            .map_err(|e| format!("Failed to get feeds: {}", e))?;
+        if all_feeds.iter().any(|f| f.url == *new_url && f.id != id) {
+            return Err("Another feed with this URL already exists".to_string());
+        }
+        feed.url = new_url.clone();
+    }
+
+    // 如果提供了新标题
+    if let Some(ref new_title) = title {
+        if new_title.trim().is_empty() {
+            return Err("Title cannot be empty".to_string());
+        }
+        feed.title = new_title.clone();
+    }
+
+    // 更新时间戳
+    feed.updated_at = chrono::Utc::now();
+
+    // 保存更新
+    storage.update_feed(&feed)
+        .map_err(|e| format!("Failed to update feed: {}", e))?;
+
+    let unread_count = storage.get_unread_count(&id).unwrap_or(0);
+
+    Ok(FeedWithUnreadCount {
+        feed,
+        unread_count,
+    })
+}

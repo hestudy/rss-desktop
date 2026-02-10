@@ -53,14 +53,17 @@ export class FeedListPage {
    */
   async closeAnyDialog() {
     for (let i = 0; i < 3; i++) {
-      const dialogTitle = this.page.locator('h2', { hasText: '添加 RSS 订阅' })
-      const isDialogOpen = await dialogTitle.isVisible().catch(() => false)
+      const addDialogTitle = this.page.locator('h2', { hasText: '添加 RSS 订阅' })
+      const editDialogTitle = this.page.locator('h2', { hasText: '编辑订阅' })
+      const isAddOpen = await addDialogTitle.isVisible().catch(() => false)
+      const isEditOpen = await editDialogTitle.isVisible().catch(() => false)
 
-      if (isDialogOpen) {
+      if (isAddOpen || isEditOpen) {
         await this.page.keyboard.press('Escape')
         await this.page.waitForTimeout(500)
 
-        const stillOpen = await dialogTitle.isVisible().catch(() => false)
+        const stillOpen = (await addDialogTitle.isVisible().catch(() => false))
+          || (await editDialogTitle.isVisible().catch(() => false))
         if (!stillOpen) {
           break
         }
@@ -163,6 +166,13 @@ export class FeedListPage {
   async hoverFeed(title: string) {
     const feedElement = this.page.locator('div.group.relative.rounded-md').filter({ hasText: title }).first()
     await feedElement.hover()
+  }
+
+  async clickEditButton(title: string) {
+    await this.hoverFeed(title)
+    const actions = this.getFeedActions(title)
+    const editButton = actions.locator('button').nth(1)
+    await editButton.click()
   }
 
   getFeedActions(title: string): Locator {

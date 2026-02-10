@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { Rss, Plus, Trash2, Settings, Star, RefreshCw } from 'lucide-react'
+import { Rss, Plus, Trash2, Settings, Star, RefreshCw, Pencil } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { ScrollArea } from '../ui/ScrollArea'
 import { AddFeedDialog } from './AddFeedDialog'
+import { EditFeedDialog } from './EditFeedDialog'
 import { FeedIcon } from './FeedIcon'
 import { useConfirm } from '../ui/ConfirmDialog'
 import { useUnifiedSettings } from '../settings/UnifiedSettings'
@@ -28,6 +29,7 @@ export function FeedList() {
   const { openSettings } = useUnifiedSettings()
   const [showAddDialog, setShowAddDialog] = useState(false)
   const [refreshingId, setRefreshingId] = useState<string | null>(null)
+  const [editingFeed, setEditingFeed] = useState<typeof feeds[number]['feed'] | null>(null)
 
   const handleRefreshAll = async () => {
     await refreshAllFeeds()
@@ -182,6 +184,14 @@ export function FeedList() {
                     <Button
                       size="sm"
                       variant="ghost"
+                      onClick={() => setEditingFeed(feed)}
+                      className="h-7 w-7 p-0 text-sidebar-muted hover:text-sidebar-fg hover:bg-sidebar-hover"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
                       onClick={() => handleRemoveFeed(feed.id)}
                       className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
                     >
@@ -226,6 +236,13 @@ export function FeedList() {
       </div>
 
       <AddFeedDialog isOpen={showAddDialog} onClose={() => setShowAddDialog(false)} />
+      {editingFeed && (
+        <EditFeedDialog
+          isOpen={!!editingFeed}
+          onClose={() => setEditingFeed(null)}
+          feed={editingFeed}
+        />
+      )}
     </>
   )
 }
