@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 
 /// RSS 订阅源
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -31,6 +31,9 @@ pub struct Article {
     /// 是否收藏
     #[serde(default)]
     pub favorite: bool,
+    /// 全文抓取的内容（与原始 content 分开存储）
+    #[serde(default)]
+    pub full_content: Option<String>,
 }
 
 /// 添加订阅源的请求

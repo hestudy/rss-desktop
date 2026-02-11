@@ -23,6 +23,7 @@ interface RssContextType {
   markAllRead: (feedId: string) => Promise<void>
   openLink: (url: string) => Promise<void>
   getGlobalUnreadCount: () => number
+  updateArticleInList: (updated: Article) => void
 }
 
 const RssContext = createContext<RssContextType | undefined>(undefined)
@@ -254,6 +255,10 @@ export function RssProvider({ children }: RssProviderProps) {
     return feeds.reduce((sum, f) => sum + f.unread_count, 0)
   }, [feeds])
 
+  const updateArticleInList = useCallback((updated: Article) => {
+    setArticles(prev => prev.map(a => a.id === updated.id ? updated : a))
+  }, [])
+
   const value: RssContextType = {
     feeds,
     articles,
@@ -275,6 +280,7 @@ export function RssProvider({ children }: RssProviderProps) {
     markAllRead,
     openLink,
     getGlobalUnreadCount,
+    updateArticleInList,
   }
 
   return <RssContext.Provider value={value}>{children}</RssContext.Provider>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { Star, StarOff, ExternalLink, ChevronLeft, ChevronRight, Settings, FileText, Loader2 } from 'lucide-react'
+import { Star, StarOff, ExternalLink, ChevronLeft, ChevronRight, Settings, FileText, Loader2, ArrowLeftRight } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
 import DOMPurify from 'dompurify'
@@ -8,6 +8,7 @@ import type { Article, ReaderSettings } from '../../types'
 import { useReader } from '../../contexts/ReaderContext'
 import { useUnifiedSettings } from '../settings/UnifiedSettings'
 import { useTheme } from '../../contexts/ThemeContext'
+import { useRss } from '../../contexts/RssContext'
 
 interface ArticleViewerProps {
   article: Article
@@ -39,17 +40,23 @@ export function ArticleViewer({
   const [isFavorite, setIsFavorite] = useState(article.favorite ?? false)
   const [scrollProgress, setScrollProgress] = useState(article.reading_progress ?? 0)
   const [isFetchingContent, setIsFetchingContent] = useState(false)
-  const [displayContent, setDisplayContent] = useState<string | null>(null)
+  const [fetchedFullContent, setFetchedFullContent] = useState<string | null>(null)
+  const [contentMode, setContentMode] = useState<'original' | 'fulltext'>(
+    article.full_content ? 'fulltext' : 'original'
+  )
   const [fetchError, setFetchError] = useState<string | null>(null)
   const { selectArticle } = useReader()
   const { openSettings } = useUnifiedSettings()
   const { isDark } = useTheme()
+  const { updateArticleInList } = useRss()
 
-  // 处理滚动并更新阅读进度
+  const hasFullContent = !!(fetchedFullContent || article.full_content)
+
   useEffect(() => {
-    setDisplayContent(null)
+    setFetchedFullContent(null)
     setFetchError(null)
-  }, [article.id])
+    setContentMode(article.full_content ? 'fulltext' : 'original')
+  }, [article.id, article.full_content])
 
   useEffect(() => {
     setIsFavorite(article.favorite ?? false)
@@ -66,13 +73,15 @@ export function ArticleViewer({
     setFetchError(null)
     try {
       const updated = await RssApi.fetchFullContent(article.id)
-      setDisplayContent(updated.content ?? null)
+      setFetchedFullContent(updated.full_content ?? null)
+      setContentMode('fulltext')
+      updateArticleInList(updated)
     } catch (err) {
       setFetchError(err instanceof Error ? err.message : '抓取全文失败，请稍后重试')
     } finally {
       setIsFetchingContent(false)
     }
-  }, [article.id])
+  }, [article.id, updateArticleInList])
 
   const handleScroll = useCallback(() => {
     if (!contentRef.current) return
@@ -222,6 +231,19 @@ export function ArticleViewer({
             {isFetchingContent ? <Loader2 className="w-5 h-5 animate-spin" /> : <FileText className="w-5 h-5" />}
           </button>
 
+          {/* 切换原始/全文内容 */}
+          {hasFullContent && (
+            <button
+              onClick={() => setContentMode(prev => prev === 'fulltext' ? 'original' : 'fulltext')}
+              className={`p-2 rounded-lg hover:bg-muted transition-colors ${
+                contentMode === 'fulltext' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
+              }`}
+              title={contentMode === 'fulltext' ? '切换为原始内容' : '切换为全文内容'}
+            >
+              <ArrowLeftRight className="w-5 h-5" />
+            </button>
+          )}
+
           {/* 设置按钮 */}
           <button
             onClick={() => openSettings('reading')}
@@ -280,7 +302,11 @@ export function ArticleViewer({
           <div
             className={`prose max-w-none ${isDark ? 'prose-invert' : ''}`}
             dangerouslySetInnerHTML={{
-              __html: sanitizeHtml(displayContent || article.content || article.description || ''),
+              __html: sanitizeHtml(
+                contentMode === 'fulltext'
+                  ? (fetchedFullContent || article.full_content || article.content || article.description || '')
+                  : (article.content || article.description || '')
+              ),
             }}
           />
         </article>

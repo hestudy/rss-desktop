@@ -30,6 +30,8 @@ export interface Article {
   reading_progress?: number
   /** 是否收藏 */
   favorite?: boolean
+  /** 全文抓取的内容 */
+  full_content?: string
 }
 
 /**

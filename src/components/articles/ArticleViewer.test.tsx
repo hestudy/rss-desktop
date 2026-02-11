@@ -14,6 +14,9 @@ vi.mock('lucide-react', () => ({
   ChevronRight: () => 'ChevronRight',
   Settings: () => 'Settings',
   Clock: () => 'Clock',
+  FileText: () => 'FileText',
+  Loader2: () => 'Loader2',
+  ArrowLeftRight: () => 'ArrowLeftRight',
 }))
 
 // Mock DOMPurify
@@ -29,6 +32,7 @@ vi.mock('../../lib/api', () => ({
     updateReadingProgress: vi.fn(),
     setArticleFavorite: vi.fn(),
     openLink: vi.fn(),
+    fetchFullContent: vi.fn(),
   },
 }))
 
@@ -51,6 +55,22 @@ vi.mock('../settings/UnifiedSettings', () => ({
     open: false,
     openSettings: mockOpenSettings,
     closeSettings: vi.fn(),
+  }),
+}))
+
+// Mock useTheme
+vi.mock('../../contexts/ThemeContext', () => ({
+  useTheme: () => ({
+    isDark: false,
+    theme: 'light',
+    setTheme: vi.fn(),
+  }),
+}))
+
+const mockUpdateArticleInList = vi.fn()
+vi.mock('../../contexts/RssContext', () => ({
+  useRss: () => ({
+    updateArticleInList: mockUpdateArticleInList,
   }),
 }))
 
@@ -312,5 +332,104 @@ describe('ArticleViewer', () => {
     // 进度条容器应该不存在
     const progressContainer = document.querySelector('.h-1.bg-muted')
     expect(progressContainer).not.toBeInTheDocument()
+  })
+
+  it('应该自动显示已缓存的全文内容', () => {
+    const articleWithFullContent: Article = {
+      ...mockArticle,
+      content: '<p>Original RSS content</p>',
+      full_content: '<p>Full text fetched from web</p>',
+    }
+
+    render(
+      <ArticleViewer
+        article={articleWithFullContent}
+        articles={mockArticles}
+        readerSettings={mockReaderSettings}
+      />
+    )
+
+    expect(screen.getByText('Full text fetched from web')).toBeInTheDocument()
+    expect(screen.queryByText('Original RSS content')).not.toBeInTheDocument()
+  })
+
+  it('应该显示切换按钮当文章有全文内容时', () => {
+    const articleWithFullContent: Article = {
+      ...mockArticle,
+      full_content: '<p>Full text</p>',
+    }
+
+    render(
+      <ArticleViewer
+        article={articleWithFullContent}
+        articles={mockArticles}
+        readerSettings={mockReaderSettings}
+      />
+    )
+
+    const toggleButton = screen.getByTitle('切换为原始内容')
+    expect(toggleButton).toBeInTheDocument()
+  })
+
+  it('应该不显示切换按钮当文章没有全文内容时', () => {
+    render(
+      <ArticleViewer
+        article={mockArticle}
+        articles={mockArticles}
+        readerSettings={mockReaderSettings}
+      />
+    )
+
+    const toggleButton = screen.queryByTitle('切换为原始内容')
+    expect(toggleButton).not.toBeInTheDocument()
+    const toggleButton2 = screen.queryByTitle('切换为全文内容')
+    expect(toggleButton2).not.toBeInTheDocument()
+  })
+
+  it('应该在点击切换按钮后显示原始内容', () => {
+    const articleWithFullContent: Article = {
+      ...mockArticle,
+      content: '<p>Original RSS content</p>',
+      full_content: '<p>Full text fetched from web</p>',
+    }
+
+    render(
+      <ArticleViewer
+        article={articleWithFullContent}
+        articles={mockArticles}
+        readerSettings={mockReaderSettings}
+      />
+    )
+
+    const toggleButton = screen.getByTitle('切换为原始内容')
+    fireEvent.click(toggleButton)
+
+    expect(screen.getByText('Original RSS content')).toBeInTheDocument()
+    expect(screen.queryByText('Full text fetched from web')).not.toBeInTheDocument()
+  })
+
+  it('应该在抓取全文后自动切换到全文显示', async () => {
+    const fetchedArticle: Article = {
+      ...mockArticle,
+      full_content: '<p>Newly fetched full content</p>',
+    }
+    vi.mocked(RssApi.fetchFullContent).mockResolvedValue(fetchedArticle)
+
+    render(
+      <ArticleViewer
+        article={mockArticle}
+        articles={mockArticles}
+        readerSettings={mockReaderSettings}
+      />
+    )
+
+    const fetchButton = screen.getByTitle('抓取全文')
+    fireEvent.click(fetchButton)
+
+    await waitFor(() => {
+      expect(screen.getByText('Newly fetched full content')).toBeInTheDocument()
+    })
+
+    expect(mockUpdateArticleInList).toHaveBeenCalledWith(fetchedArticle)
   })
 })
