@@ -18,29 +18,29 @@ pub fn fetch_and_extract_content(url: &str) -> Result<String> {
         .set("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
         .timeout(Duration::from_secs(30))
         .call()
-        .map_err(|e| RssError::ContentExtractionError(format!("Failed to fetch page: {}", e)))?;
+        .map_err(|e| RssError::ContentExtractionError(format!("页面请求失败: {}", e)))?;
 
     let status = response.status();
     if status < 200 || status >= 300 {
         return Err(RssError::ContentExtractionError(format!(
-            "HTTP error: {} - Server returned non-success status",
+            "服务器返回错误状态码: {}",
             status
         )));
     }
 
     let html = response
         .into_string()
-        .map_err(|e| RssError::ContentExtractionError(format!("Failed to read response: {}", e)))?;
+        .map_err(|e| RssError::ContentExtractionError(format!("读取响应内容失败: {}", e)))?;
 
     if html.is_empty() {
         return Err(RssError::ContentExtractionError(
-            "Empty response from server".to_string(),
+            "服务器返回了空响应".to_string(),
         ));
     }
 
     if html.len() > MAX_CONTENT_SIZE {
         return Err(RssError::ContentExtractionError(format!(
-            "Content too large: {} bytes (max: {} bytes)",
+            "页面内容过大: {} 字节（最大: {} 字节）",
             html.len(),
             MAX_CONTENT_SIZE
         )));
@@ -50,27 +50,63 @@ pub fn fetch_and_extract_content(url: &str) -> Result<String> {
 }
 
 pub fn extract_content_from_html(html: &str, url: Option<&str>) -> Result<String> {
+    if is_likely_spa(html) {
+        return Err(RssError::ContentExtractionError(
+            "该页面使用 JavaScript 动态渲染内容，无法提取全文".to_string(),
+        ));
+    }
+
     let cfg = Config {
         max_elements_to_parse: 5000,
         ..Default::default()
     };
 
     let mut readability = Readability::new(html, url, Some(cfg))
-        .map_err(|e| RssError::ContentExtractionError(format!("Failed to parse HTML: {}", e)))?;
+        .map_err(|e| RssError::ContentExtractionError(format!("HTML 解析失败: {}", e)))?;
 
-    let article = readability.parse().map_err(|e| {
-        RssError::ContentExtractionError(format!("Failed to extract content: {}", e))
-    })?;
+    let article = readability
+        .parse()
+        .map_err(|e| RssError::ContentExtractionError(format!("内容提取失败: {}", e)))?;
 
     let content = article.content.to_string();
 
     if content.trim().is_empty() {
         return Err(RssError::ContentExtractionError(
-            "No readable content found".to_string(),
+            "未找到可读内容".to_string(),
         ));
     }
 
     Ok(content)
+}
+
+fn is_likely_spa(html: &str) -> bool {
+    let html_lower = html.to_lowercase();
+
+    let has_spa_root = html_lower.contains(r#"id="root""#)
+        || html_lower.contains("id='root'")
+        || html_lower.contains(r#"id="app""#)
+        || html_lower.contains("id='app'")
+        || html_lower.contains(r#"id="__next""#)
+        || html_lower.contains("id='__next'")
+        || html_lower.contains(r#"id="__nuxt""#)
+        || html_lower.contains("id='__nuxt'");
+
+    if !has_spa_root {
+        return false;
+    }
+
+    let body_content = html_lower
+        .split("<body")
+        .nth(1)
+        .and_then(|s| s.split("</body>").next())
+        .unwrap_or("");
+
+    let text_len: usize = body_content
+        .split('<')
+        .filter_map(|s| s.split_once('>').map(|(_, text)| text.trim().len()))
+        .sum();
+
+    text_len < 100
 }
 
 #[cfg(test)]
@@ -187,5 +223,85 @@ mod tests {
             content.contains("<p>") || content.contains("<div>"),
             "Should preserve HTML tags"
         );
+    }
+
+    #[test]
+    fn test_detect_spa_page() {
+        let spa_html = r#"
+        <html><head><title>App</title></head>
+        <body><div id="root"></div>
+        <script type="module" src="/assets/app.js"></script>
+        </body></html>"#;
+        assert!(is_likely_spa(spa_html));
+    }
+
+    #[test]
+    fn test_normal_page_not_detected_as_spa() {
+        let normal_html = r#"
+        <html><head><title>Article</title></head>
+        <body><div id="root">
+        <article><h1>Title</h1>
+        <p>This is a real article with substantial content that should not be
+        detected as a SPA page because it has meaningful text content in the body
+        and enough words to pass the threshold check.</p>
+        </article></div></body></html>"#;
+        assert!(!is_likely_spa(normal_html));
+    }
+
+    #[test]
+    fn test_spa_extract_returns_meaningful_error() {
+        let spa_html = r#"
+        <html><head><title>App</title></head>
+        <body class="min-h-screen"><div id="root"></div>
+        <script type="module" crossorigin src="/assets/app.js"></script>
+        </body></html>"#;
+        let result = extract_content_from_html(spa_html, None);
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("JavaScript"),
+            "Error should mention JavaScript: {}",
+            err_msg
+        );
+    }
+
+    #[test]
+    fn test_spa_single_quote_attributes() {
+        let spa_html = r#"
+        <html><head><title>App</title></head>
+        <body><div id='root'></div>
+        <script type="module" src="/assets/app.js"></script>
+        </body></html>"#;
+        assert!(is_likely_spa(spa_html));
+    }
+
+    #[test]
+    fn test_no_spa_root_not_detected() {
+        let html = r#"
+        <html><head><title>Page</title></head>
+        <body><div id="content"></div>
+        <script src="/app.js"></script>
+        </body></html>"#;
+        assert!(!is_likely_spa(html));
+    }
+
+    #[test]
+    fn test_spa_boundary_text_at_threshold() {
+        let padding = "x".repeat(100);
+        let html = format!(
+            r#"<html><head></head><body><div id="root">{}</div></body></html>"#,
+            padding
+        );
+        assert!(!is_likely_spa(&html));
+    }
+
+    #[test]
+    fn test_spa_boundary_text_below_threshold() {
+        let padding = "x".repeat(99);
+        let html = format!(
+            r#"<html><head></head><body><div id="root">{}</div></body></html>"#,
+            padding
+        );
+        assert!(is_likely_spa(&html));
     }
 }

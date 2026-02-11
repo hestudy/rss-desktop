@@ -46,6 +46,7 @@ export function ArticleViewer({
     article.full_content ? 'fulltext' : 'original'
   )
   const [fetchError, setFetchError] = useState<string | null>(null)
+  const hasAttemptedAutoFetch = useRef(false)
   
   // AI Summary State
   const [aiSummary, setAiSummary] = useState<string | null>(article.ai_summary ?? null)
@@ -62,6 +63,7 @@ export function ArticleViewer({
   const hasFullContent = !!(fetchedFullContent || article.full_content)
 
   useEffect(() => {
+    hasAttemptedAutoFetch.current = false
     setFetchedFullContent(null)
     setFetchError(null)
     setContentMode(article.full_content ? 'fulltext' : 'original')
@@ -70,7 +72,8 @@ export function ArticleViewer({
   }, [article.id, article.full_content, article.ai_summary])
 
   useEffect(() => {
-    if (feedUsesFullContent && !article.full_content && !fetchedFullContent && !isFetchingContent) {
+    if (feedUsesFullContent && !article.full_content && !fetchedFullContent && !hasAttemptedAutoFetch.current) {
+      hasAttemptedAutoFetch.current = true
       setIsFetchingContent(true)
       setFetchError(null)
       RssApi.fetchFullContent(article.id)
@@ -79,14 +82,14 @@ export function ArticleViewer({
           setContentMode('fulltext')
           updateArticleInList(updated)
         })
-        .catch((err) => {
-          setFetchError(err instanceof Error ? err.message : '抓取全文失败，请稍后重试')
+        .catch((err: unknown) => {
+          setFetchError(typeof err === 'string' ? err : err instanceof Error ? err.message : '抓取全文失败，请稍后重试')
         })
         .finally(() => {
           setIsFetchingContent(false)
         })
     }
-  }, [article.id, article.full_content, feedUsesFullContent, fetchedFullContent, isFetchingContent, updateArticleInList])
+  }, [article.id, article.full_content, feedUsesFullContent, fetchedFullContent, updateArticleInList])
 
   useEffect(() => {
     setIsFavorite(article.favorite ?? false)
@@ -106,8 +109,8 @@ export function ArticleViewer({
       setFetchedFullContent(updated.full_content ?? null)
       setContentMode('fulltext')
       updateArticleInList(updated)
-    } catch (err) {
-      setFetchError(err instanceof Error ? err.message : '抓取全文失败，请稍后重试')
+    } catch (err: unknown) {
+      setFetchError(typeof err === 'string' ? err : err instanceof Error ? err.message : '抓取全文失败，请稍后重试')
     } finally {
       setIsFetchingContent(false)
     }
@@ -119,8 +122,8 @@ export function ArticleViewer({
       const updated = await RssApi.generateSummary(article.id)
       setAiSummary(updated.ai_summary ?? null)
       updateArticleInList(updated)
-    } catch (err) {
-      setFetchError(err instanceof Error ? err.message : 'AI 摘要生成失败')
+    } catch (err: unknown) {
+      setFetchError(typeof err === 'string' ? err : err instanceof Error ? err.message : 'AI 摘要生成失败')
     } finally {
       setIsGeneratingSummary(false)
     }

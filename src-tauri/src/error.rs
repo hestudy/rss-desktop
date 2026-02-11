@@ -26,7 +26,7 @@ pub enum RssError {
     #[error("Lock error: {0}")]
     LockError(String),
 
-    #[error("Content extraction failed: {0}")]
+    #[error("{0}")]
     ContentExtractionError(String),
 
     #[error("AI summary failed: {0}")]
