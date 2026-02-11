@@ -21,6 +21,7 @@ export class ArticleViewerPage {
   readonly externalLinkButton: Locator
   readonly fetchFullContentButton: Locator
   readonly fetchErrorBanner: Locator
+  readonly toggleContentButton: Locator
   readonly contentArea: Locator
   readonly articleTitle: Locator
   readonly progressBar: Locator
@@ -62,6 +63,7 @@ export class ArticleViewerPage {
     this.fetchFullContentButton = page.getByTitle('抓取全文')
 
     this.fetchErrorBanner = page.locator('.bg-destructive\\/10')
+    this.toggleContentButton = page.locator('button[title*="切换为"]')
 
     // Content area - the scrollable div
     this.contentArea = this.readerPanel.locator('.overflow-y-auto').first()
@@ -483,5 +485,18 @@ export class ArticleViewerPage {
 
   async getFetchErrorText(): Promise<string | null> {
     return await this.fetchErrorBanner.textContent()
+  }
+
+  async isToggleContentButtonVisible(): Promise<boolean> {
+    return await this.toggleContentButton.isVisible().catch(() => false)
+  }
+
+  async clickToggleContent() {
+    await this.toggleContentButton.click()
+    await this.page.waitForTimeout(300)
+  }
+
+  async getToggleContentButtonTitle(): Promise<string | null> {
+    return await this.toggleContentButton.getAttribute('title')
   }
 }

@@ -44,7 +44,7 @@ test.describe('Fetch Full Content', () => {
     expect(updatedContent).not.toBe(originalContent)
   })
 
-  test('should reset fetched content when switching articles', async () => {
+  test('should persist full content when switching articles and coming back', async () => {
     await articleListPage.clickArticle(0)
     await articleViewerPage.waitForVisible()
 
@@ -59,6 +59,12 @@ test.describe('Fetch Full Content', () => {
 
     const nextContent = await articleViewerPage.getArticleContent()
     expect(nextContent).not.toContain('Full Article Content')
+
+    await articleViewerPage.clickPrevious()
+    await articleViewerPage.page.waitForTimeout(500)
+
+    const restoredContent = await articleViewerPage.getArticleContent()
+    expect(restoredContent).toContain('Full Article Content')
   })
 
   test('should show loading spinner while fetching', async ({ page }) => {
@@ -87,5 +93,44 @@ test.describe('Fetch Full Content', () => {
     await articleViewerPage.clickFetchFullContent()
 
     expect(await articleViewerPage.isFetchingContent()).toBe(true)
+  })
+
+  test('should show toggle button after fetching full content', async () => {
+    await articleListPage.clickArticle(0)
+    await articleViewerPage.waitForVisible()
+
+    expect(await articleViewerPage.isToggleContentButtonVisible()).toBe(false)
+
+    await articleViewerPage.clickFetchFullContent()
+    await articleViewerPage.page.waitForTimeout(1000)
+
+    expect(await articleViewerPage.isToggleContentButtonVisible()).toBe(true)
+    expect(await articleViewerPage.getToggleContentButtonTitle()).toBe('切换为原始内容')
+  })
+
+  test('should toggle between original and full content', async () => {
+    await articleListPage.clickArticle(0)
+    await articleViewerPage.waitForVisible()
+
+    const originalContent = await articleViewerPage.getArticleContent()
+
+    await articleViewerPage.clickFetchFullContent()
+    await articleViewerPage.page.waitForTimeout(1000)
+
+    const fullContent = await articleViewerPage.getArticleContent()
+    expect(fullContent).toContain('Full Article Content')
+    expect(fullContent).not.toBe(originalContent)
+
+    await articleViewerPage.clickToggleContent()
+
+    const toggledContent = await articleViewerPage.getArticleContent()
+    expect(toggledContent).not.toContain('Full Article Content')
+
+    expect(await articleViewerPage.getToggleContentButtonTitle()).toBe('切换为全文内容')
+
+    await articleViewerPage.clickToggleContent()
+
+    const toggledBack = await articleViewerPage.getArticleContent()
+    expect(toggledBack).toContain('Full Article Content')
   })
 })

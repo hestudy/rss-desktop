@@ -225,7 +225,7 @@ export function buildTauriMockScript(): string {
           '<p>This is the full article content fetched from the original website.</p>' +
           '<p>It contains much more detail than the RSS summary.</p>' +
           '<p>The readability algorithm extracted only the main content.</p>';
-        art.content = fullContent;
+        art.full_content = fullContent;
         return Promise.resolve({ ...art });
       }
 
