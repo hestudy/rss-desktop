@@ -229,6 +229,37 @@ export function buildTauriMockScript(): string {
         return Promise.resolve({ ...art });
       }
 
+      case 'generate_article_summary': {
+        const summaryArt = articleState[args.id];
+        if (!summaryArt) {
+          return Promise.reject('Article not found');
+        }
+        summaryArt.ai_summary = '这是一篇关于技术主题的文章。文章主要讨论了核心概念和实践应用，提供了详细的代码示例和最佳实践建议。';
+        return Promise.resolve({ ...summaryArt });
+      }
+
+      case 'get_ai_settings':
+        return Promise.resolve({
+          apiEndpoint: 'https://api.openai.com/v1',
+          apiKey: '',
+          model: 'gpt-4o-mini',
+          maxTokens: 300,
+          prompt: '你是一个专业的文章摘要助手。',
+          enableAutoSummary: false,
+          language: 'zh-CN',
+        });
+
+      case 'update_ai_settings':
+        return Promise.resolve(args.settings || {
+          apiEndpoint: 'https://api.openai.com/v1',
+          apiKey: '',
+          model: 'gpt-4o-mini',
+          maxTokens: 300,
+          prompt: '你是一个专业的文章摘要助手。',
+          enableAutoSummary: false,
+          language: 'zh-CN',
+        });
+
       case 'update_feed_info': {
         const feed = feeds.find(f => f.feed.id === args.id);
         if (!feed) {

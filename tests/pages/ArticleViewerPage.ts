@@ -22,6 +22,10 @@ export class ArticleViewerPage {
   readonly fetchFullContentButton: Locator
   readonly fetchErrorBanner: Locator
   readonly toggleContentButton: Locator
+  readonly aiSummaryButton: Locator
+  readonly aiSummaryCard: Locator
+  readonly aiSummaryToggle: Locator
+  readonly aiSummaryContent: Locator
   readonly contentArea: Locator
   readonly articleTitle: Locator
   readonly progressBar: Locator
@@ -61,9 +65,14 @@ export class ArticleViewerPage {
     this.settingsButton = page.getByTitle('阅读设置')
     this.externalLinkButton = page.getByTitle('在浏览器中打开')
     this.fetchFullContentButton = page.getByTitle('抓取全文')
+    this.aiSummaryButton = page.getByTitle('生成 AI 摘要')
 
     this.fetchErrorBanner = page.locator('.bg-destructive\\/10')
     this.toggleContentButton = page.locator('button[title*="切换为"]')
+
+    this.aiSummaryCard = page.locator('.border-primary\\/20')
+    this.aiSummaryToggle = this.aiSummaryCard.locator('button').first()
+    this.aiSummaryContent = this.aiSummaryCard.locator('div.px-4.pb-3')
 
     // Content area - the scrollable div
     this.contentArea = this.readerPanel.locator('.overflow-y-auto').first()
@@ -124,7 +133,7 @@ export class ArticleViewerPage {
    */
   async closeWithEscape() {
     await this.page.keyboard.press('Escape')
-    await this.page.waitForTimeout(500)
+    await expect(this.articleTitle).not.toBeVisible()
   }
 
   /**
@@ -146,64 +155,130 @@ export class ArticleViewerPage {
    */
   async toggleFavorite() {
     const favBtn = this.page.locator('button[title*="收藏"]').first()
+    const wasFavorited = await this.isFavorited()
     await favBtn.click()
-    await this.page.waitForTimeout(500)
+    // Wait for the state to change
+    if (wasFavorited) {
+      await expect(this.favoriteButton).toBeVisible()
+    } else {
+      await expect(this.unfavoriteButton).toBeVisible()
+    }
   }
 
   /**
    * Press F key to toggle favorite
    */
   async toggleFavoriteWithKeyboard() {
+    const wasFavorited = await this.isFavorited()
     await this.page.keyboard.press('f')
-    await this.page.waitForTimeout(500)
+    // Wait for the state to change
+    if (wasFavorited) {
+      await expect(this.favoriteButton).toBeVisible()
+    } else {
+      await expect(this.unfavoriteButton).toBeVisible()
+    }
   }
 
   /**
    * Click next article button
    */
   async clickNext() {
+    const currentTitle = await this.getArticleTitle()
     await this.nextButton.click()
-    await this.page.waitForTimeout(500)
+    // Wait for article to change
+    await this.page.waitForFunction(
+      (oldTitle) => {
+        const h1 = document.querySelector('[data-testid="reader-panel-content"] h1')
+        return h1?.textContent !== oldTitle
+      },
+      currentTitle,
+      { timeout: 5000 }
+    )
   }
 
   /**
    * Click previous article button
    */
   async clickPrevious() {
+    const currentTitle = await this.getArticleTitle()
     await this.previousButton.click()
-    await this.page.waitForTimeout(500)
+    // Wait for article to change
+    await this.page.waitForFunction(
+      (oldTitle) => {
+        const h1 = document.querySelector('[data-testid="reader-panel-content"] h1')
+        return h1?.textContent !== oldTitle
+      },
+      currentTitle,
+      { timeout: 5000 }
+    )
   }
 
   /**
    * Press N key to go to next article
    */
   async goToNextWithKeyboard() {
+    const currentTitle = await this.getArticleTitle()
     await this.page.keyboard.press('n')
-    await this.page.waitForTimeout(500)
+    // Wait for article to change
+    await this.page.waitForFunction(
+      (oldTitle) => {
+        const h1 = document.querySelector('[data-testid="reader-panel-content"] h1')
+        return h1?.textContent !== oldTitle
+      },
+      currentTitle,
+      { timeout: 5000 }
+    )
   }
 
   /**
    * Press P key to go to previous article
    */
   async goToPreviousWithKeyboard() {
+    const currentTitle = await this.getArticleTitle()
     await this.page.keyboard.press('p')
-    await this.page.waitForTimeout(500)
+    // Wait for article to change
+    await this.page.waitForFunction(
+      (oldTitle) => {
+        const h1 = document.querySelector('[data-testid="reader-panel-content"] h1')
+        return h1?.textContent !== oldTitle
+      },
+      currentTitle,
+      { timeout: 5000 }
+    )
   }
 
   /**
    * Press ArrowRight to go to next article
    */
   async goToNextWithArrowKey() {
+    const currentTitle = await this.getArticleTitle()
     await this.page.keyboard.press('ArrowRight')
-    await this.page.waitForTimeout(500)
+    // Wait for article to change
+    await this.page.waitForFunction(
+      (oldTitle) => {
+        const h1 = document.querySelector('[data-testid="reader-panel-content"] h1')
+        return h1?.textContent !== oldTitle
+      },
+      currentTitle,
+      { timeout: 5000 }
+    )
   }
 
   /**
    * Press ArrowLeft to go to previous article
    */
   async goToPreviousWithArrowKey() {
+    const currentTitle = await this.getArticleTitle()
     await this.page.keyboard.press('ArrowLeft')
-    await this.page.waitForTimeout(500)
+    // Wait for article to change
+    await this.page.waitForFunction(
+      (oldTitle) => {
+        const h1 = document.querySelector('[data-testid="reader-panel-content"] h1')
+        return h1?.textContent !== oldTitle
+      },
+      currentTitle,
+      { timeout: 5000 }
+    )
   }
 
   /**
@@ -232,7 +307,6 @@ export class ArticleViewerPage {
    */
   async openSettings() {
     await this.settingsButton.click()
-    await this.page.waitForTimeout(300)
     // Wait for the dialog to appear
     await expect(this.settingsDialog).toBeVisible({ timeout: 3000 })
   }
@@ -243,7 +317,7 @@ export class ArticleViewerPage {
   async closeSettings() {
     // Click the X button or press Escape
     await this.page.keyboard.press('Escape')
-    await this.page.waitForTimeout(300)
+    await expect(this.settingsDialog).not.toBeVisible()
   }
 
   /**
@@ -266,7 +340,15 @@ export class ArticleViewerPage {
    */
   async setFontSize(size: number) {
     await this.fontSizeSlider.fill(size.toString())
-    await this.page.waitForTimeout(200)
+    // Wait for the change to be applied
+    await this.page.waitForFunction(
+      (expectedSize) => {
+        const slider = document.querySelector('input[type="range"]') as HTMLInputElement
+        return slider?.value === expectedSize.toString()
+      },
+      size,
+      { timeout: 2000 }
+    )
   }
 
   /**
@@ -282,7 +364,15 @@ export class ArticleViewerPage {
    */
   async setLineHeight(height: number) {
     await this.lineHeightSlider.fill(height.toString())
-    await this.page.waitForTimeout(200)
+    // Wait for the change to be applied
+    await this.page.waitForFunction(
+      (expectedHeight) => {
+        const slider = document.querySelectorAll('input[type="range"]')[1] as HTMLInputElement
+        return slider?.value === expectedHeight.toString()
+      },
+      height,
+      { timeout: 2000 }
+    )
   }
 
   /**
@@ -298,7 +388,15 @@ export class ArticleViewerPage {
    */
   async setLetterSpacing(spacing: number) {
     await this.letterSpacingSlider.fill(spacing.toString())
-    await this.page.waitForTimeout(200)
+    // Wait for the change to be applied
+    await this.page.waitForFunction(
+      (expectedSpacing) => {
+        const slider = document.querySelectorAll('input[type="range"]')[2] as HTMLInputElement
+        return slider?.value === expectedSpacing.toString()
+      },
+      spacing,
+      { timeout: 2000 }
+    )
   }
 
   /**
@@ -314,7 +412,15 @@ export class ArticleViewerPage {
    */
   async setMaxWidth(width: number) {
     await this.maxWidthSlider.fill(width.toString())
-    await this.page.waitForTimeout(200)
+    // Wait for the change to be applied
+    await this.page.waitForFunction(
+      (expectedWidth) => {
+        const slider = document.querySelectorAll('input[type="range"]')[3] as HTMLInputElement
+        return slider?.value === expectedWidth.toString()
+      },
+      width,
+      { timeout: 2000 }
+    )
   }
 
   /**
@@ -327,7 +433,8 @@ export class ArticleViewerPage {
       justify: this.textAlignJustify,
     }
     await buttonMap[align].click()
-    await this.page.waitForTimeout(200)
+    // Wait for the button to become active
+    await expect(buttonMap[align]).toHaveClass(/bg-primary/)
   }
 
   /**
@@ -348,8 +455,14 @@ export class ArticleViewerPage {
    * Toggle show progress toggle
    */
   async toggleShowProgress() {
+    const wasVisible = await this.isProgressBarVisible()
     await this.showProgressToggle.click()
-    await this.page.waitForTimeout(200)
+    // Wait for the state to change
+    if (wasVisible) {
+      await expect(this.progressBar.first()).not.toBeVisible()
+    } else {
+      await expect(this.progressBar.first()).toBeVisible()
+    }
   }
 
   /**
@@ -378,7 +491,14 @@ export class ArticleViewerPage {
     await this.contentArea.evaluate(el => {
       el.scrollTop = el.scrollHeight
     })
-    await this.page.waitForTimeout(500)
+    // Wait for scroll to complete
+    await this.page.waitForFunction(
+      () => {
+        const el = document.querySelector('[data-testid="reader-panel-content"] .overflow-y-auto') as HTMLElement
+        return el && el.scrollTop + el.clientHeight >= el.scrollHeight - 10
+      },
+      { timeout: 2000 }
+    )
   }
 
   /**
@@ -388,17 +508,33 @@ export class ArticleViewerPage {
     await this.contentArea.evaluate(el => {
       el.scrollTop = 0
     })
-    await this.page.waitForTimeout(500)
+    // Wait for scroll to complete
+    await this.page.waitForFunction(
+      () => {
+        const el = document.querySelector('[data-testid="reader-panel-content"] .overflow-y-auto') as HTMLElement
+        return el && el.scrollTop === 0
+      },
+      { timeout: 2000 }
+    )
   }
 
   /**
    * Scroll by a specific amount
    */
   async scrollBy(amount: number) {
+    const initialScroll = await this.contentArea.evaluate(el => el.scrollTop)
     await this.contentArea.evaluate((el, scrollAmount) => {
       el.scrollTop += scrollAmount
     }, amount)
-    await this.page.waitForTimeout(300)
+    // Wait for scroll to complete
+    await this.page.waitForFunction(
+      ({ initial, delta }) => {
+        const el = document.querySelector('[data-testid="reader-panel-content"] .overflow-y-auto') as HTMLElement
+        return el && Math.abs(el.scrollTop - (initial + delta)) < 5
+      },
+      { initial: initialScroll, delta: amount },
+      { timeout: 2000 }
+    )
   }
 
   /**
@@ -406,7 +542,14 @@ export class ArticleViewerPage {
    */
   async resetSettings() {
     await this.resetSettingsButton.click()
-    await this.page.waitForTimeout(300)
+    // Wait for settings to be reset (font size should be back to default)
+    await this.page.waitForFunction(
+      () => {
+        const slider = document.querySelector('input[type="range"]') as HTMLInputElement
+        return slider && parseInt(slider.value) === 16 // default font size
+      },
+      { timeout: 2000 }
+    )
   }
 
   /**
@@ -455,7 +598,7 @@ export class ArticleViewerPage {
    */
   async waitForContent() {
     await this.readerPanel.locator('article').first().waitFor({ state: 'attached', timeout: 5000 })
-    await this.page.waitForTimeout(500)
+    await expect(this.readerPanel.locator('article').first()).toBeVisible()
   }
 
   /**
@@ -492,11 +635,61 @@ export class ArticleViewerPage {
   }
 
   async clickToggleContent() {
+    const currentTitle = await this.getToggleContentButtonTitle()
     await this.toggleContentButton.click()
-    await this.page.waitForTimeout(300)
+    // Wait for the button title to change
+    await this.page.waitForFunction(
+      (oldTitle) => {
+        const btn = document.querySelector('button[title*="切换为"]') as HTMLButtonElement
+        return btn && btn.title !== oldTitle
+      },
+      currentTitle,
+      { timeout: 3000 }
+    )
   }
 
   async getToggleContentButtonTitle(): Promise<string | null> {
     return await this.toggleContentButton.getAttribute('title')
+  }
+
+  async clickAiSummary() {
+    await this.aiSummaryButton.click()
+  }
+
+  async isAiSummaryButtonVisible(): Promise<boolean> {
+    return await this.aiSummaryButton.isVisible().catch(() => false)
+  }
+
+  async isAiSummaryButtonHighlighted(): Promise<boolean> {
+    const cls = await this.aiSummaryButton.getAttribute('class') || ''
+    return cls.includes('text-primary')
+  }
+
+  async isGeneratingAiSummary(): Promise<boolean> {
+    const spinner = this.aiSummaryButton.locator('.animate-spin')
+    return await spinner.isVisible().catch(() => false)
+  }
+
+  async isAiSummaryCardVisible(): Promise<boolean> {
+    return await this.aiSummaryCard.isVisible().catch(() => false)
+  }
+
+  async getAiSummaryText(): Promise<string | null> {
+    return await this.aiSummaryContent.textContent()
+  }
+
+  async toggleAiSummaryCollapse() {
+    const wasVisible = await this.isAiSummaryContentVisible()
+    await this.aiSummaryToggle.click()
+    // Wait for the state to change
+    if (wasVisible) {
+      await expect(this.aiSummaryContent).not.toBeVisible()
+    } else {
+      await expect(this.aiSummaryContent).toBeVisible()
+    }
+  }
+
+  async isAiSummaryContentVisible(): Promise<boolean> {
+    return await this.aiSummaryContent.isVisible().catch(() => false)
   }
 }
