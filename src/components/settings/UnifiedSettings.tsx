@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, createContext, useContext } from 'react'
+import { useState, useEffect, useCallback, useRef, createContext, useContext } from 'react'
 import { createPortal } from 'react-dom'
 import {
   X,
@@ -10,6 +10,7 @@ import {
   Moon,
   Monitor,
   Rss,
+  Sparkles,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useTheme, type ThemePreset, type ThemeMode } from '@/contexts/ThemeContext'
@@ -18,15 +19,19 @@ import { DEFAULT_READER_SETTINGS } from '@/types'
 import {
   getSettings,
   updateSettings,
+  getAiSettings,
+  updateAiSettings,
   POLL_INTERVAL_OPTIONS,
   NOTIFICATION_TYPE_OPTIONS,
   DEFAULT_SETTINGS,
+  DEFAULT_AI_SETTINGS,
   type AppSettings,
+  type AiSettings,
 } from '@/lib/settings'
 
 // ============= 设置面板 Context =============
 
-type SettingsTab = 'appearance' | 'reading' | 'notification' | 'about'
+type SettingsTab = 'appearance' | 'reading' | 'notification' | 'ai' | 'about'
 
 interface UnifiedSettingsContextType {
   open: boolean
@@ -71,6 +76,7 @@ const NAV_ITEMS: { key: SettingsTab; label: string; icon: React.ReactNode }[] = 
   { key: 'appearance', label: '外观', icon: <Palette className="w-4 h-4" /> },
   { key: 'reading', label: '阅读', icon: <BookOpen className="w-4 h-4" /> },
   { key: 'notification', label: '通知', icon: <Bell className="w-4 h-4" /> },
+  { key: 'ai', label: 'AI', icon: <Sparkles className="w-4 h-4" /> },
   { key: 'about', label: '关于', icon: <Info className="w-4 h-4" /> },
 ]
 
@@ -155,6 +161,7 @@ function UnifiedSettingsPanel({ initialTab, onClose }: UnifiedSettingsPanelProps
             {activeTab === 'appearance' && <AppearanceSection />}
             {activeTab === 'reading' && <ReadingSection />}
             {activeTab === 'notification' && <NotificationSection />}
+            {activeTab === 'ai' && <AiSection />}
             {activeTab === 'about' && <AboutSection />}
           </div>
         </div>
@@ -431,6 +438,156 @@ function NotificationSection() {
         checked={settings.enableBackgroundRefresh}
         onChange={(v) => handleChange({ enableBackgroundRefresh: v })}
       />
+    </div>
+  )
+}
+
+// ============= AI 设置 =============
+
+function AiSection() {
+  const [settings, setSettings] = useState<AiSettings>(DEFAULT_AI_SETTINGS)
+  const [saving, setSaving] = useState(false)
+  const [loaded, setLoaded] = useState(false)
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(null)
+
+  useEffect(() => {
+    getAiSettings()
+      .then((s) => {
+        setSettings(s)
+        setLoaded(true)
+      })
+      .catch(() => setLoaded(true))
+  }, [])
+
+  const saveSettings = useCallback(async (updated: AiSettings) => {
+    setSaving(true)
+    try {
+      await updateAiSettings(updated)
+    } catch {
+      // silent
+    } finally {
+      setSaving(false)
+    }
+  }, [])
+
+  const handleChange = useCallback((patch: Partial<AiSettings>) => {
+    setSettings((prev) => {
+      const updated = { ...prev, ...patch }
+      saveSettings(updated)
+      return updated
+    })
+  }, [saveSettings])
+
+  const handleDebouncedChange = useCallback((patch: Partial<AiSettings>) => {
+    setSettings((prev) => ({ ...prev, ...patch }))
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      setSettings((prev) => {
+        saveSettings(prev)
+        return prev
+      })
+    }, 500)
+  }, [saveSettings])
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [])
+
+  if (!loaded) {
+    return <div className="text-sm text-muted-foreground">加载中...</div>
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* API 地址 */}
+      <div>
+        <h3 className="text-sm font-medium text-foreground mb-1">API 地址</h3>
+        <p className="text-xs text-muted-foreground mb-2">OpenAI 兼容的 API 端点</p>
+        <input
+          type="text"
+          value={settings.apiEndpoint}
+          onChange={(e) => handleDebouncedChange({ apiEndpoint: e.target.value })}
+          disabled={saving}
+          placeholder="https://api.openai.com/v1"
+          className="w-full px-3 py-2 rounded-lg border border-border bg-card text-foreground text-sm"
+        />
+      </div>
+
+      {/* API Key */}
+      <div>
+        <h3 className="text-sm font-medium text-foreground mb-1">API Key</h3>
+        <p className="text-xs text-muted-foreground mb-2">用于身份验证的密钥</p>
+        <input
+          type="password"
+          value={settings.apiKey}
+          onChange={(e) => handleDebouncedChange({ apiKey: e.target.value })}
+          disabled={saving}
+          placeholder="sk-..."
+          className="w-full px-3 py-2 rounded-lg border border-border bg-card text-foreground text-sm"
+        />
+      </div>
+
+      {/* 模型 */}
+      <div>
+        <h3 className="text-sm font-medium text-foreground mb-1">模型</h3>
+        <p className="text-xs text-muted-foreground mb-2">用于生成摘要的模型名称</p>
+        <input
+          type="text"
+          value={settings.model}
+          onChange={(e) => handleDebouncedChange({ model: e.target.value })}
+          disabled={saving}
+          placeholder="gpt-4o-mini"
+          className="w-full px-3 py-2 rounded-lg border border-border bg-card text-foreground text-sm"
+        />
+      </div>
+
+      {/* 最大 Token */}
+      <SettingSlider
+        label="最大 Token 数"
+        value={settings.maxTokens}
+        min={50}
+        max={2000}
+        step={50}
+        onChange={(v) => handleChange({ maxTokens: v })}
+      />
+
+      {/* 自动摘要 */}
+      <SettingToggle
+        label="自动生成摘要"
+        description="新文章自动生成 AI 摘要（需要配置有效的 API Key）"
+        checked={settings.enableAutoSummary}
+        onChange={(v) => handleChange({ enableAutoSummary: v })}
+      />
+
+      {/* 摘要语言 */}
+      <div>
+        <h3 className="text-sm font-medium text-foreground mb-1">摘要语言</h3>
+        <select
+          value={settings.language}
+          onChange={(e) => handleChange({ language: e.target.value })}
+          disabled={saving}
+          className="w-full px-3 py-2 rounded-lg border border-border bg-card text-foreground text-sm"
+        >
+          <option value="zh-CN">中文</option>
+          <option value="en">English</option>
+          <option value="ja">日本語</option>
+        </select>
+      </div>
+
+      {/* 自定义提示词 */}
+      <div>
+        <h3 className="text-sm font-medium text-foreground mb-1">自定义提示词</h3>
+        <p className="text-xs text-muted-foreground mb-2">AI 生成摘要时使用的系统提示词</p>
+        <textarea
+          value={settings.prompt}
+          onChange={(e) => handleDebouncedChange({ prompt: e.target.value })}
+          disabled={saving}
+          rows={3}
+          className="w-full px-3 py-2 rounded-lg border border-border bg-card text-foreground text-sm resize-none"
+        />
+      </div>
     </div>
   )
 }

@@ -33,6 +33,8 @@ export interface Article {
   favorite?: boolean
   /** 全文抓取的内容 */
   full_content?: string
+  /** AI 生成的摘要 */
+  ai_summary?: string
 }
 
 /**

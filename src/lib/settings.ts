@@ -60,6 +60,39 @@ export const AppSettingsSchema = z.object({
 })
 
 /**
+ * AI 设置
+ */
+export interface AiSettings {
+  apiEndpoint: string
+  apiKey: string
+  model: string
+  maxTokens: number
+  prompt: string
+  enableAutoSummary: boolean
+  language: string
+}
+
+export const DEFAULT_AI_SETTINGS: AiSettings = {
+  apiEndpoint: 'https://api.openai.com/v1',
+  apiKey: '',
+  model: 'gpt-4o-mini',
+  maxTokens: 300,
+  prompt: '你是一个专业的文章摘要助手。请用简洁的语言总结以下文章的核心内容，包括主要观点和关键信息。',
+  enableAutoSummary: false,
+  language: 'zh-CN',
+}
+
+export const AiSettingsSchema = z.object({
+  apiEndpoint: z.string().default('https://api.openai.com/v1'),
+  apiKey: z.string().default(''),
+  model: z.string().default('gpt-4o-mini'),
+  maxTokens: z.number().int().min(50).max(2000).default(300),
+  prompt: z.string().default(DEFAULT_AI_SETTINGS.prompt),
+  enableAutoSummary: z.boolean().default(false),
+  language: z.string().default('zh-CN'),
+})
+
+/**
  * Zod schema for SchedulerState validation
  */
 export const SchedulerStateSchema = z.object({
@@ -124,6 +157,25 @@ export async function updateSettings(
 export async function getSchedulerState(): Promise<SchedulerState> {
   const result = await invoke<SchedulerState>('get_scheduler_state')
   return SchedulerStateSchema.parse(result)
+}
+
+/**
+ * 获取 AI 设置
+ */
+export async function getAiSettings(): Promise<AiSettings> {
+  const result = await invoke<AiSettings>('get_ai_settings')
+  return AiSettingsSchema.parse(result)
+}
+
+/**
+ * 更新 AI 设置
+ */
+export async function updateAiSettings(settings: Partial<AiSettings>): Promise<AiSettings> {
+  const current = await getAiSettings()
+  const merged = { ...current, ...settings }
+  const validated = AiSettingsSchema.parse(merged)
+  const result = await invoke<AiSettings>('update_ai_settings', { settings: validated })
+  return AiSettingsSchema.parse(result)
 }
 
 // ============= 辅助函数 =============

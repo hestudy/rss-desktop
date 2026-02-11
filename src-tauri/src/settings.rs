@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 
 /// 轮询间隔配置
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -143,6 +143,74 @@ pub struct SchedulerState {
     pub consecutive_errors: u32,
 }
 
+/// AI 摘要设置
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct AiSettings {
+    /// API 端点 (OpenAI 兼容格式)
+    #[serde(default = "default_api_endpoint")]
+    pub api_endpoint: String,
+
+    /// API Key
+    #[serde(default)]
+    pub api_key: String,
+
+    /// 模型名称
+    #[serde(default = "default_model")]
+    pub model: String,
+
+    /// 最大 token 数
+    #[serde(default = "default_max_tokens")]
+    pub max_tokens: u32,
+
+    /// 自定义系统提示词
+    #[serde(default = "default_prompt")]
+    pub prompt: String,
+
+    /// 是否启用自动摘要
+    #[serde(default)]
+    pub enable_auto_summary: bool,
+
+    /// 摘要语言
+    #[serde(default = "default_language")]
+    pub language: String,
+}
+
+fn default_api_endpoint() -> String {
+    "https://api.openai.com/v1".to_string()
+}
+
+fn default_model() -> String {
+    "gpt-4o-mini".to_string()
+}
+
+fn default_max_tokens() -> u32 {
+    300
+}
+
+fn default_prompt() -> String {
+    "你是一个专业的文章摘要助手。请用简洁的语言总结以下文章的核心内容，包括主要观点和关键信息。"
+        .to_string()
+}
+
+fn default_language() -> String {
+    "zh-CN".to_string()
+}
+
+impl Default for AiSettings {
+    fn default() -> Self {
+        Self {
+            api_endpoint: default_api_endpoint(),
+            api_key: String::new(),
+            model: default_model(),
+            max_tokens: default_max_tokens(),
+            prompt: default_prompt(),
+            enable_auto_summary: false,
+            language: default_language(),
+        }
+    }
+}
+
 impl Default for SchedulerState {
     fn default() -> Self {
         Self {
@@ -263,8 +331,14 @@ mod tests {
         assert_eq!(parsed.poll_interval, settings.poll_interval);
         assert_eq!(parsed.notification_type, settings.notification_type);
         assert_eq!(parsed.enable_notifications, settings.enable_notifications);
-        assert_eq!(parsed.max_notifications_per_batch, settings.max_notifications_per_batch);
-        assert_eq!(parsed.enable_background_refresh, settings.enable_background_refresh);
+        assert_eq!(
+            parsed.max_notifications_per_batch,
+            settings.max_notifications_per_batch
+        );
+        assert_eq!(
+            parsed.enable_background_refresh,
+            settings.enable_background_refresh
+        );
     }
 
     // 测试: AppSettings 缺失字段使用默认值
@@ -321,5 +395,55 @@ mod tests {
         assert!(state.last_run_at.is_none());
         assert!(state.next_run_at.is_none());
         assert_eq!(state.consecutive_errors, 0);
+    }
+
+    // 测试: AiSettings 默认值
+    #[test]
+    fn test_ai_settings_default() {
+        let settings = AiSettings::default();
+
+        assert_eq!(settings.api_endpoint, "https://api.openai.com/v1");
+        assert_eq!(settings.api_key, "");
+        assert_eq!(settings.model, "gpt-4o-mini");
+        assert_eq!(settings.max_tokens, 300);
+        assert_eq!(
+            settings.prompt,
+            "你是一个专业的文章摘要助手。请用简洁的语言总结以下文章的核心内容，包括主要观点和关键信息。"
+        );
+        assert!(!settings.enable_auto_summary);
+        assert_eq!(settings.language, "zh-CN");
+    }
+
+    // 测试: AiSettings 序列化和反序列化
+    #[test]
+    fn test_ai_settings_serialize_roundtrip() {
+        let settings = AiSettings {
+            api_endpoint: "https://example.com/v1".to_string(),
+            api_key: "test-key".to_string(),
+            model: "gpt-4.1-mini".to_string(),
+            max_tokens: 512,
+            prompt: "请简洁总结文章".to_string(),
+            enable_auto_summary: true,
+            language: "en-US".to_string(),
+        };
+
+        let json = serde_json::to_string(&settings).unwrap();
+        let parsed: AiSettings = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(parsed, settings);
+    }
+
+    // 测试: AiSettings 缺失字段使用默认值
+    #[test]
+    fn test_ai_settings_partial_deserialize() {
+        let json = r#"{"apiKey":"k","enableAutoSummary":true}"#;
+        let settings: AiSettings = serde_json::from_str(json).unwrap();
+
+        assert_eq!(settings.api_endpoint, "https://api.openai.com/v1");
+        assert_eq!(settings.api_key, "k");
+        assert_eq!(settings.model, "gpt-4o-mini");
+        assert_eq!(settings.max_tokens, 300);
+        assert!(settings.enable_auto_summary);
+        assert_eq!(settings.language, "zh-CN");
     }
 }

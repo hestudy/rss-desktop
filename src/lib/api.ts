@@ -130,4 +130,8 @@ export class RssApi {
   static async fetchFullContent(id: string): Promise<Article> {
     return await invoke<Article>('fetch_full_content', { id })
   }
+
+  static async generateSummary(id: string): Promise<Article> {
+    return await invoke<Article>('generate_article_summary', { id })
+  }
 }

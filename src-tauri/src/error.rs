@@ -28,6 +28,9 @@ pub enum RssError {
 
     #[error("Content extraction failed: {0}")]
     ContentExtractionError(String),
+
+    #[error("AI summary failed: {0}")]
+    AiSummaryError(String),
 }
 
 pub type Result<T> = std::result::Result<T, RssError>;

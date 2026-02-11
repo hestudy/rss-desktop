@@ -1,6 +1,8 @@
 use crate::models::{Feed, Article, FeedWithUnreadCount};
 use crate::fetcher::fetch_feed;
 use crate::content_extractor::fetch_and_extract_content;
+use crate::ai_summarizer;
+use crate::settings::AiSettings;
 use crate::storage::{Storage, MAX_ARTICLES_LIMIT};
 use tauri::State;
 use std::path::PathBuf;
@@ -416,4 +418,47 @@ pub async fn fetch_full_content(id: String, storage: State<'_, Arc<Storage>>) ->
     storage.get_article(&id)
         .map_err(|e| format!("Failed to get updated article: {}", e))?
         .ok_or_else(|| "Article not found after update".to_string())
+}
+
+#[tauri::command]
+pub async fn generate_article_summary(
+    id: String,
+    storage: State<'_, Arc<Storage>>,
+    app_state: State<'_, AppState>,
+) -> CommandResult<Article> {
+    let article = storage
+        .get_article(&id)
+        .map_err(|e| format!("Failed to get article: {}", e))?
+        .ok_or_else(|| "Article not found".to_string())?;
+
+    let settings = match get_store_value("ai_settings".to_string(), app_state).await {
+        Ok(Some(value)) => serde_json::from_value::<AiSettings>(value)
+            .map_err(|e| format!("Failed to parse AI settings: {}", e))?,
+        Ok(None) => AiSettings::default(),
+        Err(e) => return Err(e),
+    };
+
+    let content = article
+        .full_content
+        .as_deref()
+        .or(article.content.as_deref())
+        .or(article.description.as_deref())
+        .ok_or_else(|| "Article content is empty".to_string())?
+        .to_string();
+
+    let settings_for_task = settings.clone();
+    let summary = tauri::async_runtime::spawn_blocking(move || {
+        ai_summarizer::generate_summary(&content, &settings_for_task)
+    })
+    .await
+    .map_err(|e| format!("AI summary task join error: {}", e))??;
+
+    storage
+        .update_article_ai_summary(&id, &summary)
+        .map_err(|e| format!("Failed to save AI summary: {}", e))?;
+
+    storage
+        .get_article(&id)
+        .map_err(|e| format!("Failed to get updated article: {}", e))?
+        .ok_or_else(|| "Article not found after summary update".to_string())
 }

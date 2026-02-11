@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { Star, StarOff, ExternalLink, ChevronLeft, ChevronRight, Settings, FileText, Loader2, ArrowLeftRight } from 'lucide-react'
+import { Star, StarOff, ExternalLink, ChevronLeft, ChevronRight, Settings, FileText, Loader2, ArrowLeftRight, Sparkles, ChevronDown } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
 import DOMPurify from 'dompurify'
+import { cn } from '@/lib/utils'
 import { RssApi } from '../../lib/api'
 import type { Article, ReaderSettings } from '../../types'
 import { useReader } from '../../contexts/ReaderContext'
@@ -45,6 +46,12 @@ export function ArticleViewer({
     article.full_content ? 'fulltext' : 'original'
   )
   const [fetchError, setFetchError] = useState<string | null>(null)
+  
+  // AI Summary State
+  const [aiSummary, setAiSummary] = useState<string | null>(article.ai_summary ?? null)
+  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false)
+  const [summaryCollapsed, setSummaryCollapsed] = useState(false)
+
   const { selectArticle } = useReader()
   const { openSettings } = useUnifiedSettings()
   const { isDark } = useTheme()
@@ -58,7 +65,9 @@ export function ArticleViewer({
     setFetchedFullContent(null)
     setFetchError(null)
     setContentMode(article.full_content ? 'fulltext' : 'original')
-  }, [article.id, article.full_content])
+    setAiSummary(article.ai_summary ?? null)
+    setSummaryCollapsed(false)
+  }, [article.id, article.full_content, article.ai_summary])
 
   useEffect(() => {
     if (feedUsesFullContent && !article.full_content && !fetchedFullContent && !isFetchingContent) {
@@ -101,6 +110,19 @@ export function ArticleViewer({
       setFetchError(err instanceof Error ? err.message : '抓取全文失败，请稍后重试')
     } finally {
       setIsFetchingContent(false)
+    }
+  }, [article.id, updateArticleInList])
+
+  const handleGenerateSummary = useCallback(async () => {
+    setIsGeneratingSummary(true)
+    try {
+      const updated = await RssApi.generateSummary(article.id)
+      setAiSummary(updated.ai_summary ?? null)
+      updateArticleInList(updated)
+    } catch (err) {
+      setFetchError(err instanceof Error ? err.message : 'AI 摘要生成失败')
+    } finally {
+      setIsGeneratingSummary(false)
     }
   }, [article.id, updateArticleInList])
 
@@ -252,6 +274,19 @@ export function ArticleViewer({
             {isFetchingContent ? <Loader2 className="w-5 h-5 animate-spin" /> : <FileText className="w-5 h-5" />}
           </button>
 
+          {/* AI 摘要 */}
+          <button
+            onClick={handleGenerateSummary}
+            disabled={isGeneratingSummary}
+            className={cn(
+              "p-2 rounded-lg hover:bg-muted transition-colors disabled:opacity-50",
+              aiSummary ? "text-primary" : "text-muted-foreground hover:text-foreground"
+            )}
+            title="生成 AI 摘要"
+          >
+            {isGeneratingSummary ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
+          </button>
+
           {/* 切换原始/全文内容 */}
           {hasFullContent && (
             <button
@@ -318,6 +353,34 @@ export function ArticleViewer({
               查看原文
             </a>
           </div>
+
+          {/* AI 摘要卡片 */}
+          {(aiSummary || isGeneratingSummary) && (
+            <div className="mb-6 rounded-lg border border-primary/20 bg-primary/5 overflow-hidden">
+              <button
+                onClick={() => setSummaryCollapsed(!summaryCollapsed)}
+                className="w-full flex items-center justify-between px-4 py-2.5 text-sm font-medium text-primary hover:bg-primary/10 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4" />
+                  <span>AI 摘要</span>
+                </div>
+                <ChevronDown className={cn("w-4 h-4 transition-transform", !summaryCollapsed && "rotate-180")} />
+              </button>
+              {!summaryCollapsed && (
+                <div className="px-4 pb-3 text-sm text-foreground/80 leading-relaxed">
+                  {isGeneratingSummary ? (
+                    <div className="flex items-center gap-2 text-muted-foreground py-2">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>正在生成摘要...</span>
+                    </div>
+                  ) : (
+                    aiSummary
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* 文章内容 */}
           <div

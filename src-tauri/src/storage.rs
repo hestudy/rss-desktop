@@ -284,6 +284,21 @@ impl Storage {
         }
     }
 
+    pub fn update_article_ai_summary(&self, id: &str, ai_summary: &str) -> Result<()> {
+        let _lock = self.acquire_write_lock()?;
+        let mut articles = self.load_articles()?;
+        if let Some(article) = articles.iter_mut().find(|a| a.id == id) {
+            article.ai_summary = Some(ai_summary.to_string());
+            self.save_articles(&articles)?;
+            Ok(())
+        } else {
+            Err(crate::error::RssError::StorageError(format!(
+                "Article not found: {}",
+                id
+            )))
+        }
+    }
+
     /// 获取收藏的文章
     pub fn get_favorite_articles(&self, limit: Option<usize>) -> Result<Vec<Article>> {
         let mut articles = self.load_articles()?;
@@ -435,6 +450,7 @@ mod tests {
             reading_progress: 0.0,
             favorite: false,
             full_content: None,
+            ai_summary: None,
         }
     }
 
@@ -610,6 +626,19 @@ mod tests {
             let mut articles = self.articles.lock().unwrap();
             if let Some(article) = articles.iter_mut().find(|a| a.id == id) {
                 article.full_content = Some(full_content.to_string());
+                Ok(())
+            } else {
+                Err(crate::error::RssError::StorageError(format!(
+                    "Article not found: {}",
+                    id
+                )))
+            }
+        }
+
+        fn update_article_ai_summary(&self, id: &str, ai_summary: &str) -> Result<()> {
+            let mut articles = self.articles.lock().unwrap();
+            if let Some(article) = articles.iter_mut().find(|a| a.id == id) {
+                article.ai_summary = Some(ai_summary.to_string());
                 Ok(())
             } else {
                 Err(crate::error::RssError::StorageError(format!(

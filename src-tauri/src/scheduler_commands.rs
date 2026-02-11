@@ -1,4 +1,4 @@
-use crate::settings::{AppSettings, SchedulerState, NotificationType};
+use crate::settings::{AiSettings, AppSettings, SchedulerState};
 use crate::commands::AppState;
 use crate::commands::CommandResult;
 use tauri::State;
@@ -124,6 +124,37 @@ pub async fn update_settings(
     let key = "app_settings".to_string();
     let value = serde_json::to_value(&settings)
         .map_err(|e| format!("Failed to serialize settings: {}", e))?;
+
+    set_store_value(key, value, state).await?;
+    Ok(settings)
+}
+
+#[tauri::command]
+pub async fn get_ai_settings(state: State<'_, AppState>) -> CommandResult<AiSettings> {
+    use crate::commands::get_store_value;
+
+    let key = "ai_settings".to_string();
+
+    match get_store_value(key, state).await {
+        Ok(Some(value)) => {
+            serde_json::from_value(value)
+                .map_err(|e| format!("Failed to parse AI settings: {}", e))
+        }
+        Ok(None) => Ok(AiSettings::default()),
+        Err(e) => Err(e),
+    }
+}
+
+#[tauri::command]
+pub async fn update_ai_settings(
+    settings: AiSettings,
+    state: State<'_, AppState>,
+) -> CommandResult<AiSettings> {
+    use crate::commands::set_store_value;
+
+    let key = "ai_settings".to_string();
+    let value = serde_json::to_value(&settings)
+        .map_err(|e| format!("Failed to serialize AI settings: {}", e))?;
 
     set_store_value(key, value, state).await?;
     Ok(settings)

@@ -11,12 +11,13 @@ mod scheduler_commands;
 mod background_scheduler;
 mod notifications;
 mod tray;
+mod ai_summarizer;
 
 // 导出常用类型
 pub use models::{Feed, Article, AddFeedRequest, UpdateFeedRequest, GetArticlesRequest, ApiResponse, FeedWithUnreadCount};
 pub use error::{RssError, Result};
 pub use commands::AppState;
-pub use settings::{AppSettings, SchedulerState, PollInterval, NotificationType};
+pub use settings::{AiSettings, AppSettings, SchedulerState, PollInterval, NotificationType};
 pub use background_scheduler::{BackgroundScheduler, NewArticlesEvent, ArticleSummary};
 pub use notifications::NotificationManager;
 pub use tray::TrayManager;
@@ -169,8 +170,11 @@ pub fn run() {
             commands::get_favorite_articles,
             commands::update_feed_info,
             commands::fetch_full_content,
+            commands::generate_article_summary,
             scheduler_commands::get_settings,
             scheduler_commands::update_settings,
+            scheduler_commands::get_ai_settings,
+            scheduler_commands::update_ai_settings,
             scheduler_commands::get_scheduler_state,
             scheduler_commands::set_scheduler_state,
         ])

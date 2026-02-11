@@ -36,6 +36,9 @@ pub struct Article {
     /// 全文抓取的内容（与原始 content 分开存储）
     #[serde(default)]
     pub full_content: Option<String>,
+    /// AI 生成的文章摘要
+    #[serde(default)]
+    pub ai_summary: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

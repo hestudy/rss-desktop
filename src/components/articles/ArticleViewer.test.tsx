@@ -12,11 +12,13 @@ vi.mock('lucide-react', () => ({
   ExternalLink: () => 'ExternalLink',
   ChevronLeft: () => 'ChevronLeft',
   ChevronRight: () => 'ChevronRight',
+  ChevronDown: () => 'ChevronDown',
   Settings: () => 'Settings',
   Clock: () => 'Clock',
   FileText: () => 'FileText',
   Loader2: () => 'Loader2',
   ArrowLeftRight: () => 'ArrowLeftRight',
+  Sparkles: () => 'Sparkles',
 }))
 
 // Mock DOMPurify
@@ -33,6 +35,7 @@ vi.mock('../../lib/api', () => ({
     setArticleFavorite: vi.fn(),
     openLink: vi.fn(),
     fetchFullContent: vi.fn(),
+    generateSummary: vi.fn(),
   },
 }))
 

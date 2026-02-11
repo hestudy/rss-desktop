@@ -133,6 +133,7 @@ pub fn fetch_feed(url: &str) -> Result<FeedResult> {
                 reading_progress: 0.0,
                 favorite: false,
                 full_content: None,
+                ai_summary: None,
             })
         })
         .take(MAX_ARTICLES_PER_FETCH) // 限制文章数量
