@@ -11,6 +11,8 @@ pub struct Feed {
     pub icon_url: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    #[serde(default)]
+    pub use_full_content: bool,
 }
 
 /// RSS 文章
@@ -36,18 +38,19 @@ pub struct Article {
     pub full_content: Option<String>,
 }
 
-/// 添加订阅源的请求
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AddFeedRequest {
     pub url: String,
+    #[serde(default)]
+    pub use_full_content: bool,
 }
 
-/// 更新订阅源的请求
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateFeedRequest {
     pub id: String,
     pub url: Option<String>,
     pub title: Option<String>,
+    pub use_full_content: Option<bool>,
 }
 
 /// 获取文章的请求参数

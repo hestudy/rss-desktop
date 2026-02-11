@@ -10,6 +10,7 @@ const feedUrlSchema = z.string().url('Invalid URL format')
 
 export function AddFeedDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const [url, setUrl] = useState('')
+  const [useFullContent, setUseFullContent] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { addFeed } = useRss()
@@ -23,7 +24,6 @@ export function AddFeedDialog({ isOpen, onClose }: { isOpen: boolean; onClose: (
       return
     }
 
-    // 使用 Zod 验证 URL
     const validationResult = feedUrlSchema.safeParse(trimmedUrl)
     if (!validationResult.success) {
       setError('请输入有效的 URL（例如：https://example.com/feed.xml）')
@@ -34,8 +34,9 @@ export function AddFeedDialog({ isOpen, onClose }: { isOpen: boolean; onClose: (
     setError(null)
 
     try {
-      await addFeed(trimmedUrl)
+      await addFeed(trimmedUrl, useFullContent)
       setUrl('')
+      setUseFullContent(false)
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : '添加失败')
@@ -71,6 +72,17 @@ export function AddFeedDialog({ isOpen, onClose }: { isOpen: boolean; onClose: (
                 <p className="text-sm text-destructive mt-2">{error}</p>
               )}
             </div>
+            <label htmlFor="add-feed-full-content" className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                id="add-feed-full-content"
+                type="checkbox"
+                checked={useFullContent}
+                onChange={(e) => setUseFullContent(e.target.checked)}
+                disabled={isLoading}
+                className="w-4 h-4 rounded border-border text-primary focus:ring-primary"
+              />
+              <span className="text-sm text-foreground">自动抓取全文</span>
+            </label>
           </div>
           <div className="flex justify-end gap-2 mt-6">
             <Button

@@ -11,6 +11,7 @@ export interface Feed {
   icon_url?: string
   created_at: string
   updated_at: string
+  use_full_content?: boolean
 }
 
 /**

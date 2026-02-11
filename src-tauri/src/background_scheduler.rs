@@ -1,6 +1,7 @@
 use crate::settings::{AppSettings, SchedulerState};
 use crate::storage::Storage;
 use crate::fetcher::fetch_feed;
+use crate::content_extractor::fetch_and_extract_content;
 use crate::scheduler::{calculate_next_run_time, calculate_retry_backoff};
 use chrono::Utc;
 use std::path::PathBuf;
@@ -209,7 +210,6 @@ impl BackgroundScheduler {
         }
     }
 
-    /// 刷新所有订阅
     async fn refresh_all_feeds(
         storage: &Arc<Storage>,
         event_tx: broadcast::Sender<NewArticlesEvent>,
@@ -222,36 +222,42 @@ impl BackgroundScheduler {
             let feed_url = feed.url.clone();
             let feed_title = feed.title.clone();
 
-            // 获取刷新前的文章链接（用于检测新文章，不能用 ID 因为 fetch_feed 每次生成新 UUID）
             let existing_links: Vec<String> = storage.get_articles(Some(&feed_id), None)
                 .unwrap_or_default()
                 .into_iter()
                 .map(|a| a.link)
                 .collect();
 
-            // 获取最新内容
             let (_feed, articles) = fetch_feed(&feed_url)
                 .map_err(|e| format!("Failed to fetch {}: {}", feed_title, e))?;
 
-            // 统计新文章（按链接比较）
             let new_count = articles.iter()
                 .filter(|a| !existing_links.contains(&a.link))
                 .count();
 
             if new_count > 0 {
-                // 保存新文章（使用现有订阅的 feed_id）
                 for article in &articles {
                     let mut article = article.clone();
                     article.feed_id = feed_id.clone();
+                    let is_new = !existing_links.contains(&article.link);
                     let _ = storage.add_article(&article);
+
+                    if is_new && feed.use_full_content {
+                        match fetch_and_extract_content(&article.link) {
+                            Ok(content) => {
+                                let _ = storage.update_article_full_content(&article.id, &content);
+                            }
+                            Err(e) => {
+                                warn!("Failed to fetch full content for {}: {}", article.link, e);
+                            }
+                        }
+                    }
                 }
 
-                // 更新订阅时间
                 let mut updated_feed = feed.clone();
                 updated_feed.updated_at = Utc::now();
                 let _ = storage.update_feed(&updated_feed);
 
-                // 发送事件
                 let summaries: Vec<ArticleSummary> = articles.iter()
                     .filter(|a| !existing_links.contains(&a.link))
                     .map(|a| ArticleSummary {

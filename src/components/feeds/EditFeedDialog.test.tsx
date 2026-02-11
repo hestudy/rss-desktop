@@ -94,6 +94,7 @@ describe('EditFeedDialog', () => {
         'feed-1',
         'Updated Title',
         undefined,
+        undefined,
       )
     })
     expect(onClose).toHaveBeenCalled()
@@ -116,6 +117,7 @@ describe('EditFeedDialog', () => {
         'feed-1',
         undefined,
         'https://new-url.com/rss',
+        undefined,
       )
     })
     expect(onClose).toHaveBeenCalled()
@@ -141,6 +143,7 @@ describe('EditFeedDialog', () => {
         'feed-1',
         'New Title',
         'https://new.com/feed',
+        undefined,
       )
     })
     expect(onClose).toHaveBeenCalled()
@@ -183,6 +186,29 @@ describe('EditFeedDialog', () => {
     const cancelButton = screen.getByRole('button', { name: '取消' })
     fireEvent.click(cancelButton)
 
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it('calls updateFeed with useFullContent when checkbox is toggled', async () => {
+    const onClose = vi.fn()
+    mockUpdateFeed.mockResolvedValue(undefined)
+
+    render(<EditFeedDialog isOpen={true} onClose={onClose} feed={baseFeed} />)
+
+    const checkbox = screen.getByRole('checkbox')
+    fireEvent.click(checkbox)
+
+    const submitButton = screen.getByRole('button', { name: '保存' })
+    fireEvent.click(submitButton)
+
+    await waitFor(() => {
+      expect(mockUpdateFeed).toHaveBeenCalledWith(
+        'feed-1',
+        undefined,
+        undefined,
+        true,
+      )
+    })
     expect(onClose).toHaveBeenCalled()
   })
 })

@@ -6,6 +6,20 @@ use tauri::State;
 use std::path::PathBuf;
 use std::sync::Arc;
 use fs2::FileExt;
+use log::warn;
+
+const MAX_FULL_CONTENT_PER_BATCH: usize = 5;
+
+fn try_fetch_full_content(storage: &Storage, article_id: &str, link: &str) {
+    match fetch_and_extract_content(link) {
+        Ok(content) => {
+            let _ = storage.update_article_full_content(article_id, &content);
+        }
+        Err(e) => {
+            warn!("Failed to fetch full content for {}: {}", link, e);
+        }
+    }
+}
 
 /// 应用状态，包含存储实例
 #[derive(Clone)]
@@ -18,21 +32,26 @@ pub type CommandResult<T> = std::result::Result<T, String>;
 
 /// 添加 RSS 订阅
 #[tauri::command]
-pub async fn add_feed(url: String, storage: State<'_, Arc<Storage>>) -> CommandResult<Feed> {
-    // 获取并解析 Feed
-    let (feed, articles) = fetch_feed(&url)
+pub async fn add_feed(url: String, use_full_content: Option<bool>, storage: State<'_, Arc<Storage>>) -> CommandResult<Feed> {
+    let (mut feed, articles) = fetch_feed(&url)
         .map_err(|e| format!("Failed to fetch feed: {}", e))?;
 
-    // 保存 Feed（add_feed 内部会检查 URL 重复）
+    feed.use_full_content = use_full_content.unwrap_or(false);
+
     storage.add_feed(&feed)
         .map_err(|e| format!("Failed to save feed: {}", e))?;
 
-    // 保存文章（显式使用已保存 feed 的 id，确保一致性）
     for article in &articles {
         let mut article = article.clone();
         article.feed_id = feed.id.clone();
         storage.add_article(&article)
             .map_err(|e| format!("Failed to save article: {}", e))?;
+    }
+
+    if feed.use_full_content {
+        for article in articles.iter().take(MAX_FULL_CONTENT_PER_BATCH) {
+            try_fetch_full_content(&storage, &article.id, &article.link);
+        }
     }
 
     Ok(feed)
@@ -62,27 +81,33 @@ pub async fn remove_feed(id: String, storage: State<'_, Arc<Storage>>) -> Comman
     Ok(())
 }
 
-/// 刷新单个订阅
 #[tauri::command]
 pub async fn refresh_feed(id: String, storage: State<'_, Arc<Storage>>) -> CommandResult<FeedWithUnreadCount> {
-    // 获取现有订阅
     let existing_feed = storage.get_feed(&id)
         .map_err(|e| format!("Failed to get feed: {}", e))?
         .ok_or_else(|| "Feed not found".to_string())?;
 
-    // 获取最新内容
+    let existing_links: Vec<String> = storage.get_articles(Some(&id), None)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|a| a.link)
+        .collect();
+
     let (_feed, articles) = fetch_feed(&existing_feed.url)
         .map_err(|e| format!("Failed to fetch feed: {}", e))?;
 
-    // 保存新文章（使用现有订阅的 feed_id，而非 fetch_feed 生成的新 ID）
     for article in &articles {
         let mut article = article.clone();
         article.feed_id = id.clone();
+        let is_new = !existing_links.contains(&article.link);
         storage.add_article(&article)
             .map_err(|e| format!("Failed to save article: {}", e))?;
+
+        if is_new && existing_feed.use_full_content {
+            try_fetch_full_content(&storage, &article.id, &article.link);
+        }
     }
 
-    // 更新订阅时间
     let mut updated_feed = existing_feed.clone();
     updated_feed.updated_at = chrono::Utc::now();
     storage.update_feed(&updated_feed)
@@ -96,7 +121,6 @@ pub async fn refresh_feed(id: String, storage: State<'_, Arc<Storage>>) -> Comma
     })
 }
 
-/// 刷新所有订阅
 #[tauri::command]
 pub async fn refresh_all_feeds(storage: State<'_, Arc<Storage>>) -> CommandResult<Vec<FeedWithUnreadCount>> {
     let feeds = storage.get_all_feeds()
@@ -108,21 +132,28 @@ pub async fn refresh_all_feeds(storage: State<'_, Arc<Storage>>) -> CommandResul
         let feed_id = feed.id.clone();
         let feed_url = feed.url.clone();
 
-        // 获取最新内容
         if let Ok((_feed, articles)) = fetch_feed(&feed_url) {
-            // 保存新文章（使用现有订阅的 feed_id）
+            let existing_links: Vec<String> = storage.get_articles(Some(&feed_id), None)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|a| a.link)
+                .collect();
+
             for article in &articles {
                 let mut article = article.clone();
                 article.feed_id = feed_id.clone();
+                let is_new = !existing_links.contains(&article.link);
                 let _ = storage.add_article(&article);
+
+                if is_new && feed.use_full_content {
+                    try_fetch_full_content(&storage, &article.id, &article.link);
+                }
             }
         }
 
-        // 更新订阅时间
         let mut updated_feed = feed.clone();
         updated_feed.updated_at = chrono::Utc::now();
         if storage.update_feed(&updated_feed).is_err() {
-            // 更新失败时使用原始 feed
             updated_feed = feed.clone();
         }
 
@@ -324,14 +355,13 @@ pub async fn update_feed_info(
     id: String,
     title: Option<String>,
     url: Option<String>,
+    use_full_content: Option<bool>,
     storage: State<'_, Arc<Storage>>,
 ) -> CommandResult<FeedWithUnreadCount> {
-    // 获取现有订阅
     let mut feed = storage.get_feed(&id)
         .map_err(|e| format!("Failed to get feed: {}", e))?
         .ok_or_else(|| "Feed not found".to_string())?;
 
-    // 如果提供了新 URL，检查是否与其他订阅重复
     if let Some(ref new_url) = url {
         if new_url.trim().is_empty() {
             return Err("URL cannot be empty".to_string());
@@ -347,7 +377,6 @@ pub async fn update_feed_info(
         feed.url = new_url.clone();
     }
 
-    // 如果提供了新标题
     if let Some(ref new_title) = title {
         if new_title.trim().is_empty() {
             return Err("Title cannot be empty".to_string());
@@ -355,10 +384,12 @@ pub async fn update_feed_info(
         feed.title = new_title.clone();
     }
 
-    // 更新时间戳
+    if let Some(ufc) = use_full_content {
+        feed.use_full_content = ufc;
+    }
+
     feed.updated_at = chrono::Utc::now();
 
-    // 保存更新
     storage.update_feed(&feed)
         .map_err(|e| format!("Failed to update feed: {}", e))?;
 

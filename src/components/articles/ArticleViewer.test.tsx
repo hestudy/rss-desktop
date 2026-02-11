@@ -68,9 +68,13 @@ vi.mock('../../contexts/ThemeContext', () => ({
 }))
 
 const mockUpdateArticleInList = vi.fn()
+let mockFeeds = [{ feed: { id: 'feed-1', use_full_content: false }, unread_count: 0 }]
 vi.mock('../../contexts/RssContext', () => ({
   useRss: () => ({
     updateArticleInList: mockUpdateArticleInList,
+    get feeds() {
+      return mockFeeds
+    },
   }),
 }))
 
@@ -431,5 +435,41 @@ describe('ArticleViewer', () => {
     })
 
     expect(mockUpdateArticleInList).toHaveBeenCalledWith(fetchedArticle)
+  })
+
+  it('应该在 feed 开启全文抓取时自动抓取全文', async () => {
+    mockFeeds = [{ feed: { id: 'feed-1', use_full_content: true }, unread_count: 0 }]
+
+    const fetchedArticle: Article = {
+      ...mockArticle,
+      full_content: '<p>Auto fetched full content</p>',
+    }
+    vi.mocked(RssApi.fetchFullContent).mockResolvedValue(fetchedArticle)
+
+    render(
+      <ArticleViewer
+        article={mockArticle}
+        articles={mockArticles}
+        readerSettings={mockReaderSettings}
+      />
+    )
+
+    await waitFor(() => {
+      expect(RssApi.fetchFullContent).toHaveBeenCalledWith('article-1')
+    })
+
+    mockFeeds = [{ feed: { id: 'feed-1', use_full_content: false }, unread_count: 0 }]
+  })
+
+  it('应该在 feed 未开启全文抓取时不自动抓取', () => {
+    render(
+      <ArticleViewer
+        article={mockArticle}
+        articles={mockArticles}
+        readerSettings={mockReaderSettings}
+      />
+    )
+
+    expect(RssApi.fetchFullContent).not.toHaveBeenCalled()
   })
 })

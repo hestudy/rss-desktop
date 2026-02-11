@@ -17,6 +17,7 @@ interface EditFeedDialogProps {
 export function EditFeedDialog({ isOpen, onClose, feed }: EditFeedDialogProps) {
   const [title, setTitle] = useState(feed.title)
   const [url, setUrl] = useState(feed.url)
+  const [useFullContent, setUseFullContent] = useState(feed.use_full_content ?? false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { updateFeed } = useRss()
@@ -25,6 +26,7 @@ export function EditFeedDialog({ isOpen, onClose, feed }: EditFeedDialogProps) {
     if (isOpen) {
       setTitle(feed.title)
       setUrl(feed.url)
+      setUseFullContent(feed.use_full_content ?? false)
       setError(null)
     }
   }, [isOpen, feed])
@@ -51,8 +53,9 @@ export function EditFeedDialog({ isOpen, onClose, feed }: EditFeedDialogProps) {
 
     const titleChanged = trimmedTitle !== feed.title
     const urlChanged = trimmedUrl !== feed.url
+    const fullContentChanged = useFullContent !== (feed.use_full_content ?? false)
 
-    if (!titleChanged && !urlChanged) {
+    if (!titleChanged && !urlChanged && !fullContentChanged) {
       onClose()
       return
     }
@@ -65,6 +68,7 @@ export function EditFeedDialog({ isOpen, onClose, feed }: EditFeedDialogProps) {
         feed.id,
         titleChanged ? trimmedTitle : undefined,
         urlChanged ? trimmedUrl : undefined,
+        fullContentChanged ? useFullContent : undefined,
       )
       onClose()
     } catch (err) {
@@ -111,6 +115,17 @@ export function EditFeedDialog({ isOpen, onClose, feed }: EditFeedDialogProps) {
                 disabled={isLoading}
               />
             </div>
+            <label htmlFor="edit-feed-full-content" className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                id="edit-feed-full-content"
+                type="checkbox"
+                checked={useFullContent}
+                onChange={(e) => setUseFullContent(e.target.checked)}
+                disabled={isLoading}
+                className="w-4 h-4 rounded border-border text-primary focus:ring-primary"
+              />
+              <span className="text-sm text-foreground">自动抓取全文</span>
+            </label>
             {error && (
               <p className="text-sm text-destructive">{error}</p>
             )}

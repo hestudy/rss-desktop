@@ -11,9 +11,9 @@ interface RssContextType {
   showFavoritesOnly: boolean
   loadFeeds: () => Promise<void>
   loadArticles: (feedId?: string) => Promise<void>
-  addFeed: (url: string) => Promise<Feed>
+  addFeed: (url: string, useFullContent?: boolean) => Promise<Feed>
   removeFeed: (id: string) => Promise<void>
-  updateFeed: (id: string, title?: string, url?: string) => Promise<void>
+  updateFeed: (id: string, title?: string, url?: string, useFullContent?: boolean) => Promise<void>
   refreshFeed: (id: string) => Promise<void>
   refreshAllFeeds: () => Promise<void>
   silentRefreshAll: () => Promise<void>
@@ -77,12 +77,11 @@ export function RssProvider({ children }: RssProviderProps) {
     }
   }, [])
 
-  const addFeed = useCallback(async (url: string) => {
+  const addFeed = useCallback(async (url: string, useFullContent?: boolean) => {
     setIsLoading(true)
     setError(null)
     try {
-      const feed = await RssApi.addFeed(url)
-      // 重新加载订阅列表
+      const feed = await RssApi.addFeed(url, useFullContent)
       await loadFeeds()
       return feed
     } catch (err) {
@@ -114,11 +113,11 @@ export function RssProvider({ children }: RssProviderProps) {
     }
   }, [loadFeeds, selectedFeedId])
 
-  const updateFeed = useCallback(async (id: string, title?: string, url?: string) => {
+  const updateFeed = useCallback(async (id: string, title?: string, url?: string, useFullContent?: boolean) => {
     setIsLoading(true)
     setError(null)
     try {
-      const result = await RssApi.updateFeed(id, title, url)
+      const result = await RssApi.updateFeed(id, title, url, useFullContent)
       setFeeds(prev => prev.map(f =>
         f.feed.id === id ? result : f
       ))

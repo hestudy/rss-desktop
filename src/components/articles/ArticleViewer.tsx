@@ -48,8 +48,10 @@ export function ArticleViewer({
   const { selectArticle } = useReader()
   const { openSettings } = useUnifiedSettings()
   const { isDark } = useTheme()
-  const { updateArticleInList } = useRss()
+  const { updateArticleInList, feeds } = useRss()
 
+  const feedConfig = feeds.find(f => f.feed.id === article.feed_id)
+  const feedUsesFullContent = feedConfig?.feed.use_full_content ?? false
   const hasFullContent = !!(fetchedFullContent || article.full_content)
 
   useEffect(() => {
@@ -57,6 +59,25 @@ export function ArticleViewer({
     setFetchError(null)
     setContentMode(article.full_content ? 'fulltext' : 'original')
   }, [article.id, article.full_content])
+
+  useEffect(() => {
+    if (feedUsesFullContent && !article.full_content && !fetchedFullContent && !isFetchingContent) {
+      setIsFetchingContent(true)
+      setFetchError(null)
+      RssApi.fetchFullContent(article.id)
+        .then((updated) => {
+          setFetchedFullContent(updated.full_content ?? null)
+          setContentMode('fulltext')
+          updateArticleInList(updated)
+        })
+        .catch((err) => {
+          setFetchError(err instanceof Error ? err.message : '抓取全文失败，请稍后重试')
+        })
+        .finally(() => {
+          setIsFetchingContent(false)
+        })
+    }
+  }, [article.id, article.full_content, feedUsesFullContent, fetchedFullContent, isFetchingContent, updateArticleInList])
 
   useEffect(() => {
     setIsFavorite(article.favorite ?? false)

@@ -417,6 +417,7 @@ mod tests {
             icon_url: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
+            use_full_content: false,
         }
     }
 

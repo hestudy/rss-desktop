@@ -103,6 +103,7 @@ pub fn fetch_feed(url: &str) -> Result<FeedResult> {
         icon_url,
         created_at: now,
         updated_at: now,
+        use_full_content: false,
     };
 
     let articles: Vec<Article> = parsed_feed
