@@ -13,6 +13,8 @@ mod notifications;
 mod tray;
 mod ai_summarizer;
 mod ai_translator;
+mod task_queue;
+mod queue_commands;
 
 // 导出常用类型
 pub use models::{Feed, Article, AddFeedRequest, UpdateFeedRequest, GetArticlesRequest, ApiResponse, FeedWithUnreadCount};
@@ -22,6 +24,7 @@ pub use settings::{AiSettings, AppSettings, SchedulerState, PollInterval, Notifi
 pub use background_scheduler::{BackgroundScheduler, NewArticlesEvent, ArticleSummary};
 pub use notifications::NotificationManager;
 pub use tray::TrayManager;
+pub use task_queue::{TaskQueue, TaskType, TaskPriority, QueueTask};
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -78,6 +81,15 @@ pub fn run() {
             app.manage(unread_count.clone());
             app.manage(Arc::new(notification_manager));
 
+            let max_concurrency = 3;
+            let task_queue = Arc::new(TaskQueue::new(
+                max_concurrency,
+                shared_storage.clone(),
+                data_dir.clone(),
+                app.handle().clone(),
+            ));
+            app.manage(task_queue.clone());
+
             // 获取 app handle 用于异步任务
             let app_handle = app.handle().clone();
 
@@ -94,10 +106,10 @@ pub fn run() {
             let data_dir_clone = data_dir.clone();
             let storage_for_scheduler = shared_storage.clone();
             let unread_count_clone = unread_count.clone();
+            let task_queue_for_scheduler = task_queue.clone();
 
             tauri::async_runtime::spawn(async move {
-                // 启动调度器
-                if let Err(e) = scheduler_clone.start(storage_for_scheduler, data_dir_clone).await {
+                if let Err(e) = scheduler_clone.start(storage_for_scheduler, data_dir_clone, Some(task_queue_for_scheduler)).await {
                     error!("Failed to start scheduler: {}", e);
                     return;
                 }
@@ -179,6 +191,10 @@ pub fn run() {
             scheduler_commands::update_ai_settings,
             scheduler_commands::get_scheduler_state,
             scheduler_commands::set_scheduler_state,
+            queue_commands::queue_add_task,
+            queue_commands::queue_get_status,
+            queue_commands::queue_cancel_task,
+            queue_commands::queue_clear_completed,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -5,12 +5,13 @@ import { zhCN } from 'date-fns/locale'
 import DOMPurify from 'dompurify'
 import { cn } from '@/lib/utils'
 import { RssApi } from '../../lib/api'
-import type { Article, ReaderSettings } from '../../types'
+import type { Article, ReaderSettings, TaskProgressEvent } from '../../types'
 import { useReader } from '../../contexts/ReaderContext'
 import { useUnifiedSettings } from '../settings/UnifiedSettings'
 import { useTheme } from '../../contexts/ThemeContext'
 import { useRss } from '../../contexts/RssContext'
 import { saveArticleViewState, loadArticleViewState, createDefaultState } from '../../lib/articleViewStateCache'
+import { listen } from '@tauri-apps/api/event'
 
 interface ArticleViewerProps {
   article: Article
@@ -92,6 +93,56 @@ export function ArticleViewer({
     }).catch(() => {})
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    let unlisten: (() => void) | undefined
+
+    listen<TaskProgressEvent>('queue-task-progress', (event) => {
+      if (cancelled) return
+      const { article_id, status, task_type } = event.payload
+      if (article_id !== article.id) return
+      if (status !== 'completed') return
+
+      RssApi.getArticle(article.id).then((latest) => {
+        if (cancelled || !latest || currentArticleIdRef.current !== article.id) return
+
+        if (task_type === 'fetch_full_content' && latest.full_content) {
+          setFetchedFullContent(latest.full_content)
+          setContentMode('fulltext')
+          setIsFetchingContent(false)
+          isFullContentFetched.current = true
+          hasAttemptedAutoFetch.current = true
+          updateArticleInList(latest)
+        }
+
+        if (task_type === 'ai_summary' && latest.ai_summary) {
+          setAiSummary(latest.ai_summary)
+          setIsGeneratingSummary(false)
+          hasAttemptedAutoSummary.current = true
+          updateArticleInList(latest)
+        }
+
+        if (task_type === 'ai_translation' && latest.ai_translation) {
+          setAiTranslation(latest.ai_translation)
+          setIsTranslating(false)
+          setShowTranslation(true)
+          updateArticleInList(latest)
+        }
+      }).catch(() => {})
+    }).then((fn) => {
+      if (cancelled) {
+        fn()
+      } else {
+        unlisten = fn
+      }
+    })
+
+    return () => {
+      cancelled = true
+      unlisten?.()
+    }
+  }, [article.id, updateArticleInList])
 
   // 组件卸载时保存状态到 cache（key 切换时触发）
   useEffect(() => {

@@ -4,6 +4,8 @@ import type {
   Article,
   FeedWithUnreadCount,
   GetArticlesParams,
+  QueueStatusSnapshot,
+  QueueTaskType,
 } from '../types'
 
 /**
@@ -138,5 +140,31 @@ export class RssApi {
 
   static async translateArticle(id: string, targetLang?: string): Promise<Article> {
     return await invoke<Article>('translate_article', { id, targetLang })
+  }
+
+  static async queueAddTask(
+    taskType: QueueTaskType,
+    articleId: string,
+    options?: { url?: string; targetLang?: string; priority?: 'high' | 'normal' },
+  ): Promise<string> {
+    return await invoke<string>('queue_add_task', {
+      taskType,
+      articleId,
+      url: options?.url,
+      targetLang: options?.targetLang,
+      priority: options?.priority,
+    })
+  }
+
+  static async queueGetStatus(): Promise<QueueStatusSnapshot> {
+    return await invoke<QueueStatusSnapshot>('queue_get_status')
+  }
+
+  static async queueCancelTask(taskId: string): Promise<void> {
+    await invoke('queue_cancel_task', { taskId })
+  }
+
+  static async queueClearCompleted(): Promise<number> {
+    return await invoke<number>('queue_clear_completed')
   }
 }

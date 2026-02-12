@@ -148,3 +148,44 @@ export interface SchedulerState {
   /** 连续错误次数 */
   consecutiveErrors: number
 }
+
+export type QueueTaskType = 'fetch_full_content' | 'ai_summary' | 'ai_translation'
+export type QueueTaskPriority = 'high' | 'normal'
+export type QueueTaskStatusType = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
+
+export interface QueueTask {
+  id: string
+  task_type: {
+    type: QueueTaskType
+    article_id: string
+    url?: string
+    target_lang?: string
+  }
+  priority: QueueTaskPriority
+  status:
+    | { status: 'pending' }
+    | { status: 'running' }
+    | { status: 'completed' }
+    | { status: 'failed'; error: string; retries: number }
+    | { status: 'cancelled' }
+  created_at: string
+  started_at: string | null
+  completed_at: string | null
+  retries: number
+}
+
+export interface QueueStatusSnapshot {
+  pending_count: number
+  running_count: number
+  completed_count: number
+  failed_count: number
+  tasks: QueueTask[]
+}
+
+export interface TaskProgressEvent {
+  task_id: string
+  article_id: string
+  task_type: string
+  status: string
+  error: string | null
+}
