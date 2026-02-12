@@ -36,6 +36,8 @@ export interface Article {
   full_content?: string
   /** AI 生成的摘要 */
   ai_summary?: string
+  /** AI 翻译的内容 */
+  ai_translation?: string
 }
 
 /**

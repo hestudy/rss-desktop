@@ -2,6 +2,7 @@ use crate::models::{Feed, Article, FeedWithUnreadCount};
 use crate::fetcher::fetch_feed;
 use crate::content_extractor::fetch_and_extract_content;
 use crate::ai_summarizer;
+use crate::ai_translator;
 use crate::settings::AiSettings;
 use crate::storage::{Storage, MAX_ARTICLES_LIMIT};
 use tauri::State;
@@ -432,4 +433,50 @@ pub async fn generate_article_summary(
         .get_article(&id)
         .map_err(|e| format!("Failed to get updated article: {}", e))?
         .ok_or_else(|| "Article not found after summary update".to_string())
+}
+
+#[tauri::command]
+pub async fn translate_article(
+    id: String,
+    target_lang: Option<String>,
+    storage: State<'_, Arc<Storage>>,
+    app_state: State<'_, AppState>,
+) -> CommandResult<Article> {
+    let article = storage
+        .get_article(&id)
+        .map_err(|e| format!("Failed to get article: {}", e))?
+        .ok_or_else(|| "Article not found".to_string())?;
+
+    let settings = match get_store_value("ai_settings".to_string(), app_state).await {
+        Ok(Some(value)) => serde_json::from_value::<AiSettings>(value)
+            .map_err(|e| format!("Failed to parse AI settings: {}", e))?,
+        Ok(None) => AiSettings::default(),
+        Err(e) => return Err(e),
+    };
+
+    let content = article
+        .full_content
+        .as_deref()
+        .or(article.content.as_deref())
+        .or(article.description.as_deref())
+        .ok_or_else(|| "Article content is empty".to_string())?
+        .to_string();
+
+    let lang = target_lang.unwrap_or_else(|| settings.language.clone());
+
+    let settings_for_task = settings.clone();
+    let translation = tauri::async_runtime::spawn_blocking(move || {
+        ai_translator::translate_content(&content, &lang, &settings_for_task)
+    })
+    .await
+    .map_err(|e| format!("Translation task join error: {}", e))??;
+
+    storage
+        .update_article_ai_translation(&id, &translation)
+        .map_err(|e| format!("Failed to save translation: {}", e))?;
+
+    storage
+        .get_article(&id)
+        .map_err(|e| format!("Failed to get updated article: {}", e))?
+        .ok_or_else(|| "Article not found after translation update".to_string())
 }

@@ -553,6 +553,15 @@ function AiSection() {
         onChange={(v) => handleChange({ maxTokens: v })}
       />
 
+      <SettingSlider
+        label="翻译最大并发数"
+        value={settings.maxConcurrency}
+        min={1}
+        max={10}
+        step={1}
+        onChange={(v) => handleChange({ maxConcurrency: v })}
+      />
+
       {/* 自动摘要 */}
       <SettingToggle
         label="自动生成摘要"

@@ -174,6 +174,9 @@ pub struct AiSettings {
     /// 摘要语言
     #[serde(default = "default_language")]
     pub language: String,
+
+    #[serde(default = "default_max_concurrency")]
+    pub max_concurrency: u32,
 }
 
 fn default_api_endpoint() -> String {
@@ -197,6 +200,10 @@ fn default_language() -> String {
     "zh-CN".to_string()
 }
 
+fn default_max_concurrency() -> u32 {
+    3
+}
+
 impl Default for AiSettings {
     fn default() -> Self {
         Self {
@@ -207,6 +214,7 @@ impl Default for AiSettings {
             prompt: default_prompt(),
             enable_auto_summary: false,
             language: default_language(),
+            max_concurrency: default_max_concurrency(),
         }
     }
 }
@@ -425,6 +433,7 @@ mod tests {
             prompt: "请简洁总结文章".to_string(),
             enable_auto_summary: true,
             language: "en-US".to_string(),
+            max_concurrency: 5,
         };
 
         let json = serde_json::to_string(&settings).unwrap();

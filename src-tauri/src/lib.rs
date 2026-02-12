@@ -12,6 +12,7 @@ mod background_scheduler;
 mod notifications;
 mod tray;
 mod ai_summarizer;
+mod ai_translator;
 
 // 导出常用类型
 pub use models::{Feed, Article, AddFeedRequest, UpdateFeedRequest, GetArticlesRequest, ApiResponse, FeedWithUnreadCount};
@@ -171,6 +172,7 @@ pub fn run() {
             commands::update_feed_info,
             commands::fetch_full_content,
             commands::generate_article_summary,
+            commands::translate_article,
             scheduler_commands::get_settings,
             scheduler_commands::update_settings,
             scheduler_commands::get_ai_settings,

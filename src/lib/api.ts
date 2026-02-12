@@ -135,4 +135,8 @@ export class RssApi {
   static async generateSummary(id: string): Promise<Article> {
     return await invoke<Article>('generate_article_summary', { id })
   }
+
+  static async translateArticle(id: string, targetLang?: string): Promise<Article> {
+    return await invoke<Article>('translate_article', { id, targetLang })
+  }
 }

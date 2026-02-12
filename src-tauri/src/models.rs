@@ -41,6 +41,9 @@ pub struct Article {
     /// AI 生成的文章摘要
     #[serde(default)]
     pub ai_summary: Option<String>,
+    /// AI 翻译的内容
+    #[serde(default)]
+    pub ai_translation: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

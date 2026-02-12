@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { Star, StarOff, ExternalLink, ChevronLeft, ChevronRight, Settings, FileText, Loader2, ArrowLeftRight, Sparkles, ChevronDown } from 'lucide-react'
+import { Star, StarOff, ExternalLink, ChevronLeft, ChevronRight, Settings, FileText, Loader2, ArrowLeftRight, Sparkles, ChevronDown, Languages } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
 import DOMPurify from 'dompurify'
@@ -55,6 +55,10 @@ export function ArticleViewer({
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false)
   const [summaryCollapsed, setSummaryCollapsed] = useState(false)
 
+  const [aiTranslation, setAiTranslation] = useState<string | null>(article.ai_translation ?? null)
+  const [isTranslating, setIsTranslating] = useState(false)
+  const [showTranslation, setShowTranslation] = useState(false)
+
   const { selectArticle } = useReader()
   const { openSettings } = useUnifiedSettings()
   const { isDark } = useTheme()
@@ -74,7 +78,9 @@ export function ArticleViewer({
     setContentMode(article.full_content ? 'fulltext' : 'original')
     setAiSummary(article.ai_summary ?? null)
     setSummaryCollapsed(false)
-  }, [article.id, article.full_content, article.ai_summary])
+    setAiTranslation(article.ai_translation ?? null)
+    setShowTranslation(false)
+  }, [article.id, article.full_content, article.ai_summary, article.ai_translation])
 
   useEffect(() => {
     if (feedUsesFullContent && !article.full_content && !fetchedFullContent && !hasAttemptedAutoFetch.current) {
@@ -172,6 +178,31 @@ export function ArticleViewer({
       setIsGeneratingSummary(false)
     }
   }, [article.id, updateArticleInList])
+
+  const handleTranslate = useCallback(async () => {
+    if (aiTranslation) {
+      setShowTranslation(prev => !prev)
+      return
+    }
+    setIsTranslating(true)
+    try {
+      const needFullContent = feedUsesFullContent && !article.full_content && !fetchedFullContent
+      if (needFullContent) {
+        const fetched = await RssApi.fetchFullContent(article.id)
+        setFetchedFullContent(fetched.full_content ?? null)
+        setContentMode('fulltext')
+        updateArticleInList(fetched)
+      }
+      const updated = await RssApi.translateArticle(article.id)
+      setAiTranslation(updated.ai_translation ?? null)
+      setShowTranslation(true)
+      updateArticleInList(updated)
+    } catch (err: unknown) {
+      setFetchError(typeof err === 'string' ? err : err instanceof Error ? err.message : 'AI 翻译失败')
+    } finally {
+      setIsTranslating(false)
+    }
+  }, [article.id, article.full_content, aiTranslation, feedUsesFullContent, fetchedFullContent, updateArticleInList])
 
   const handleScroll = useCallback(() => {
     if (!contentRef.current) return
@@ -334,6 +365,19 @@ export function ArticleViewer({
             {isGeneratingSummary ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
           </button>
 
+          {/* AI 翻译 */}
+          <button
+            onClick={handleTranslate}
+            disabled={isTranslating}
+            className={cn(
+              "p-2 rounded-lg hover:bg-muted transition-colors disabled:opacity-50",
+              showTranslation ? "text-primary" : "text-muted-foreground hover:text-foreground"
+            )}
+            title={showTranslation ? "显示原文" : (aiTranslation ? "显示译文" : "翻译文章")}
+          >
+            {isTranslating ? <Loader2 className="w-5 h-5 animate-spin" /> : <Languages className="w-5 h-5" />}
+          </button>
+
           {/* 切换原始/全文内容 */}
           {hasFullContent && (
             <button
@@ -430,16 +474,25 @@ export function ArticleViewer({
           )}
 
           {/* 文章内容 */}
-          <div
-            className={`prose max-w-none ${isDark ? 'prose-invert' : ''}`}
-            dangerouslySetInnerHTML={{
-              __html: sanitizeHtml(
-                contentMode === 'fulltext'
-                  ? (fetchedFullContent || article.full_content || article.content || article.description || '')
-                  : (article.content || article.description || '')
-              ),
-            }}
-          />
+          {showTranslation && aiTranslation ? (
+            <div
+              className={`prose max-w-none ${isDark ? 'prose-invert' : ''}`}
+              dangerouslySetInnerHTML={{
+                __html: sanitizeHtml(aiTranslation),
+              }}
+            />
+          ) : (
+            <div
+              className={`prose max-w-none ${isDark ? 'prose-invert' : ''}`}
+              dangerouslySetInnerHTML={{
+                __html: sanitizeHtml(
+                  contentMode === 'fulltext'
+                    ? (fetchedFullContent || article.full_content || article.content || article.description || '')
+                    : (article.content || article.description || '')
+                ),
+              }}
+            />
+          )}
         </article>
       </div>
     </div>

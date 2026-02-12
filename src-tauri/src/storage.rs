@@ -299,6 +299,21 @@ impl Storage {
         }
     }
 
+    pub fn update_article_ai_translation(&self, id: &str, ai_translation: &str) -> Result<()> {
+        let _lock = self.acquire_write_lock()?;
+        let mut articles = self.load_articles()?;
+        if let Some(article) = articles.iter_mut().find(|a| a.id == id) {
+            article.ai_translation = Some(ai_translation.to_string());
+            self.save_articles(&articles)?;
+            Ok(())
+        } else {
+            Err(crate::error::RssError::StorageError(format!(
+                "Article not found: {}",
+                id
+            )))
+        }
+    }
+
     /// 获取收藏的文章
     pub fn get_favorite_articles(&self, limit: Option<usize>) -> Result<Vec<Article>> {
         let mut articles = self.load_articles()?;
@@ -433,6 +448,7 @@ mod tests {
             created_at: Utc::now(),
             updated_at: Utc::now(),
             use_full_content: false,
+            use_ai_summary: false,
         }
     }
 
@@ -451,6 +467,7 @@ mod tests {
             favorite: false,
             full_content: None,
             ai_summary: None,
+            ai_translation: None,
         }
     }
 
@@ -639,6 +656,19 @@ mod tests {
             let mut articles = self.articles.lock().unwrap();
             if let Some(article) = articles.iter_mut().find(|a| a.id == id) {
                 article.ai_summary = Some(ai_summary.to_string());
+                Ok(())
+            } else {
+                Err(crate::error::RssError::StorageError(format!(
+                    "Article not found: {}",
+                    id
+                )))
+            }
+        }
+
+        fn update_article_ai_translation(&self, id: &str, ai_translation: &str) -> Result<()> {
+            let mut articles = self.articles.lock().unwrap();
+            if let Some(article) = articles.iter_mut().find(|a| a.id == id) {
+                article.ai_translation = Some(ai_translation.to_string());
                 Ok(())
             } else {
                 Err(crate::error::RssError::StorageError(format!(
@@ -1270,5 +1300,30 @@ mod tests {
             "Newest article first regardless of read status"
         );
         assert_eq!(articles[1].id, a_unread.id, "Older article second");
+    }
+
+    #[test]
+    fn test_update_article_ai_translation() {
+        let storage = TestStorage::new();
+        let feed = create_test_feed();
+        let article = create_test_article(&feed.id);
+
+        storage.add_feed(&feed).unwrap();
+        storage.add_article(&article).unwrap();
+
+        let translation = "This is the translated content";
+        storage
+            .update_article_ai_translation(&article.id, translation)
+            .expect("Failed to update ai_translation");
+
+        let retrieved = storage.get_article(&article.id).unwrap().unwrap();
+        assert_eq!(retrieved.ai_translation, Some(translation.to_string()),);
+    }
+
+    #[test]
+    fn test_update_ai_translation_nonexistent_article() {
+        let storage = TestStorage::new();
+        let result = storage.update_article_ai_translation("nonexistent", "content");
+        assert!(result.is_err());
     }
 }

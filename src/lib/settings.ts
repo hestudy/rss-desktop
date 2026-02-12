@@ -70,6 +70,7 @@ export interface AiSettings {
   prompt: string
   enableAutoSummary: boolean
   language: string
+  maxConcurrency: number
 }
 
 export const DEFAULT_AI_SETTINGS: AiSettings = {
@@ -80,6 +81,7 @@ export const DEFAULT_AI_SETTINGS: AiSettings = {
   prompt: '你是一个专业的文章摘要助手。请用简洁的语言总结以下文章的核心内容，包括主要观点和关键信息。',
   enableAutoSummary: false,
   language: 'zh-CN',
+  maxConcurrency: 3,
 }
 
 export const AiSettingsSchema = z.object({
@@ -90,6 +92,7 @@ export const AiSettingsSchema = z.object({
   prompt: z.string().default(DEFAULT_AI_SETTINGS.prompt),
   enableAutoSummary: z.boolean().default(false),
   language: z.string().default('zh-CN'),
+  maxConcurrency: z.number().int().min(1).max(10).default(3),
 })
 
 /**
