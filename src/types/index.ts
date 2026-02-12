@@ -12,6 +12,7 @@ export interface Feed {
   created_at: string
   updated_at: string
   use_full_content?: boolean
+  use_ai_summary?: boolean
 }
 
 /**

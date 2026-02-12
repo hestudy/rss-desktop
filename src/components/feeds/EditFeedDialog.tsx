@@ -18,6 +18,7 @@ export function EditFeedDialog({ isOpen, onClose, feed }: EditFeedDialogProps) {
   const [title, setTitle] = useState(feed.title)
   const [url, setUrl] = useState(feed.url)
   const [useFullContent, setUseFullContent] = useState(feed.use_full_content ?? false)
+  const [useAiSummary, setUseAiSummary] = useState(feed.use_ai_summary ?? false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { updateFeed } = useRss()
@@ -27,6 +28,7 @@ export function EditFeedDialog({ isOpen, onClose, feed }: EditFeedDialogProps) {
       setTitle(feed.title)
       setUrl(feed.url)
       setUseFullContent(feed.use_full_content ?? false)
+      setUseAiSummary(feed.use_ai_summary ?? false)
       setError(null)
     }
   }, [isOpen, feed])
@@ -54,8 +56,9 @@ export function EditFeedDialog({ isOpen, onClose, feed }: EditFeedDialogProps) {
     const titleChanged = trimmedTitle !== feed.title
     const urlChanged = trimmedUrl !== feed.url
     const fullContentChanged = useFullContent !== (feed.use_full_content ?? false)
+    const aiSummaryChanged = useAiSummary !== (feed.use_ai_summary ?? false)
 
-    if (!titleChanged && !urlChanged && !fullContentChanged) {
+    if (!titleChanged && !urlChanged && !fullContentChanged && !aiSummaryChanged) {
       onClose()
       return
     }
@@ -69,6 +72,7 @@ export function EditFeedDialog({ isOpen, onClose, feed }: EditFeedDialogProps) {
         titleChanged ? trimmedTitle : undefined,
         urlChanged ? trimmedUrl : undefined,
         fullContentChanged ? useFullContent : undefined,
+        aiSummaryChanged ? useAiSummary : undefined,
       )
       onClose()
     } catch (err) {
@@ -83,7 +87,7 @@ export function EditFeedDialog({ isOpen, onClose, feed }: EditFeedDialogProps) {
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent title="编辑订阅" className="max-w-md">
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} noValidate>
           <div className="space-y-4">
             <div>
               <label htmlFor="edit-feed-title" className="block text-sm font-medium mb-2">
@@ -125,6 +129,17 @@ export function EditFeedDialog({ isOpen, onClose, feed }: EditFeedDialogProps) {
                 className="w-4 h-4 rounded border-border text-primary focus:ring-primary"
               />
               <span className="text-sm text-foreground">自动抓取全文</span>
+            </label>
+            <label htmlFor="edit-feed-ai-summary" className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                id="edit-feed-ai-summary"
+                type="checkbox"
+                checked={useAiSummary}
+                onChange={(e) => setUseAiSummary(e.target.checked)}
+                disabled={isLoading}
+                className="w-4 h-4 rounded border-border text-primary focus:ring-primary"
+              />
+              <span className="text-sm text-foreground">自动生成 AI 摘要</span>
             </label>
             {error && (
               <p className="text-sm text-destructive">{error}</p>

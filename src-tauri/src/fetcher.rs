@@ -104,6 +104,7 @@ pub fn fetch_feed(url: &str) -> Result<FeedResult> {
         created_at: now,
         updated_at: now,
         use_full_content: false,
+        use_ai_summary: false,
     };
 
     let articles: Vec<Article> = parsed_feed

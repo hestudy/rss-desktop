@@ -10,19 +10,6 @@ use std::sync::Arc;
 use fs2::FileExt;
 use log::warn;
 
-const MAX_FULL_CONTENT_PER_BATCH: usize = 5;
-
-fn try_fetch_full_content(storage: &Storage, article_id: &str, link: &str) {
-    match fetch_and_extract_content(link) {
-        Ok(content) => {
-            let _ = storage.update_article_full_content(article_id, &content);
-        }
-        Err(e) => {
-            warn!("Failed to fetch full content for {}: {}", link, e);
-        }
-    }
-}
-
 /// 应用状态，包含存储实例
 #[derive(Clone)]
 pub struct AppState {
@@ -34,11 +21,12 @@ pub type CommandResult<T> = std::result::Result<T, String>;
 
 /// 添加 RSS 订阅
 #[tauri::command]
-pub async fn add_feed(url: String, use_full_content: Option<bool>, storage: State<'_, Arc<Storage>>) -> CommandResult<Feed> {
+pub async fn add_feed(url: String, use_full_content: Option<bool>, use_ai_summary: Option<bool>, storage: State<'_, Arc<Storage>>) -> CommandResult<Feed> {
     let (mut feed, articles) = fetch_feed(&url)
         .map_err(|e| format!("Failed to fetch feed: {}", e))?;
 
     feed.use_full_content = use_full_content.unwrap_or(false);
+    feed.use_ai_summary = use_ai_summary.unwrap_or(false);
 
     storage.add_feed(&feed)
         .map_err(|e| format!("Failed to save feed: {}", e))?;
@@ -48,12 +36,6 @@ pub async fn add_feed(url: String, use_full_content: Option<bool>, storage: Stat
         article.feed_id = feed.id.clone();
         storage.add_article(&article)
             .map_err(|e| format!("Failed to save article: {}", e))?;
-    }
-
-    if feed.use_full_content {
-        for article in articles.iter().take(MAX_FULL_CONTENT_PER_BATCH) {
-            try_fetch_full_content(&storage, &article.id, &article.link);
-        }
     }
 
     Ok(feed)
@@ -89,7 +71,7 @@ pub async fn refresh_feed(id: String, storage: State<'_, Arc<Storage>>) -> Comma
         .map_err(|e| format!("Failed to get feed: {}", e))?
         .ok_or_else(|| "Feed not found".to_string())?;
 
-    let existing_links: Vec<String> = storage.get_articles(Some(&id), None)
+    let _existing_links: Vec<String> = storage.get_articles(Some(&id), None)
         .unwrap_or_default()
         .into_iter()
         .map(|a| a.link)
@@ -101,13 +83,8 @@ pub async fn refresh_feed(id: String, storage: State<'_, Arc<Storage>>) -> Comma
     for article in &articles {
         let mut article = article.clone();
         article.feed_id = id.clone();
-        let is_new = !existing_links.contains(&article.link);
         storage.add_article(&article)
             .map_err(|e| format!("Failed to save article: {}", e))?;
-
-        if is_new && existing_feed.use_full_content {
-            try_fetch_full_content(&storage, &article.id, &article.link);
-        }
     }
 
     let mut updated_feed = existing_feed.clone();
@@ -135,21 +112,10 @@ pub async fn refresh_all_feeds(storage: State<'_, Arc<Storage>>) -> CommandResul
         let feed_url = feed.url.clone();
 
         if let Ok((_feed, articles)) = fetch_feed(&feed_url) {
-            let existing_links: Vec<String> = storage.get_articles(Some(&feed_id), None)
-                .unwrap_or_default()
-                .into_iter()
-                .map(|a| a.link)
-                .collect();
-
             for article in &articles {
                 let mut article = article.clone();
                 article.feed_id = feed_id.clone();
-                let is_new = !existing_links.contains(&article.link);
                 let _ = storage.add_article(&article);
-
-                if is_new && feed.use_full_content {
-                    try_fetch_full_content(&storage, &article.id, &article.link);
-                }
             }
         }
 
@@ -358,6 +324,7 @@ pub async fn update_feed_info(
     title: Option<String>,
     url: Option<String>,
     use_full_content: Option<bool>,
+    use_ai_summary: Option<bool>,
     storage: State<'_, Arc<Storage>>,
 ) -> CommandResult<FeedWithUnreadCount> {
     let mut feed = storage.get_feed(&id)
@@ -388,6 +355,10 @@ pub async fn update_feed_info(
 
     if let Some(ufc) = use_full_content {
         feed.use_full_content = ufc;
+    }
+
+    if let Some(uas) = use_ai_summary {
+        feed.use_ai_summary = uas;
     }
 
     feed.updated_at = chrono::Utc::now();

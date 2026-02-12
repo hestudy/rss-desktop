@@ -18,6 +18,8 @@ const baseFeed = {
   icon_url: undefined,
   created_at: '2025-01-01T00:00:00Z',
   updated_at: '2025-01-01T00:00:00Z',
+  use_full_content: false,
+  use_ai_summary: false,
 }
 
 describe('EditFeedDialog', () => {
@@ -95,6 +97,7 @@ describe('EditFeedDialog', () => {
         'Updated Title',
         undefined,
         undefined,
+        undefined,
       )
     })
     expect(onClose).toHaveBeenCalled()
@@ -117,6 +120,7 @@ describe('EditFeedDialog', () => {
         'feed-1',
         undefined,
         'https://new-url.com/rss',
+        undefined,
         undefined,
       )
     })
@@ -143,6 +147,7 @@ describe('EditFeedDialog', () => {
         'feed-1',
         'New Title',
         'https://new.com/feed',
+        undefined,
         undefined,
       )
     })
@@ -195,7 +200,7 @@ describe('EditFeedDialog', () => {
 
     render(<EditFeedDialog isOpen={true} onClose={onClose} feed={baseFeed} />)
 
-    const checkbox = screen.getByRole('checkbox')
+    const checkbox = screen.getByRole('checkbox', { name: /自动抓取全文/i })
     fireEvent.click(checkbox)
 
     const submitButton = screen.getByRole('button', { name: '保存' })
@@ -207,8 +212,73 @@ describe('EditFeedDialog', () => {
         undefined,
         undefined,
         true,
+        undefined,
       )
     })
     expect(onClose).toHaveBeenCalled()
+  })
+
+  it('renders use AI summary checkbox', () => {
+    render(<EditFeedDialog isOpen={true} onClose={vi.fn()} feed={baseFeed} />)
+    expect(screen.getByText('自动生成 AI 摘要')).toBeInTheDocument()
+  })
+
+  it('calls updateFeed with useAiSummary when AI summary checkbox is toggled', async () => {
+    const onClose = vi.fn()
+    mockUpdateFeed.mockResolvedValue(undefined)
+
+    render(<EditFeedDialog isOpen={true} onClose={onClose} feed={baseFeed} />)
+
+    const checkbox = screen.getByRole('checkbox', { name: /自动生成 AI 摘要/i })
+    fireEvent.click(checkbox)
+
+    const submitButton = screen.getByRole('button', { name: '保存' })
+    fireEvent.click(submitButton)
+
+    await waitFor(() => {
+      expect(mockUpdateFeed).toHaveBeenCalledWith(
+        'feed-1',
+        undefined,
+        undefined,
+        undefined,
+        true,
+      )
+    })
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it('calls updateFeed with both useFullContent and useAiSummary when both toggled', async () => {
+    const onClose = vi.fn()
+    mockUpdateFeed.mockResolvedValue(undefined)
+
+    render(<EditFeedDialog isOpen={true} onClose={onClose} feed={baseFeed} />)
+
+    const fullContentCheckbox = screen.getByRole('checkbox', { name: /自动抓取全文/i })
+    fireEvent.click(fullContentCheckbox)
+
+    const aiSummaryCheckbox = screen.getByRole('checkbox', { name: /自动生成 AI 摘要/i })
+    fireEvent.click(aiSummaryCheckbox)
+
+    const submitButton = screen.getByRole('button', { name: '保存' })
+    fireEvent.click(submitButton)
+
+    await waitFor(() => {
+      expect(mockUpdateFeed).toHaveBeenCalledWith(
+        'feed-1',
+        undefined,
+        undefined,
+        true,
+        true,
+      )
+    })
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it('pre-selects AI summary checkbox when feed has use_ai_summary=true', () => {
+    const feedWithAiSummary = { ...baseFeed, use_ai_summary: true }
+    render(<EditFeedDialog isOpen={true} onClose={vi.fn()} feed={feedWithAiSummary} />)
+
+    const checkbox = screen.getByRole('checkbox', { name: /自动生成 AI 摘要/i })
+    expect(checkbox).toBeChecked()
   })
 })

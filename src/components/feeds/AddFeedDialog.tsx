@@ -5,12 +5,12 @@ import { Input } from '../ui/Input'
 import { Button } from '../ui/Button'
 import { useRss } from '../../contexts/RssContext'
 
-// URL 验证 schema
 const feedUrlSchema = z.string().url('Invalid URL format')
 
 export function AddFeedDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const [url, setUrl] = useState('')
   const [useFullContent, setUseFullContent] = useState(false)
+  const [useAiSummary, setUseAiSummary] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { addFeed } = useRss()
@@ -34,9 +34,10 @@ export function AddFeedDialog({ isOpen, onClose }: { isOpen: boolean; onClose: (
     setError(null)
 
     try {
-      await addFeed(trimmedUrl, useFullContent)
+      await addFeed(trimmedUrl, useFullContent, useAiSummary)
       setUrl('')
       setUseFullContent(false)
+      setUseAiSummary(false)
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : '添加失败')
@@ -50,7 +51,7 @@ export function AddFeedDialog({ isOpen, onClose }: { isOpen: boolean; onClose: (
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent title="添加 RSS 订阅" className="max-w-md">
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} noValidate>
           <div className="space-y-4">
             <div>
               <label htmlFor="feed-url" className="block text-sm font-medium mb-2">
@@ -82,6 +83,17 @@ export function AddFeedDialog({ isOpen, onClose }: { isOpen: boolean; onClose: (
                 className="w-4 h-4 rounded border-border text-primary focus:ring-primary"
               />
               <span className="text-sm text-foreground">自动抓取全文</span>
+            </label>
+            <label htmlFor="add-feed-ai-summary" className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                id="add-feed-ai-summary"
+                type="checkbox"
+                checked={useAiSummary}
+                onChange={(e) => setUseAiSummary(e.target.checked)}
+                disabled={isLoading}
+                className="w-4 h-4 rounded border-border text-primary focus:ring-primary"
+              />
+              <span className="text-sm text-foreground">自动生成 AI 摘要</span>
             </label>
           </div>
           <div className="flex justify-end gap-2 mt-6">

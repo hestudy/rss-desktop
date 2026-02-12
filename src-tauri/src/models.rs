@@ -13,6 +13,8 @@ pub struct Feed {
     pub updated_at: DateTime<Utc>,
     #[serde(default)]
     pub use_full_content: bool,
+    #[serde(default)]
+    pub use_ai_summary: bool,
 }
 
 /// RSS 文章
@@ -46,6 +48,8 @@ pub struct AddFeedRequest {
     pub url: String,
     #[serde(default)]
     pub use_full_content: bool,
+    #[serde(default)]
+    pub use_ai_summary: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -54,6 +58,7 @@ pub struct UpdateFeedRequest {
     pub url: Option<String>,
     pub title: Option<String>,
     pub use_full_content: Option<bool>,
+    pub use_ai_summary: Option<bool>,
 }
 
 /// 获取文章的请求参数

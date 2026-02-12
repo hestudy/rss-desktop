@@ -47,6 +47,8 @@ export function ArticleViewer({
   )
   const [fetchError, setFetchError] = useState<string | null>(null)
   const hasAttemptedAutoFetch = useRef(false)
+  const hasAttemptedAutoSummary = useRef(false)
+  const isFullContentFetched = useRef(false)
   
   // AI Summary State
   const [aiSummary, setAiSummary] = useState<string | null>(article.ai_summary ?? null)
@@ -60,10 +62,13 @@ export function ArticleViewer({
 
   const feedConfig = feeds.find(f => f.feed.id === article.feed_id)
   const feedUsesFullContent = feedConfig?.feed.use_full_content ?? false
+  const feedUsesAiSummary = feedConfig?.feed.use_ai_summary ?? false
   const hasFullContent = !!(fetchedFullContent || article.full_content)
 
   useEffect(() => {
     hasAttemptedAutoFetch.current = false
+    hasAttemptedAutoSummary.current = false
+    isFullContentFetched.current = false
     setFetchedFullContent(null)
     setFetchError(null)
     setContentMode(article.full_content ? 'fulltext' : 'original')
@@ -81,6 +86,7 @@ export function ArticleViewer({
           setFetchedFullContent(updated.full_content ?? null)
           setContentMode('fulltext')
           updateArticleInList(updated)
+          isFullContentFetched.current = true
         })
         .catch((err: unknown) => {
           setFetchError(typeof err === 'string' ? err : err instanceof Error ? err.message : '抓取全文失败，请稍后重试')
@@ -90,6 +96,44 @@ export function ArticleViewer({
         })
     }
   }, [article.id, article.full_content, feedUsesFullContent, fetchedFullContent, updateArticleInList])
+
+  useEffect(() => {
+    if (feedUsesAiSummary && !article.ai_summary && !aiSummary && !hasAttemptedAutoSummary.current) {
+      const shouldWaitForFullContent = feedUsesFullContent && !article.full_content && !fetchedFullContent
+      
+      if (shouldWaitForFullContent) {
+        if (isFullContentFetched.current || fetchError) {
+          hasAttemptedAutoSummary.current = true
+          setIsGeneratingSummary(true)
+          RssApi.generateSummary(article.id)
+            .then((updated) => {
+              setAiSummary(updated.ai_summary ?? null)
+              updateArticleInList(updated)
+            })
+            .catch((err: unknown) => {
+              setFetchError(typeof err === 'string' ? err : err instanceof Error ? err.message : 'AI 摘要生成失败')
+            })
+            .finally(() => {
+              setIsGeneratingSummary(false)
+            })
+        }
+      } else {
+        hasAttemptedAutoSummary.current = true
+        setIsGeneratingSummary(true)
+        RssApi.generateSummary(article.id)
+          .then((updated) => {
+            setAiSummary(updated.ai_summary ?? null)
+            updateArticleInList(updated)
+          })
+          .catch((err: unknown) => {
+            setFetchError(typeof err === 'string' ? err : err instanceof Error ? err.message : 'AI 摘要生成失败')
+          })
+          .finally(() => {
+            setIsGeneratingSummary(false)
+          })
+      }
+    }
+  }, [article.id, article.ai_summary, aiSummary, feedUsesAiSummary, feedUsesFullContent, article.full_content, fetchedFullContent, isFullContentFetched, fetchError, updateArticleInList])
 
   useEffect(() => {
     setIsFavorite(article.favorite ?? false)

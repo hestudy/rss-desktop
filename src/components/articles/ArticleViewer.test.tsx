@@ -71,7 +71,7 @@ vi.mock('../../contexts/ThemeContext', () => ({
 }))
 
 const mockUpdateArticleInList = vi.fn()
-let mockFeeds = [{ feed: { id: 'feed-1', use_full_content: false }, unread_count: 0 }]
+let mockFeeds = [{ feed: { id: 'feed-1', use_full_content: false, use_ai_summary: false }, unread_count: 0 }]
 vi.mock('../../contexts/RssContext', () => ({
   useRss: () => ({
     updateArticleInList: mockUpdateArticleInList,
@@ -441,7 +441,7 @@ describe('ArticleViewer', () => {
   })
 
   it('应该在 feed 开启全文抓取时自动抓取全文', async () => {
-    mockFeeds = [{ feed: { id: 'feed-1', use_full_content: true }, unread_count: 0 }]
+    mockFeeds = [{ feed: { id: 'feed-1', use_full_content: true, use_ai_summary: false }, unread_count: 0 }]
 
     const fetchedArticle: Article = {
       ...mockArticle,
@@ -461,7 +461,7 @@ describe('ArticleViewer', () => {
       expect(RssApi.fetchFullContent).toHaveBeenCalledWith('article-1')
     })
 
-    mockFeeds = [{ feed: { id: 'feed-1', use_full_content: false }, unread_count: 0 }]
+    mockFeeds = [{ feed: { id: 'feed-1', use_full_content: false, use_ai_summary: false }, unread_count: 0 }]
   })
 
   it('应该在 feed 未开启全文抓取时不自动抓取', () => {
@@ -474,5 +474,131 @@ describe('ArticleViewer', () => {
     )
 
     expect(RssApi.fetchFullContent).not.toHaveBeenCalled()
+  })
+
+  it('应该在 feed 开启 AI 总结时自动生成 AI 摘要', async () => {
+    mockFeeds = [{ feed: { id: 'feed-1', use_full_content: false, use_ai_summary: true }, unread_count: 0 }]
+
+    const summarizedArticle: Article = {
+      ...mockArticle,
+      ai_summary: '这是 AI 生成的摘要',
+    }
+    vi.mocked(RssApi.generateSummary).mockResolvedValue(summarizedArticle)
+
+    render(
+      <ArticleViewer
+        article={mockArticle}
+        articles={mockArticles}
+        readerSettings={mockReaderSettings}
+      />
+    )
+
+    await waitFor(() => {
+      expect(RssApi.generateSummary).toHaveBeenCalledWith('article-1')
+    })
+
+    expect(mockUpdateArticleInList).toHaveBeenCalledWith(summarizedArticle)
+
+    mockFeeds = [{ feed: { id: 'feed-1', use_full_content: false, use_ai_summary: false }, unread_count: 0 }]
+  })
+
+  it('应该在 feed 未开启 AI 总结时不自动生成摘要', () => {
+    render(
+      <ArticleViewer
+        article={mockArticle}
+        articles={mockArticles}
+        readerSettings={mockReaderSettings}
+      />
+    )
+
+    expect(RssApi.generateSummary).not.toHaveBeenCalled()
+  })
+
+  it('应该在同时开启全文抓取和 AI 总结时，先抓取全文再生成摘要', async () => {
+    mockFeeds = [{ feed: { id: 'feed-1', use_full_content: true, use_ai_summary: true }, unread_count: 0 }]
+
+    const fetchedArticle: Article = {
+      ...mockArticle,
+      full_content: '<p>Auto fetched full content</p>',
+    }
+    const summarizedArticle: Article = {
+      ...fetchedArticle,
+      ai_summary: '基于全文生成的摘要',
+    }
+
+    vi.mocked(RssApi.fetchFullContent).mockResolvedValue(fetchedArticle)
+    vi.mocked(RssApi.generateSummary).mockResolvedValue(summarizedArticle)
+
+    render(
+      <ArticleViewer
+        article={mockArticle}
+        articles={mockArticles}
+        readerSettings={mockReaderSettings}
+      />
+    )
+
+    await waitFor(() => {
+      expect(RssApi.fetchFullContent).toHaveBeenCalledWith('article-1')
+    })
+
+    await waitFor(() => {
+      expect(RssApi.generateSummary).toHaveBeenCalledWith('article-1')
+    })
+
+    expect(RssApi.fetchFullContent).toHaveBeenCalledBefore(vi.mocked(RssApi.generateSummary))
+
+    mockFeeds = [{ feed: { id: 'feed-1', use_full_content: false, use_ai_summary: false }, unread_count: 0 }]
+  })
+
+  it('应该在文章已有 AI 摘要时不重复生成', async () => {
+    mockFeeds = [{ feed: { id: 'feed-1', use_full_content: false, use_ai_summary: true }, unread_count: 0 }]
+
+    const articleWithSummary: Article = {
+      ...mockArticle,
+      ai_summary: '已有的摘要',
+    }
+
+    render(
+      <ArticleViewer
+        article={articleWithSummary}
+        articles={mockArticles}
+        readerSettings={mockReaderSettings}
+      />
+    )
+
+    await new Promise(resolve => setTimeout(resolve, 100))
+
+    expect(RssApi.generateSummary).not.toHaveBeenCalled()
+
+    mockFeeds = [{ feed: { id: 'feed-1', use_full_content: false, use_ai_summary: false }, unread_count: 0 }]
+  })
+
+  it('应该在全文抓取失败时仍然尝试生成 AI 摘要', async () => {
+    mockFeeds = [{ feed: { id: 'feed-1', use_full_content: true, use_ai_summary: true }, unread_count: 0 }]
+
+    vi.mocked(RssApi.fetchFullContent).mockRejectedValue(new Error('抓取失败'))
+    const summarizedArticle: Article = {
+      ...mockArticle,
+      ai_summary: '基于原始内容生成的摘要',
+    }
+    vi.mocked(RssApi.generateSummary).mockResolvedValue(summarizedArticle)
+
+    render(
+      <ArticleViewer
+        article={mockArticle}
+        articles={mockArticles}
+        readerSettings={mockReaderSettings}
+      />
+    )
+
+    await waitFor(() => {
+      expect(RssApi.fetchFullContent).toHaveBeenCalledWith('article-1')
+    })
+
+    await waitFor(() => {
+      expect(RssApi.generateSummary).toHaveBeenCalledWith('article-1')
+    })
+
+    mockFeeds = [{ feed: { id: 'feed-1', use_full_content: false, use_ai_summary: false }, unread_count: 0 }]
   })
 })

@@ -1,8 +1,6 @@
-use crate::ai_summarizer;
-use crate::settings::{AiSettings, AppSettings, SchedulerState};
+use crate::settings::{AppSettings, SchedulerState};
 use crate::storage::Storage;
 use crate::fetcher::fetch_feed;
-use crate::content_extractor::fetch_and_extract_content;
 use crate::scheduler::{calculate_next_run_time, calculate_retry_backoff};
 use chrono::Utc;
 use std::path::PathBuf;
@@ -212,48 +210,11 @@ impl BackgroundScheduler {
         }
     }
 
-    async fn get_ai_settings(data_dir: &PathBuf) -> std::result::Result<Option<AiSettings>, String> {
-        use std::collections::HashMap;
-        use std::fs::File;
-        use std::io::BufReader;
-
-        let store_path = data_dir.join("store.json");
-        if !store_path.exists() {
-            return Ok(None);
-        }
-
-        let file = File::open(&store_path)
-            .map_err(|e| format!("Failed to open store: {}", e))?;
-        let reader = BufReader::new(file);
-        let store: HashMap<String, serde_json::Value> = serde_json::from_reader(reader)
-            .map_err(|e| format!("Failed to parse store: {}", e))?;
-
-        if let Some(value) = store.get("ai_settings") {
-            let settings: AiSettings = serde_json::from_value(value.clone())
-                .map_err(|e| format!("Failed to parse AI settings: {}", e))?;
-            Ok(Some(settings))
-        } else {
-            Ok(None)
-        }
-    }
-
     async fn refresh_all_feeds(
         storage: &Arc<Storage>,
         event_tx: broadcast::Sender<NewArticlesEvent>,
-        data_dir: &PathBuf,
+        _data_dir: &PathBuf,
     ) -> std::result::Result<(), String> {
-        let ai_settings = match Self::get_ai_settings(data_dir).await {
-            Ok(Some(settings)) => settings,
-            Ok(None) => AiSettings::default(),
-            Err(e) => {
-                warn!("Failed to load AI settings: {}", e);
-                AiSettings::default()
-            }
-        };
-        let auto_summary_enabled =
-            ai_settings.enable_auto_summary && !ai_settings.api_key.trim().is_empty();
-        let mut auto_summary_count = 0usize;
-
         let feeds = storage.get_all_feeds()
             .map_err(|e| format!("Failed to get feeds: {}", e))?;
 
@@ -279,59 +240,7 @@ impl BackgroundScheduler {
                 for article in &articles {
                     let mut article = article.clone();
                     article.feed_id = feed_id.clone();
-                    let is_new = !existing_links.contains(&article.link);
                     let _ = storage.add_article(&article);
-
-                    let mut summary_source = article
-                        .full_content
-                        .clone()
-                        .or_else(|| article.content.clone())
-                        .or_else(|| article.description.clone());
-
-                    if is_new && feed.use_full_content {
-                        match fetch_and_extract_content(&article.link) {
-                            Ok(content) => {
-                                let _ = storage.update_article_full_content(&article.id, &content);
-                                summary_source = Some(content);
-                            }
-                            Err(e) => {
-                                warn!("Failed to fetch full content for {}: {}", article.link, e);
-                            }
-                        }
-                    }
-
-                    if is_new && auto_summary_enabled && auto_summary_count < 3 {
-                        if let Some(content) = summary_source {
-                            let storage_clone = storage.clone();
-                            let article_id = article.id.clone();
-                            let ai_settings_clone = ai_settings.clone();
-
-                            tokio::spawn(async move {
-                                let summarize_result = tauri::async_runtime::spawn_blocking(move || {
-                                    ai_summarizer::generate_summary(&content, &ai_settings_clone)
-                                })
-                                .await;
-
-                                match summarize_result {
-                                    Ok(Ok(summary)) => {
-                                        if let Err(e) = storage_clone.update_article_ai_summary(&article_id, &summary) {
-                                            warn!("Failed to save AI summary for {}: {}", article_id, e);
-                                        } else {
-                                            info!("Auto summary generated for article {}", article_id);
-                                        }
-                                    }
-                                    Ok(Err(e)) => {
-                                        warn!("Auto summary failed for article {}: {}", article_id, e);
-                                    }
-                                    Err(e) => {
-                                        warn!("Auto summary task join failed for article {}: {}", article_id, e);
-                                    }
-                                }
-                            });
-
-                            auto_summary_count += 1;
-                        }
-                    }
                 }
 
                 let mut updated_feed = feed.clone();
