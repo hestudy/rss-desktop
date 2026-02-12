@@ -410,7 +410,7 @@ pub async fn fetch_full_content(id: String, storage: State<'_, Arc<Storage>>) ->
         .ok_or_else(|| "Article not found".to_string())?;
 
     let content = fetch_and_extract_content(&article.link)
-        .map_err(|e| format!("Failed to fetch full content: {}", e))?;
+        .map_err(|e| e.to_string())?;
 
     storage.update_article_full_content(&id, &content)
         .map_err(|e| format!("Failed to save content: {}", e))?;
