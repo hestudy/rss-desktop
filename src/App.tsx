@@ -186,6 +186,7 @@ function AppContent() {
         <div data-testid="reader-panel-content" className="h-full">
           {selectedArticle ? (
             <ArticleViewer
+              key={selectedArticle.id}
               article={selectedArticle}
               articles={articles}
               onNext={handleNext}

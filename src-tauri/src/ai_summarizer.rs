@@ -1,5 +1,7 @@
 use crate::settings::AiSettings;
+use log::{debug, info};
 use serde_json::Value;
+use std::time::Instant;
 
 const MAX_INPUT_CHARS: usize = 4000;
 
@@ -49,6 +51,14 @@ pub fn generate_summary(content: &str, settings: &AiSettings) -> Result<String, 
     let base = settings.api_endpoint.trim_end_matches('/');
     let endpoint = format!("{}/chat/completions", base);
 
+    debug!(
+        "[Summary] model={}, endpoint={}, input_chars={}, truncated_chars={}",
+        settings.model,
+        base,
+        content.len(),
+        truncated.len()
+    );
+
     let user_prompt = format!("请用{}总结以下文章：\n\n{}", settings.language, truncated);
 
     let body = serde_json::json!({
@@ -60,6 +70,12 @@ pub fn generate_summary(content: &str, settings: &AiSettings) -> Result<String, 
         "max_tokens": settings.max_tokens,
         "temperature": 0.3
     });
+
+    let start = Instant::now();
+    info!(
+        "[Summary] Requesting AI summary ({}chars input)",
+        truncated.len()
+    );
 
     let response = ureq::post(&endpoint)
         .set(
@@ -81,13 +97,25 @@ pub fn generate_summary(content: &str, settings: &AiSettings) -> Result<String, 
                     .as_str()
                     .map(ToString::to_string)
             });
-            return Err(match api_message {
+            let err = match api_message {
                 Some(msg) => format!("AI API error {}: {}", code, msg),
                 None => format!("AI API error {}: {}", code, err_text),
-            });
+            };
+            info!(
+                "[Summary] Failed in {:.1}s: {}",
+                start.elapsed().as_secs_f64(),
+                err
+            );
+            return Err(err);
         }
         Err(ureq::Error::Transport(e)) => {
-            return Err(format!("AI request transport error: {}", e));
+            let err = format!("AI request transport error: {}", e);
+            info!(
+                "[Summary] Failed in {:.1}s: {}",
+                start.elapsed().as_secs_f64(),
+                err
+            );
+            return Err(err);
         }
     };
 
@@ -105,6 +133,12 @@ pub fn generate_summary(content: &str, settings: &AiSettings) -> Result<String, 
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
         .ok_or_else(|| "AI response missing choices[0].message.content".to_string())?;
+
+    info!(
+        "[Summary] Done in {:.1}s, output_chars={}",
+        start.elapsed().as_secs_f64(),
+        summary.len()
+    );
 
     Ok(summary)
 }

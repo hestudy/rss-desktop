@@ -9,7 +9,7 @@ use tauri::State;
 use std::path::PathBuf;
 use std::sync::Arc;
 use fs2::FileExt;
-use log::warn;
+use log::{warn, info};
 
 /// 应用状态，包含存储实例
 #[derive(Clone)]
@@ -22,7 +22,7 @@ pub type CommandResult<T> = std::result::Result<T, String>;
 
 /// 添加 RSS 订阅
 #[tauri::command]
-pub async fn add_feed(url: String, use_full_content: Option<bool>, use_ai_summary: Option<bool>, storage: State<'_, Arc<Storage>>) -> CommandResult<Feed> {
+pub async fn add_feed(url: String, use_full_content: Option<bool>, use_ai_summary: Option<bool>, storage: State<'_, Arc<Storage>>, app_state: State<'_, AppState>) -> CommandResult<Feed> {
     let (mut feed, articles) = fetch_feed(&url)
         .map_err(|e| format!("Failed to fetch feed: {}", e))?;
 
@@ -32,11 +32,22 @@ pub async fn add_feed(url: String, use_full_content: Option<bool>, use_ai_summar
     storage.add_feed(&feed)
         .map_err(|e| format!("Failed to save feed: {}", e))?;
 
+    let mut new_article_ids = Vec::new();
     for article in &articles {
         let mut article = article.clone();
         article.feed_id = feed.id.clone();
+        new_article_ids.push(article.id.clone());
         storage.add_article(&article)
             .map_err(|e| format!("Failed to save article: {}", e))?;
+    }
+
+    if !new_article_ids.is_empty() {
+        process_new_articles_background(
+            storage.inner().clone(),
+            app_state.data_dir.clone(),
+            &feed,
+            new_article_ids,
+        );
     }
 
     Ok(feed)
@@ -67,12 +78,12 @@ pub async fn remove_feed(id: String, storage: State<'_, Arc<Storage>>) -> Comman
 }
 
 #[tauri::command]
-pub async fn refresh_feed(id: String, storage: State<'_, Arc<Storage>>) -> CommandResult<FeedWithUnreadCount> {
+pub async fn refresh_feed(id: String, storage: State<'_, Arc<Storage>>, app_state: State<'_, AppState>) -> CommandResult<FeedWithUnreadCount> {
     let existing_feed = storage.get_feed(&id)
         .map_err(|e| format!("Failed to get feed: {}", e))?
         .ok_or_else(|| "Feed not found".to_string())?;
 
-    let _existing_links: Vec<String> = storage.get_articles(Some(&id), None)
+    let existing_links: std::collections::HashSet<String> = storage.get_articles(Some(&id), None)
         .unwrap_or_default()
         .into_iter()
         .map(|a| a.link)
@@ -81,9 +92,14 @@ pub async fn refresh_feed(id: String, storage: State<'_, Arc<Storage>>) -> Comma
     let (_feed, articles) = fetch_feed(&existing_feed.url)
         .map_err(|e| format!("Failed to fetch feed: {}", e))?;
 
+    let mut new_article_ids = Vec::new();
     for article in &articles {
         let mut article = article.clone();
         article.feed_id = id.clone();
+        let is_new = !existing_links.contains(&article.link);
+        if is_new {
+            new_article_ids.push(article.id.clone());
+        }
         storage.add_article(&article)
             .map_err(|e| format!("Failed to save article: {}", e))?;
     }
@@ -95,6 +111,15 @@ pub async fn refresh_feed(id: String, storage: State<'_, Arc<Storage>>) -> Comma
 
     let unread_count = storage.get_unread_count(&id).unwrap_or(0);
 
+    if !new_article_ids.is_empty() {
+        process_new_articles_background(
+            storage.inner().clone(),
+            app_state.data_dir.clone(),
+            &existing_feed,
+            new_article_ids,
+        );
+    }
+
     Ok(FeedWithUnreadCount {
         feed: updated_feed,
         unread_count,
@@ -102,7 +127,7 @@ pub async fn refresh_feed(id: String, storage: State<'_, Arc<Storage>>) -> Comma
 }
 
 #[tauri::command]
-pub async fn refresh_all_feeds(storage: State<'_, Arc<Storage>>) -> CommandResult<Vec<FeedWithUnreadCount>> {
+pub async fn refresh_all_feeds(storage: State<'_, Arc<Storage>>, app_state: State<'_, AppState>) -> CommandResult<Vec<FeedWithUnreadCount>> {
     let feeds = storage.get_all_feeds()
         .map_err(|e| format!("Failed to get feeds: {}", e))?;
 
@@ -112,11 +137,31 @@ pub async fn refresh_all_feeds(storage: State<'_, Arc<Storage>>) -> CommandResul
         let feed_id = feed.id.clone();
         let feed_url = feed.url.clone();
 
-        if let Ok((_feed, articles)) = fetch_feed(&feed_url) {
+        let existing_links: std::collections::HashSet<String> = storage.get_articles(Some(&feed_id), None)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|a| a.link)
+            .collect();
+
+        if let Ok((_fetched, articles)) = fetch_feed(&feed_url) {
+            let mut new_article_ids = Vec::new();
             for article in &articles {
                 let mut article = article.clone();
                 article.feed_id = feed_id.clone();
+                let is_new = !existing_links.contains(&article.link);
+                if is_new {
+                    new_article_ids.push(article.id.clone());
+                }
                 let _ = storage.add_article(&article);
+            }
+
+            if !new_article_ids.is_empty() {
+                process_new_articles_background(
+                    storage.inner().clone(),
+                    app_state.data_dir.clone(),
+                    &feed,
+                    new_article_ids,
+                );
             }
         }
 
@@ -381,8 +426,20 @@ pub async fn fetch_full_content(id: String, storage: State<'_, Arc<Storage>>) ->
         .map_err(|e| format!("Failed to get article: {}", e))?
         .ok_or_else(|| "Article not found".to_string())?;
 
+    info!("[FullContent] Fetching for article \"{}\" ({})", article.title, article.link);
+    let start = std::time::Instant::now();
+
     let content = fetch_and_extract_content(&article.link)
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| {
+            warn!("[FullContent] Failed for \"{}\": {}", article.title, e);
+            e.to_string()
+        })?;
+
+    info!(
+        "[FullContent] Done in {:.1}s, content_len={}",
+        start.elapsed().as_secs_f64(),
+        content.len()
+    );
 
     storage.update_article_full_content(&id, &content)
         .map_err(|e| format!("Failed to save content: {}", e))?;
@@ -403,12 +460,16 @@ pub async fn generate_article_summary(
         .map_err(|e| format!("Failed to get article: {}", e))?
         .ok_or_else(|| "Article not found".to_string())?;
 
+    info!("[AISummary] Generating for article \"{}\"", article.title);
+
     let settings = match get_store_value("ai_settings".to_string(), app_state).await {
         Ok(Some(value)) => serde_json::from_value::<AiSettings>(value)
             .map_err(|e| format!("Failed to parse AI settings: {}", e))?,
         Ok(None) => AiSettings::default(),
         Err(e) => return Err(e),
     };
+
+    info!("[AISummary] Using model={}, endpoint={}", settings.model, settings.api_endpoint);
 
     let content = article
         .full_content
@@ -418,12 +479,23 @@ pub async fn generate_article_summary(
         .ok_or_else(|| "Article content is empty".to_string())?
         .to_string();
 
+    let content_source = if article.full_content.is_some() { "full_content" } else if article.content.is_some() { "content" } else { "description" };
+    info!("[AISummary] Content source={}, len={}", content_source, content.len());
+
     let settings_for_task = settings.clone();
+    let start = std::time::Instant::now();
     let summary = tauri::async_runtime::spawn_blocking(move || {
         ai_summarizer::generate_summary(&content, &settings_for_task)
     })
     .await
     .map_err(|e| format!("AI summary task join error: {}", e))??;
+
+    info!(
+        "[AISummary] Done for \"{}\" in {:.1}s, summary_len={}",
+        article.title,
+        start.elapsed().as_secs_f64(),
+        summary.len()
+    );
 
     storage
         .update_article_ai_summary(&id, &summary)
@@ -464,12 +536,25 @@ pub async fn translate_article(
 
     let lang = target_lang.unwrap_or_else(|| settings.language.clone());
 
+    info!(
+        "[AITranslate] Translating \"{}\" to {}, model={}, content_len={}",
+        article.title, lang, settings.model, content.len()
+    );
+
     let settings_for_task = settings.clone();
+    let start = std::time::Instant::now();
     let translation = tauri::async_runtime::spawn_blocking(move || {
         ai_translator::translate_content(&content, &lang, &settings_for_task)
     })
     .await
     .map_err(|e| format!("Translation task join error: {}", e))??;
+
+    info!(
+        "[AITranslate] Done for \"{}\" in {:.1}s, output_len={}",
+        article.title,
+        start.elapsed().as_secs_f64(),
+        translation.len()
+    );
 
     storage
         .update_article_ai_translation(&id, &translation)
@@ -479,4 +564,128 @@ pub async fn translate_article(
         .get_article(&id)
         .map_err(|e| format!("Failed to get updated article: {}", e))?
         .ok_or_else(|| "Article not found after translation update".to_string())
+}
+
+pub fn process_new_articles_background(
+    storage: Arc<Storage>,
+    data_dir: PathBuf,
+    feed: &Feed,
+    new_article_ids: Vec<String>,
+) {
+    if new_article_ids.is_empty() {
+        return;
+    }
+
+    let use_full_content = feed.use_full_content;
+    let use_ai_summary = feed.use_ai_summary;
+
+    if !use_full_content && !use_ai_summary {
+        return;
+    }
+
+    let feed_title = feed.title.clone();
+    let storage = storage.clone();
+    let data_dir = data_dir.clone();
+
+    tauri::async_runtime::spawn(async move {
+        for article_id in &new_article_ids {
+            let article = match storage.get_article(article_id) {
+                Ok(Some(a)) => a,
+                _ => continue,
+            };
+
+            if use_full_content && article.full_content.is_none() {
+                let link = article.link.clone();
+                let result = tauri::async_runtime::spawn_blocking(move || {
+                    fetch_and_extract_content(&link)
+                }).await;
+
+                match result {
+                    Ok(Ok(content)) => {
+                        if let Err(e) = storage.update_article_full_content(article_id, &content) {
+                            warn!("[bg] Failed to save full content for {}: {}", article_id, e);
+                        } else {
+                            info!("[bg] Fetched full content for article in {}", feed_title);
+                        }
+                    }
+                    Ok(Err(e)) => {
+                        warn!("[bg] Failed to fetch full content for {}: {}", article_id, e);
+                    }
+                    Err(e) => {
+                        warn!("[bg] Full content task panicked for {}: {}", article_id, e);
+                    }
+                }
+            }
+
+            if use_ai_summary && article.ai_summary.is_none() {
+                let current = match storage.get_article(article_id) {
+                    Ok(Some(a)) => a,
+                    _ => continue,
+                };
+
+                let content = current
+                    .full_content
+                    .as_deref()
+                    .or(current.content.as_deref())
+                    .or(current.description.as_deref());
+
+                if let Some(text) = content {
+                    let ai_settings = load_ai_settings_from_store(&data_dir);
+                    let text = text.to_string();
+                    let settings_clone = ai_settings.clone();
+                    match tauri::async_runtime::spawn_blocking(move || {
+                        ai_summarizer::generate_summary(&text, &settings_clone)
+                    })
+                    .await
+                    {
+                        Ok(Ok(summary)) => {
+                            if let Err(e) = storage.update_article_ai_summary(article_id, &summary) {
+                                warn!("[bg] Failed to save AI summary for {}: {}", article_id, e);
+                            } else {
+                                info!("[bg] Generated AI summary for article in {}", feed_title);
+                            }
+                        }
+                        Ok(Err(e)) => {
+                            warn!("[bg] AI summary generation failed for {}: {}", article_id, e);
+                        }
+                        Err(e) => {
+                            warn!("[bg] AI summary task panicked for {}: {}", article_id, e);
+                        }
+                    }
+                }
+            }
+        }
+        info!("[bg] Finished processing {} new articles for {}", new_article_ids.len(), feed_title);
+    });
+}
+
+fn load_ai_settings_from_store(data_dir: &PathBuf) -> AiSettings {
+    use std::collections::HashMap;
+    use std::fs::File;
+    use std::io::BufReader;
+
+    let store_path = data_dir.join("store.json");
+    if !store_path.exists() {
+        return AiSettings::default();
+    }
+
+    let file = match File::open(&store_path) {
+        Ok(f) => f,
+        Err(_) => return AiSettings::default(),
+    };
+
+    if file.lock_shared().is_err() {
+        return AiSettings::default();
+    }
+
+    let reader = BufReader::new(file);
+    let store: HashMap<String, serde_json::Value> = match serde_json::from_reader(reader) {
+        Ok(s) => s,
+        Err(_) => return AiSettings::default(),
+    };
+
+    match store.get("ai_settings") {
+        Some(value) => serde_json::from_value(value.clone()).unwrap_or_default(),
+        None => AiSettings::default(),
+    }
 }

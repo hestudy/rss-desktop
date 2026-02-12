@@ -213,7 +213,7 @@ impl BackgroundScheduler {
     async fn refresh_all_feeds(
         storage: &Arc<Storage>,
         event_tx: broadcast::Sender<NewArticlesEvent>,
-        _data_dir: &PathBuf,
+        data_dir: &PathBuf,
     ) -> std::result::Result<(), String> {
         let feeds = storage.get_all_feeds()
             .map_err(|e| format!("Failed to get feeds: {}", e))?;
@@ -223,7 +223,7 @@ impl BackgroundScheduler {
             let feed_url = feed.url.clone();
             let feed_title = feed.title.clone();
 
-            let existing_links: Vec<String> = storage.get_articles(Some(&feed_id), None)
+            let existing_links: std::collections::HashSet<String> = storage.get_articles(Some(&feed_id), None)
                 .unwrap_or_default()
                 .into_iter()
                 .map(|a| a.link)
@@ -232,9 +232,14 @@ impl BackgroundScheduler {
             let (_feed, articles) = fetch_feed(&feed_url)
                 .map_err(|e| format!("Failed to fetch {}: {}", feed_title, e))?;
 
-            let new_count = articles.iter()
-                .filter(|a| !existing_links.contains(&a.link))
-                .count();
+            let mut new_article_ids = Vec::new();
+            for article in &articles {
+                if !existing_links.contains(&article.link) {
+                    new_article_ids.push(article.id.clone());
+                }
+            }
+
+            let new_count = new_article_ids.len();
 
             if new_count > 0 {
                 for article in &articles {
@@ -264,6 +269,13 @@ impl BackgroundScheduler {
                 };
 
                 let _ = event_tx.send(event);
+
+                crate::commands::process_new_articles_background(
+                    storage.clone(),
+                    data_dir.clone(),
+                    &feed,
+                    new_article_ids,
+                );
             }
         }
 

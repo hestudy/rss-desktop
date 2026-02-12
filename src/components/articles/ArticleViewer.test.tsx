@@ -4,6 +4,7 @@ import { ArticleViewer } from './ArticleViewer'
 import { DEFAULT_READER_SETTINGS } from '../../types'
 import type { Article, ReaderSettings } from '../../types'
 import { RssApi } from '../../lib/api'
+import { clearAllCache, loadArticleViewState } from '../../lib/articleViewStateCache'
 
 // Mock lucide-react icons
 vi.mock('lucide-react', () => ({
@@ -19,6 +20,7 @@ vi.mock('lucide-react', () => ({
   Loader2: () => 'Loader2',
   ArrowLeftRight: () => 'ArrowLeftRight',
   Sparkles: () => 'Sparkles',
+  Languages: () => 'Languages',
 }))
 
 // Mock DOMPurify
@@ -36,6 +38,8 @@ vi.mock('../../lib/api', () => ({
     openLink: vi.fn(),
     fetchFullContent: vi.fn(),
     generateSummary: vi.fn(),
+    translateArticle: vi.fn(),
+    getArticle: vi.fn().mockResolvedValue(null),
   },
 }))
 
@@ -114,6 +118,8 @@ const mockReaderSettings: ReaderSettings = DEFAULT_READER_SETTINGS
 describe('ArticleViewer', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    clearAllCache()
+    mockFeeds = [{ feed: { id: 'feed-1', use_full_content: false, use_ai_summary: false }, unread_count: 0 }]
   })
 
   it('应该渲染文章标题', () => {
@@ -600,5 +606,141 @@ describe('ArticleViewer', () => {
     })
 
     mockFeeds = [{ feed: { id: 'feed-1', use_full_content: false, use_ai_summary: false }, unread_count: 0 }]
+  })
+
+  describe('state cache on article switch', () => {
+    beforeEach(() => {
+      clearAllCache()
+    })
+
+    it('should save state to cache when switching to a different article', async () => {
+      const fetchedArticle: Article = {
+        ...mockArticle,
+        full_content: '<p>Fetched full content</p>',
+      }
+      vi.mocked(RssApi.fetchFullContent).mockResolvedValue(fetchedArticle)
+
+      const { rerender } = render(
+        <ArticleViewer
+          article={mockArticle}
+          articles={mockArticles}
+          readerSettings={mockReaderSettings}
+        />
+      )
+
+      const fetchButton = screen.getByTitle('抓取全文')
+      fireEvent.click(fetchButton)
+
+      await waitFor(() => {
+        expect(screen.getByText('Fetched full content')).toBeInTheDocument()
+      })
+
+      rerender(
+        <ArticleViewer
+          article={mockArticles[1]}
+          articles={mockArticles}
+          readerSettings={mockReaderSettings}
+        />
+      )
+
+      const cached = loadArticleViewState('article-1')
+      expect(cached).not.toBeNull()
+      expect(cached?.fetchedFullContent).toBe('<p>Fetched full content</p>')
+      expect(cached?.contentMode).toBe('fulltext')
+    })
+
+    it('should restore cached state when switching back to a previous article', async () => {
+      const fetchedArticle: Article = {
+        ...mockArticle,
+        full_content: '<p>Fetched full content</p>',
+      }
+      vi.mocked(RssApi.fetchFullContent).mockResolvedValue(fetchedArticle)
+
+      const { rerender } = render(
+        <ArticleViewer
+          article={mockArticle}
+          articles={mockArticles}
+          readerSettings={mockReaderSettings}
+        />
+      )
+
+      const fetchButton = screen.getByTitle('抓取全文')
+      fireEvent.click(fetchButton)
+
+      await waitFor(() => {
+        expect(screen.getByText('Fetched full content')).toBeInTheDocument()
+      })
+
+      rerender(
+        <ArticleViewer
+          article={mockArticles[1]}
+          articles={mockArticles}
+          readerSettings={mockReaderSettings}
+        />
+      )
+
+      vi.mocked(RssApi.fetchFullContent).mockClear()
+
+      rerender(
+        <ArticleViewer
+          article={mockArticle}
+          articles={mockArticles}
+          readerSettings={mockReaderSettings}
+        />
+      )
+
+      await waitFor(() => {
+        expect(screen.getByText('Fetched full content')).toBeInTheDocument()
+      })
+
+      expect(RssApi.fetchFullContent).not.toHaveBeenCalled()
+    })
+
+    it('should restore AI summary state when switching back', async () => {
+      const summarizedArticle: Article = {
+        ...mockArticle,
+        ai_summary: 'Cached AI summary',
+      }
+      vi.mocked(RssApi.generateSummary).mockResolvedValue(summarizedArticle)
+
+      const { rerender } = render(
+        <ArticleViewer
+          article={mockArticle}
+          articles={mockArticles}
+          readerSettings={mockReaderSettings}
+        />
+      )
+
+      const summaryButton = screen.getByTitle('生成 AI 摘要')
+      fireEvent.click(summaryButton)
+
+      await waitFor(() => {
+        expect(screen.getByText('Cached AI summary')).toBeInTheDocument()
+      })
+
+      rerender(
+        <ArticleViewer
+          article={mockArticles[1]}
+          articles={mockArticles}
+          readerSettings={mockReaderSettings}
+        />
+      )
+
+      vi.mocked(RssApi.generateSummary).mockClear()
+
+      rerender(
+        <ArticleViewer
+          article={mockArticle}
+          articles={mockArticles}
+          readerSettings={mockReaderSettings}
+        />
+      )
+
+      await waitFor(() => {
+        expect(screen.getByText('Cached AI summary')).toBeInTheDocument()
+      })
+
+      expect(RssApi.generateSummary).not.toHaveBeenCalled()
+    })
   })
 })

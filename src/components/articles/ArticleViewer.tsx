@@ -10,6 +10,7 @@ import { useReader } from '../../contexts/ReaderContext'
 import { useUnifiedSettings } from '../settings/UnifiedSettings'
 import { useTheme } from '../../contexts/ThemeContext'
 import { useRss } from '../../contexts/RssContext'
+import { saveArticleViewState, loadArticleViewState, createDefaultState } from '../../lib/articleViewStateCache'
 
 interface ArticleViewerProps {
   article: Article
@@ -40,24 +41,25 @@ export function ArticleViewer({
   const contentRef = useRef<HTMLDivElement>(null)
   const [isFavorite, setIsFavorite] = useState(article.favorite ?? false)
   const [scrollProgress, setScrollProgress] = useState(article.reading_progress ?? 0)
-  const [isFetchingContent, setIsFetchingContent] = useState(false)
-  const [fetchedFullContent, setFetchedFullContent] = useState<string | null>(null)
-  const [contentMode, setContentMode] = useState<'original' | 'fulltext'>(
-    article.full_content ? 'fulltext' : 'original'
-  )
-  const [fetchError, setFetchError] = useState<string | null>(null)
-  const hasAttemptedAutoFetch = useRef(false)
-  const hasAttemptedAutoSummary = useRef(false)
-  const isFullContentFetched = useRef(false)
-  
-  // AI Summary State
-  const [aiSummary, setAiSummary] = useState<string | null>(article.ai_summary ?? null)
-  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false)
-  const [summaryCollapsed, setSummaryCollapsed] = useState(false)
+  const currentArticleIdRef = useRef(article.id)
 
-  const [aiTranslation, setAiTranslation] = useState<string | null>(article.ai_translation ?? null)
-  const [isTranslating, setIsTranslating] = useState(false)
-  const [showTranslation, setShowTranslation] = useState(false)
+  const initialState = loadArticleViewState(article.id) ?? createDefaultState(article)
+
+  const [isFetchingContent, setIsFetchingContent] = useState(initialState.isFetchingContent)
+  const [fetchedFullContent, setFetchedFullContent] = useState<string | null>(initialState.fetchedFullContent)
+  const [contentMode, setContentMode] = useState<'original' | 'fulltext'>(initialState.contentMode)
+  const [fetchError, setFetchError] = useState<string | null>(initialState.fetchError)
+  const hasAttemptedAutoFetch = useRef(initialState.hasAttemptedAutoFetch)
+  const hasAttemptedAutoSummary = useRef(initialState.hasAttemptedAutoSummary)
+  const isFullContentFetched = useRef(initialState.isFullContentFetched)
+
+  const [aiSummary, setAiSummary] = useState<string | null>(initialState.aiSummary)
+  const [isGeneratingSummary, setIsGeneratingSummary] = useState(initialState.isGeneratingSummary)
+  const [summaryCollapsed, setSummaryCollapsed] = useState(initialState.summaryCollapsed)
+
+  const [aiTranslation, setAiTranslation] = useState<string | null>(initialState.aiTranslation)
+  const [isTranslating, setIsTranslating] = useState(initialState.isTranslating)
+  const [showTranslation, setShowTranslation] = useState(initialState.showTranslation)
 
   const { selectArticle } = useReader()
   const { openSettings } = useUnifiedSettings()
@@ -69,74 +71,124 @@ export function ArticleViewer({
   const feedUsesAiSummary = feedConfig?.feed.use_ai_summary ?? false
   const hasFullContent = !!(fetchedFullContent || article.full_content)
 
+  // 挂载时从数据库获取最新数据（后台预处理可能已完成）
   useEffect(() => {
-    hasAttemptedAutoFetch.current = false
-    hasAttemptedAutoSummary.current = false
-    isFullContentFetched.current = false
-    setFetchedFullContent(null)
-    setFetchError(null)
-    setContentMode(article.full_content ? 'fulltext' : 'original')
-    setAiSummary(article.ai_summary ?? null)
-    setSummaryCollapsed(false)
-    setAiTranslation(article.ai_translation ?? null)
-    setShowTranslation(false)
-  }, [article.id, article.full_content, article.ai_summary, article.ai_translation])
+    if (article.full_content && article.ai_summary) return
+    const targetId = article.id
+    RssApi.getArticle(targetId).then((latest) => {
+      if (!latest || currentArticleIdRef.current !== targetId) return
+      if (latest.full_content && !article.full_content && !fetchedFullContent) {
+        setFetchedFullContent(latest.full_content)
+        setContentMode('fulltext')
+        isFullContentFetched.current = true
+        hasAttemptedAutoFetch.current = true
+        updateArticleInList(latest)
+      }
+      if (latest.ai_summary && !article.ai_summary && !aiSummary) {
+        setAiSummary(latest.ai_summary)
+        hasAttemptedAutoSummary.current = true
+        updateArticleInList(latest)
+      }
+    }).catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // 组件卸载时保存状态到 cache（key 切换时触发）
+  useEffect(() => {
+    return () => {
+      saveArticleViewState(article.id, {
+        fetchedFullContent,
+        contentMode,
+        isFetchingContent,
+        aiSummary,
+        isGeneratingSummary,
+        summaryCollapsed,
+        aiTranslation,
+        isTranslating,
+        showTranslation,
+        fetchError,
+        hasAttemptedAutoFetch: hasAttemptedAutoFetch.current,
+        hasAttemptedAutoSummary: hasAttemptedAutoSummary.current,
+        isFullContentFetched: isFullContentFetched.current,
+      })
+    }
+  })
 
   useEffect(() => {
     if (feedUsesFullContent && !article.full_content && !fetchedFullContent && !hasAttemptedAutoFetch.current) {
+      const targetId = article.id
       hasAttemptedAutoFetch.current = true
       setIsFetchingContent(true)
       setFetchError(null)
-      RssApi.fetchFullContent(article.id)
+      RssApi.fetchFullContent(targetId)
         .then((updated) => {
+          if (currentArticleIdRef.current !== targetId) {
+            const cached = loadArticleViewState(targetId)
+            if (cached) {
+              cached.fetchedFullContent = updated.full_content ?? null
+              cached.contentMode = 'fulltext'
+              cached.isFetchingContent = false
+              cached.isFullContentFetched = true
+              saveArticleViewState(targetId, cached)
+            }
+            return
+          }
           setFetchedFullContent(updated.full_content ?? null)
           setContentMode('fulltext')
           updateArticleInList(updated)
           isFullContentFetched.current = true
         })
         .catch((err: unknown) => {
+          if (currentArticleIdRef.current !== targetId) return
           setFetchError(typeof err === 'string' ? err : err instanceof Error ? err.message : '抓取全文失败，请稍后重试')
         })
         .finally(() => {
-          setIsFetchingContent(false)
+          if (currentArticleIdRef.current === targetId) {
+            setIsFetchingContent(false)
+          }
         })
     }
   }, [article.id, article.full_content, feedUsesFullContent, fetchedFullContent, updateArticleInList])
 
   useEffect(() => {
     if (feedUsesAiSummary && !article.ai_summary && !aiSummary && !hasAttemptedAutoSummary.current) {
+      const targetId = article.id
       const shouldWaitForFullContent = feedUsesFullContent && !article.full_content && !fetchedFullContent
       
-      if (shouldWaitForFullContent) {
-        if (isFullContentFetched.current || fetchError) {
-          hasAttemptedAutoSummary.current = true
-          setIsGeneratingSummary(true)
-          RssApi.generateSummary(article.id)
-            .then((updated) => {
-              setAiSummary(updated.ai_summary ?? null)
-              updateArticleInList(updated)
-            })
-            .catch((err: unknown) => {
-              setFetchError(typeof err === 'string' ? err : err instanceof Error ? err.message : 'AI 摘要生成失败')
-            })
-            .finally(() => {
-              setIsGeneratingSummary(false)
-            })
-        }
-      } else {
+      const doGenerate = () => {
         hasAttemptedAutoSummary.current = true
         setIsGeneratingSummary(true)
-        RssApi.generateSummary(article.id)
+        RssApi.generateSummary(targetId)
           .then((updated) => {
+            if (currentArticleIdRef.current !== targetId) {
+              const cached = loadArticleViewState(targetId)
+              if (cached) {
+                cached.aiSummary = updated.ai_summary ?? null
+                cached.isGeneratingSummary = false
+                saveArticleViewState(targetId, cached)
+              }
+              return
+            }
             setAiSummary(updated.ai_summary ?? null)
             updateArticleInList(updated)
           })
           .catch((err: unknown) => {
+            if (currentArticleIdRef.current !== targetId) return
             setFetchError(typeof err === 'string' ? err : err instanceof Error ? err.message : 'AI 摘要生成失败')
           })
           .finally(() => {
-            setIsGeneratingSummary(false)
+            if (currentArticleIdRef.current === targetId) {
+              setIsGeneratingSummary(false)
+            }
           })
+      }
+
+      if (shouldWaitForFullContent) {
+        if (isFullContentFetched.current || fetchError) {
+          doGenerate()
+        }
+      } else {
+        doGenerate()
       }
     }
   }, [article.id, article.ai_summary, aiSummary, feedUsesAiSummary, feedUsesFullContent, article.full_content, fetchedFullContent, isFullContentFetched, fetchError, updateArticleInList])
@@ -152,30 +204,57 @@ export function ArticleViewer({
   }, [fetchError])
 
   const handleFetchFullContent = useCallback(async () => {
+    const targetId = article.id
     setIsFetchingContent(true)
     setFetchError(null)
     try {
-      const updated = await RssApi.fetchFullContent(article.id)
+      const updated = await RssApi.fetchFullContent(targetId)
+      if (currentArticleIdRef.current !== targetId) {
+        const cached = loadArticleViewState(targetId)
+        if (cached) {
+          cached.fetchedFullContent = updated.full_content ?? null
+          cached.contentMode = 'fulltext'
+          cached.isFetchingContent = false
+          saveArticleViewState(targetId, cached)
+        }
+        return
+      }
       setFetchedFullContent(updated.full_content ?? null)
       setContentMode('fulltext')
       updateArticleInList(updated)
     } catch (err: unknown) {
+      if (currentArticleIdRef.current !== targetId) return
       setFetchError(typeof err === 'string' ? err : err instanceof Error ? err.message : '抓取全文失败，请稍后重试')
     } finally {
-      setIsFetchingContent(false)
+      if (currentArticleIdRef.current === targetId) {
+        setIsFetchingContent(false)
+      }
     }
   }, [article.id, updateArticleInList])
 
   const handleGenerateSummary = useCallback(async () => {
+    const targetId = article.id
     setIsGeneratingSummary(true)
     try {
-      const updated = await RssApi.generateSummary(article.id)
+      const updated = await RssApi.generateSummary(targetId)
+      if (currentArticleIdRef.current !== targetId) {
+        const cached = loadArticleViewState(targetId)
+        if (cached) {
+          cached.aiSummary = updated.ai_summary ?? null
+          cached.isGeneratingSummary = false
+          saveArticleViewState(targetId, cached)
+        }
+        return
+      }
       setAiSummary(updated.ai_summary ?? null)
       updateArticleInList(updated)
     } catch (err: unknown) {
+      if (currentArticleIdRef.current !== targetId) return
       setFetchError(typeof err === 'string' ? err : err instanceof Error ? err.message : 'AI 摘要生成失败')
     } finally {
-      setIsGeneratingSummary(false)
+      if (currentArticleIdRef.current === targetId) {
+        setIsGeneratingSummary(false)
+      }
     }
   }, [article.id, updateArticleInList])
 
@@ -184,23 +263,39 @@ export function ArticleViewer({
       setShowTranslation(prev => !prev)
       return
     }
+    const targetId = article.id
     setIsTranslating(true)
     try {
       const needFullContent = feedUsesFullContent && !article.full_content && !fetchedFullContent
       if (needFullContent) {
-        const fetched = await RssApi.fetchFullContent(article.id)
-        setFetchedFullContent(fetched.full_content ?? null)
-        setContentMode('fulltext')
-        updateArticleInList(fetched)
+        const fetched = await RssApi.fetchFullContent(targetId)
+        if (currentArticleIdRef.current === targetId) {
+          setFetchedFullContent(fetched.full_content ?? null)
+          setContentMode('fulltext')
+          updateArticleInList(fetched)
+        }
       }
-      const updated = await RssApi.translateArticle(article.id)
+      const updated = await RssApi.translateArticle(targetId)
+      if (currentArticleIdRef.current !== targetId) {
+        const cached = loadArticleViewState(targetId)
+        if (cached) {
+          cached.aiTranslation = updated.ai_translation ?? null
+          cached.showTranslation = true
+          cached.isTranslating = false
+          saveArticleViewState(targetId, cached)
+        }
+        return
+      }
       setAiTranslation(updated.ai_translation ?? null)
       setShowTranslation(true)
       updateArticleInList(updated)
     } catch (err: unknown) {
+      if (currentArticleIdRef.current !== targetId) return
       setFetchError(typeof err === 'string' ? err : err instanceof Error ? err.message : 'AI 翻译失败')
     } finally {
-      setIsTranslating(false)
+      if (currentArticleIdRef.current === targetId) {
+        setIsTranslating(false)
+      }
     }
   }, [article.id, article.full_content, aiTranslation, feedUsesFullContent, fetchedFullContent, updateArticleInList])
 
