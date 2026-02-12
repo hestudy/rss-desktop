@@ -1,0 +1,121 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { QueueIndicator } from './QueueIndicator'
+import type { QueueStatusSnapshot } from '../../types'
+
+const emptySnapshot: QueueStatusSnapshot = {
+  pending_count: 0,
+  running_count: 0,
+  completed_count: 0,
+  failed_count: 0,
+  tasks: [],
+}
+
+const activeSnapshot: QueueStatusSnapshot = {
+  pending_count: 2,
+  running_count: 1,
+  completed_count: 0,
+  failed_count: 0,
+  tasks: [
+    {
+      id: 'task-1',
+      task_type: { type: 'ai_summary', article_id: 'art-1' },
+      priority: 'high',
+      status: { status: 'running' },
+      created_at: '2026-01-01T00:00:00Z',
+      started_at: '2026-01-01T00:00:01Z',
+      completed_at: null,
+      retries: 0,
+    },
+  ],
+}
+
+const mockCancelTask = vi.fn()
+const mockClearCompleted = vi.fn()
+
+let mockStatus: QueueStatusSnapshot | null = emptySnapshot
+let mockActiveCount = 0
+
+vi.mock('../../hooks/useQueueStatus', () => ({
+  useQueueStatus: () => ({
+    status: mockStatus,
+    activeCount: mockActiveCount,
+    cancelTask: mockCancelTask,
+    clearCompleted: mockClearCompleted,
+  }),
+}))
+
+vi.mock('lucide-react', () => ({
+  ListTodo: (props: Record<string, unknown>) => <svg data-testid="list-todo-icon" {...props} />,
+  FileText: (props: Record<string, unknown>) => <svg data-testid="file-text-icon" {...props} />,
+  Sparkles: (props: Record<string, unknown>) => <svg data-testid="sparkles-icon" {...props} />,
+  Languages: (props: Record<string, unknown>) => <svg data-testid="languages-icon" {...props} />,
+  X: (props: Record<string, unknown>) => <svg data-testid="x-icon" {...props} />,
+  Loader2: (props: Record<string, unknown>) => <svg data-testid="loader-icon" {...props} />,
+  AlertCircle: (props: Record<string, unknown>) => <svg data-testid="alert-icon" {...props} />,
+  CheckCircle2: (props: Record<string, unknown>) => <svg data-testid="check-icon" {...props} />,
+  Clock: (props: Record<string, unknown>) => <svg data-testid="clock-icon" {...props} />,
+  Trash2: (props: Record<string, unknown>) => <svg data-testid="trash-icon" {...props} />,
+}))
+
+describe('QueueIndicator', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockStatus = emptySnapshot
+    mockActiveCount = 0
+  })
+
+  describe('icon button', () => {
+    it('should always render the queue icon button', () => {
+      render(<QueueIndicator />)
+      expect(screen.getByRole('button', { name: '任务队列' })).toBeInTheDocument()
+    })
+  })
+
+  describe('badge', () => {
+    it('should not show badge when no active tasks', () => {
+      mockActiveCount = 0
+      render(<QueueIndicator />)
+      expect(screen.queryByTestId('queue-badge')).not.toBeInTheDocument()
+    })
+
+    it('should show badge with count when active tasks exist', () => {
+      mockActiveCount = 3
+      mockStatus = activeSnapshot
+      render(<QueueIndicator />)
+      const badge = screen.getByTestId('queue-badge')
+      expect(badge).toBeInTheDocument()
+      expect(badge).toHaveTextContent('3')
+    })
+  })
+
+  describe('popover toggle', () => {
+    it('should not show panel by default', () => {
+      render(<QueueIndicator />)
+      expect(screen.queryByText('暂无任务')).not.toBeInTheDocument()
+    })
+
+    it('should show panel when button is clicked', async () => {
+      render(<QueueIndicator />)
+      fireEvent.click(screen.getByRole('button', { name: '任务队列' }))
+      await waitFor(() => {
+        expect(screen.getByText('暂无任务')).toBeInTheDocument()
+      })
+    })
+
+    it('should hide panel when button is clicked again', async () => {
+      render(<QueueIndicator />)
+      const btn = screen.getByRole('button', { name: '任务队列' })
+
+      fireEvent.click(btn)
+      await waitFor(() => {
+        expect(screen.getByText('暂无任务')).toBeInTheDocument()
+      })
+
+      fireEvent.click(btn)
+      await waitFor(() => {
+        expect(screen.queryByText('暂无任务')).not.toBeInTheDocument()
+      })
+    })
+  })
+})

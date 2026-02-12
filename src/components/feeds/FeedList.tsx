@@ -10,6 +10,7 @@ import { useUnifiedSettings } from '../settings/UnifiedSettings'
 import { useRss } from '../../contexts/RssContext'
 import { SidebarNav, type NavItem } from '../sidebar/SidebarNav'
 import { SectionHeader } from './SectionHeader'
+import { QueueIndicator } from '../queue/QueueIndicator'
 
 export function FeedList() {
   const {
@@ -211,7 +212,7 @@ export function FeedList() {
           </div>
         </ScrollArea>
 
-        {/* 底部固定区域 - 刷新 + 设置 */}
+        {/* 底部固定区域 - 刷新 + 队列 + 设置 */}
         <div className="p-3 border-t border-sidebar-border flex items-center justify-between">
           <Button
             size="sm"
@@ -223,6 +224,7 @@ export function FeedList() {
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
           </Button>
+          <QueueIndicator />
           <Button
             size="sm"
             variant="ghost"

@@ -62,6 +62,10 @@ vi.mock('lucide-react', () => ({
   Pencil: (props: Record<string, unknown>) => <svg data-testid="pencil-icon" {...props} />,
 }))
 
+vi.mock('../queue/QueueIndicator', () => ({
+  QueueIndicator: () => <div data-testid="queue-indicator" />,
+}))
+
 describe('FeedList', () => {
   describe('feed action buttons hover behavior', () => {
     it('renders action buttons with absolute positioning and hidden by default', () => {
@@ -112,6 +116,13 @@ describe('FeedList', () => {
         const editButton = container.querySelector('[data-testid="pencil-icon"]')
         expect(editButton).toBeTruthy()
       })
+    })
+  })
+
+  describe('queue indicator', () => {
+    it('renders QueueIndicator in the bottom toolbar', () => {
+      render(<FeedList />)
+      expect(screen.getByTestId('queue-indicator')).toBeInTheDocument()
     })
   })
 })
