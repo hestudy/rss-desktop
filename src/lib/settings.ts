@@ -181,58 +181,6 @@ export async function updateAiSettings(settings: Partial<AiSettings>): Promise<A
   return AiSettingsSchema.parse(result)
 }
 
-// ============= 辅助函数 =============
-
-/**
- * 将轮询间隔转换为分钟数
- */
-export function pollIntervalToMinutes(interval: PollInterval): number {
-  const map: Record<PollInterval, number> = {
-    '5m': 5,
-    '15m': 15,
-    '30m': 30,
-    '1h': 60,
-    '2h': 120,
-    '6h': 360,
-    '12h': 720,
-    '24h': 1440,
-  }
-  return map[interval]
-}
-
-/**
- * 格式化轮询间隔为人类可读文本
- */
-export function formatPollInterval(interval: PollInterval): string {
-  const minutes = pollIntervalToMinutes(interval)
-
-  if (minutes < 60) {
-    return `${minutes} 分钟`
-  }
-
-  const hours = minutes / 60
-  if (hours === 1) {
-    return '1 小时'
-  }
-
-  return `${hours} 小时`
-}
-
-/**
- * 计算下次运行时间
- */
-export function calculateNextRunTime(
-  lastRun: Date | string | null,
-  interval: PollInterval
-): Date | null {
-  if (!lastRun) return null
-
-  const base = typeof lastRun === 'string' ? new Date(lastRun) : lastRun
-  const minutes = pollIntervalToMinutes(interval)
-
-  return new Date(base.getTime() + minutes * 60 * 1000)
-}
-
 /**
  * 获取可用的轮询间隔选项
  */

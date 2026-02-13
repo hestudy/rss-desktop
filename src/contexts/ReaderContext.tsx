@@ -3,8 +3,6 @@ import type { ReaderSettings } from '../types'
 import { DEFAULT_READER_SETTINGS, ReaderSettingsSchema } from '../types'
 import { READER_STORAGE_KEY } from '../lib/constants'
 
-export { DEFAULT_READER_SETTINGS } from '../types'
-
 interface ReaderContextType {
   selectedArticleId: string | null
   readerSettings: ReaderSettings

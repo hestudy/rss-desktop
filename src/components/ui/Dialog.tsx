@@ -49,21 +49,6 @@ export function Dialog({ open: controlledOpen, onOpenChange, children }: DialogP
   )
 }
 
-export function DialogTrigger({ children, onClick }: { children: ReactNode; onClick?: () => void }) {
-  const { open } = useDialog()
-
-  return (
-    <button
-      onClick={() => {
-        open()
-        onClick?.()
-      }}
-    >
-      {children}
-    </button>
-  )
-}
-
 export function DialogContent({
   children,
   className,
@@ -104,14 +89,3 @@ export function DialogContent({
   )
 }
 
-export function DialogHeader({ children }: { children: ReactNode }) {
-  return <div className="mb-4">{children}</div>
-}
-
-export function DialogTitle({ children }: { children: ReactNode }) {
-  return <h2 className="text-lg font-semibold">{children}</h2>
-}
-
-export function DialogFooter({ children }: { children: ReactNode }) {
-  return <div className="flex justify-end gap-2 mt-4">{children}</div>
-}
