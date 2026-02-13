@@ -18,6 +18,7 @@ interface RssContextType {
   refreshAllFeeds: () => Promise<void>
   silentRefreshAll: () => Promise<void>
   selectFeed: (id: string | null) => void
+  selectFeedAndLoad: (feedId: string) => Promise<void>
   selectFavorites: () => void
   markArticleRead: (id: string, read: boolean) => Promise<void>
   markAllRead: (feedId: string) => Promise<void>
@@ -182,8 +183,13 @@ export function RssProvider({ children }: RssProviderProps) {
   const selectFeed = useCallback((id: string | null) => {
     setSelectedFeedId(id)
     setShowFavoritesOnly(false)
-    // 加载文章：指定订阅时加载该订阅的文章，否则加载全部文章
     loadArticles(id || undefined)
+  }, [loadArticles])
+
+  const selectFeedAndLoad = useCallback(async (feedId: string) => {
+    setSelectedFeedId(feedId)
+    setShowFavoritesOnly(false)
+    await loadArticles(feedId)
   }, [loadArticles])
 
   const selectFavorites = useCallback(async () => {
@@ -274,6 +280,7 @@ export function RssProvider({ children }: RssProviderProps) {
     refreshAllFeeds,
     silentRefreshAll,
     selectFeed,
+    selectFeedAndLoad,
     selectFavorites,
     markArticleRead,
     markAllRead,
