@@ -20,6 +20,7 @@ const baseFeed = {
   updated_at: '2025-01-01T00:00:00Z',
   use_full_content: false,
   use_ai_summary: false,
+  use_ai_translation: false,
 }
 
 describe('EditFeedDialog', () => {
@@ -98,6 +99,7 @@ describe('EditFeedDialog', () => {
         undefined,
         undefined,
         undefined,
+        undefined,
       )
     })
     expect(onClose).toHaveBeenCalled()
@@ -120,6 +122,7 @@ describe('EditFeedDialog', () => {
         'feed-1',
         undefined,
         'https://new-url.com/rss',
+        undefined,
         undefined,
         undefined,
       )
@@ -147,6 +150,7 @@ describe('EditFeedDialog', () => {
         'feed-1',
         'New Title',
         'https://new.com/feed',
+        undefined,
         undefined,
         undefined,
       )
@@ -213,6 +217,7 @@ describe('EditFeedDialog', () => {
         undefined,
         true,
         undefined,
+        undefined,
       )
     })
     expect(onClose).toHaveBeenCalled()
@@ -242,6 +247,7 @@ describe('EditFeedDialog', () => {
         undefined,
         undefined,
         true,
+        undefined,
       )
     })
     expect(onClose).toHaveBeenCalled()
@@ -269,6 +275,7 @@ describe('EditFeedDialog', () => {
         undefined,
         true,
         true,
+        undefined,
       )
     })
     expect(onClose).toHaveBeenCalled()

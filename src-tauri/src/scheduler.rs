@@ -1,11 +1,12 @@
-use crate::settings::{AppSettings, PollInterval};
+use crate::settings::AppSettings;
 use chrono::{DateTime, Duration, Utc};
-use std::time::Duration as StdDuration;
 
 // ============= 测试模块 (TDD: 先写测试) =============
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::PollInterval;
+    use std::time::Duration as StdDuration;
 
     // 测试: 计算下次运行时间
     #[test]
@@ -21,7 +22,10 @@ mod tests {
 
         // 允许 1 秒误差
         let diff = (next - expected).num_seconds().abs();
-        assert!(diff <= 1, "Expected next run time to be ~30 minutes from now");
+        assert!(
+            diff <= 1,
+            "Expected next run time to be ~30 minutes from now"
+        );
     }
 
     // 测试: 各种轮询间隔的下次运行时间
@@ -114,10 +118,7 @@ mod tests {
     #[test]
     fn test_detect_new_articles() {
         // 模拟场景: 现有文章和新增文章
-        let existing_ids = vec![
-            "article1".to_string(),
-            "article2".to_string(),
-        ];
+        let existing_ids = vec!["article1".to_string(), "article2".to_string()];
 
         let new_articles = vec![
             "article1".to_string(), // 已存在
@@ -143,7 +144,10 @@ mod tests {
         let new_articles = vec!["article1".to_string(), "article2".to_string()];
 
         let new_count = count_new_articles(&existing_ids, &new_articles);
-        assert_eq!(new_count, 2, "All articles are new when existing list is empty");
+        assert_eq!(
+            new_count, 2,
+            "All articles are new when existing list is empty"
+        );
     }
 
     // 测试: 通知聚合限制

@@ -449,6 +449,7 @@ mod tests {
             updated_at: Utc::now(),
             use_full_content: false,
             use_ai_summary: false,
+            use_ai_translation: false,
         }
     }
 

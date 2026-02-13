@@ -65,6 +65,7 @@ describe('AddFeedDialog', () => {
         'https://example.com/feed.xml',
         false,
         false,
+        false,
       )
     })
     expect(onClose).toHaveBeenCalled()
@@ -94,6 +95,7 @@ describe('AddFeedDialog', () => {
       expect(mockAddFeed).toHaveBeenCalledWith(
         'https://example.com/feed.xml',
         true,
+        false,
         false,
       )
     })
@@ -125,6 +127,7 @@ describe('AddFeedDialog', () => {
         'https://example.com/feed.xml',
         false,
         true,
+        false,
       )
     })
   })
@@ -152,6 +155,7 @@ describe('AddFeedDialog', () => {
         'https://example.com/feed.xml',
         true,
         true,
+        false,
       )
     })
   })
