@@ -5,6 +5,7 @@ export interface QueuePanelProps {
   status: QueueStatusSnapshot | null
   onCancelTask: (taskId: string) => void
   onClearCompleted: () => void
+  onTaskClick?: (task: QueueTask) => void
 }
 
 const STATUS_ORDER: Record<string, number> = {
@@ -58,9 +59,11 @@ function TaskStatusIcon({ task }: { task: QueueTask }) {
 function TaskItem({
   task,
   onCancel,
+  onTaskClick,
 }: {
   task: QueueTask
   onCancel: (taskId: string) => void
+  onTaskClick?: (task: QueueTask) => void
 }) {
   const status = getStatusString(task)
   const canCancel = status === 'pending' || status === 'running'
@@ -72,7 +75,8 @@ function TaskItem({
     <div
       data-testid="queue-task-item"
       data-task-id={task.id}
-      className="flex items-start gap-2 px-3 py-2 rounded-md hover:bg-accent/50 transition-colors"
+      onClick={() => onTaskClick?.(task)}
+      className="flex items-start gap-2 px-3 py-2 rounded-md hover:bg-accent/50 transition-colors cursor-pointer"
     >
       <div className="mt-0.5 flex-shrink-0">
         <TaskStatusIcon task={task} />
@@ -89,7 +93,10 @@ function TaskItem({
       {canCancel && (
         <button
           aria-label="取消任务"
-          onClick={() => onCancel(task.id)}
+          onClick={(e) => {
+            e.stopPropagation()
+            onCancel(task.id)
+          }}
           className="flex-shrink-0 p-0.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
         >
           <X className="w-3.5 h-3.5" />
@@ -99,7 +106,7 @@ function TaskItem({
   )
 }
 
-export function QueuePanel({ status, onCancelTask, onClearCompleted }: QueuePanelProps) {
+export function QueuePanel({ status, onCancelTask, onClearCompleted, onTaskClick }: QueuePanelProps) {
   if (!status || status.tasks.length === 0) {
     return (
       <div className="p-4 text-center text-sm text-muted-foreground">
@@ -115,7 +122,7 @@ export function QueuePanel({ status, onCancelTask, onClearCompleted }: QueuePane
     <div className="w-72">
       <div className="max-h-64 overflow-y-auto py-1">
         {sorted.map(task => (
-          <TaskItem key={task.id} task={task} onCancel={onCancelTask} />
+          <TaskItem key={task.id} task={task} onCancel={onCancelTask} onTaskClick={onTaskClick} />
         ))}
       </div>
       {hasCompleted && (

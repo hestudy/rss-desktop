@@ -247,4 +247,49 @@ describe('QueuePanel', () => {
       expect(items[3]).toHaveAttribute('data-task-id', 'completed-1')
     })
   })
+
+  describe('task click', () => {
+    it('should call onTaskClick when task item is clicked', () => {
+      const onTaskClick = vi.fn()
+      const task = makeTask({ id: 't1', status: { status: 'pending' } })
+      const status: QueueStatusSnapshot = {
+        ...emptySnapshot,
+        pending_count: 1,
+        tasks: [task],
+      }
+      render(<QueuePanel {...defaultProps} status={status} onTaskClick={onTaskClick} />)
+
+      const taskItem = screen.getByTestId('queue-task-item')
+      fireEvent.click(taskItem)
+      expect(onTaskClick).toHaveBeenCalledWith(task)
+    })
+
+    it('should not call onTaskClick when cancel button is clicked', () => {
+      const onTaskClick = vi.fn()
+      const onCancelTask = vi.fn()
+      const status: QueueStatusSnapshot = {
+        ...emptySnapshot,
+        pending_count: 1,
+        tasks: [makeTask({ id: 't1', status: { status: 'pending' } })],
+      }
+      render(<QueuePanel {...defaultProps} status={status} onTaskClick={onTaskClick} onCancelTask={onCancelTask} />)
+
+      const cancelBtn = screen.getByRole('button', { name: '取消任务' })
+      fireEvent.click(cancelBtn)
+      expect(onCancelTask).toHaveBeenCalledWith('t1')
+      expect(onTaskClick).not.toHaveBeenCalled()
+    })
+
+    it('should have cursor-pointer class on task item', () => {
+      const status: QueueStatusSnapshot = {
+        ...emptySnapshot,
+        pending_count: 1,
+        tasks: [makeTask({ id: 't1', status: { status: 'pending' } })],
+      }
+      render(<QueuePanel {...defaultProps} status={status} />)
+
+      const taskItem = screen.getByTestId('queue-task-item')
+      expect(taskItem).toHaveClass('cursor-pointer')
+    })
+  })
 })
