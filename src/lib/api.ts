@@ -6,6 +6,7 @@ import type {
   GetArticlesParams,
   QueueStatusSnapshot,
   QueueTaskType,
+  FeedLog,
 } from '../types'
 
 /**
@@ -167,5 +168,13 @@ export class RssApi {
 
   static async queueClearCompleted(): Promise<number> {
     return await invoke<number>('queue_clear_completed')
+  }
+
+  static async getFeedLogs(feedId: string, limit?: number): Promise<FeedLog[]> {
+    return await invoke<FeedLog[]>('get_feed_logs', { feedId, limit })
+  }
+
+  static async getAllFeedLogs(limit?: number): Promise<FeedLog[]> {
+    return await invoke<FeedLog[]>('get_all_feed_logs', { limit })
   }
 }

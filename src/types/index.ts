@@ -157,6 +157,23 @@ export interface FeedRefreshProgressEvent {
   error: string | null
 }
 
+export interface LogArticleSummary {
+  title: string
+  link: string
+}
+
+export interface FeedLog {
+  id: string
+  feed_id: string
+  feed_title: string
+  timestamp: string
+  success: boolean
+  new_article_count: number
+  new_articles: LogArticleSummary[]
+  error: string | null
+  duration_ms: number
+}
+
 export interface RefreshProgress {
   isRefreshing: boolean
   current: number

@@ -1,5 +1,6 @@
 use crate::settings::{AppSettings, SchedulerState};
 use crate::storage::Storage;
+use crate::models::FeedLog;
 use crate::scheduler::{calculate_next_run_time, calculate_retry_backoff};
 use crate::task_queue::TaskQueue;
 use chrono::Utc;
@@ -240,6 +241,7 @@ impl BackgroundScheduler {
                 let feed_id = feed.id.clone();
                 let feed_title = feed.title.clone();
 
+                let start_time = std::time::Instant::now();
                 match crate::commands::process_feed_refresh(
                     &feed,
                     &storage,
@@ -271,6 +273,16 @@ impl BackgroundScheduler {
                         }
                     }
                     Err(e) => {
+                        // 记录失败日志
+                        let error_log = FeedLog::failure(
+                            feed_id.clone(),
+                            feed_title.clone(),
+                            e.clone(),
+                            start_time.elapsed().as_millis() as u64,
+                        );
+                        if let Err(log_err) = storage.add_feed_log(&error_log) {
+                            warn!("[scheduler] Failed to write error log: {}", log_err);
+                        }
                         warn!("[scheduler] Failed to refresh {}: {}", feed_title, e);
                     }
                 }

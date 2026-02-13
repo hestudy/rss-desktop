@@ -1,4 +1,4 @@
-use crate::models::{Feed, Article, FeedWithUnreadCount};
+use crate::models::{Feed, Article, FeedWithUnreadCount, FeedLog, LogArticleSummary};
 use crate::fetcher::fetch_feed;
 use crate::content_extractor::fetch_and_extract_content;
 use crate::ai_summarizer;
@@ -52,6 +52,7 @@ pub async fn process_feed_refresh(
     data_dir: &PathBuf,
     queue: Option<&Arc<TaskQueue>>,
 ) -> Result<(Feed, usize, usize), String> {
+    let start_time = std::time::Instant::now();
     let feed_id = feed.id.clone();
     let feed_url = feed.url.clone();
 
@@ -71,12 +72,17 @@ pub async fn process_feed_refresh(
     .map_err(|e| format!("Failed to fetch feed: {}", e))?;
 
     let mut new_article_ids = Vec::new();
+    let mut new_article_summaries = Vec::new();
     for article in &articles {
         let mut article = article.clone();
         article.feed_id = feed_id.clone();
         let is_new = !existing_links.contains(&article.link);
         if is_new {
             new_article_ids.push(article.id.clone());
+            new_article_summaries.push(LogArticleSummary {
+                title: article.title.clone(),
+                link: article.link.clone(),
+            });
         }
         storage
             .add_article(&article)
@@ -92,6 +98,17 @@ pub async fn process_feed_refresh(
         .map_err(|e| format!("Failed to update feed: {}", e))?;
 
     let unread_count = storage.get_unread_count(&feed_id).unwrap_or(0);
+
+    // 记录刷新日志
+    let log = FeedLog::success(
+        feed_id.clone(),
+        feed.title.clone(),
+        new_article_summaries,
+        start_time.elapsed().as_millis() as u64,
+    );
+    if let Err(e) = storage.add_feed_log(&log) {
+        warn!("Failed to write feed log: {}", e);
+    }
 
     if !new_article_ids.is_empty() {
         let queue_clone = queue.cloned();
@@ -229,6 +246,7 @@ pub async fn refresh_all_feeds(
                     completed_count.load(std::sync::atomic::Ordering::Relaxed), total, None,
                 ));
 
+                let start_time = std::time::Instant::now();
                 match process_feed_refresh(&feed, &storage, &data_dir, Some(&queue)).await {
                     Ok((updated_feed, new_count, unread_count)) => {
                         let done = completed_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
@@ -244,6 +262,17 @@ pub async fn refresh_all_feeds(
                         ));
                     }
                     Err(e) => {
+                        // 记录失败日志
+                        let error_log = FeedLog::failure(
+                            feed_id.clone(),
+                            feed_title.clone(),
+                            e.clone(),
+                            start_time.elapsed().as_millis() as u64,
+                        );
+                        if let Err(log_err) = storage.add_feed_log(&error_log) {
+                            warn!("[refresh_all] Failed to write error log: {}", log_err);
+                        }
+
                         let done = completed_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
                         warn!("[refresh_all] Failed to refresh {}: {}", feed_title, e);
                         let _ = app_handle.emit("feed-refresh-progress", FeedRefreshProgressEvent::new(
@@ -676,6 +705,22 @@ pub async fn translate_article(
         .get_article(&id)
         .map_err(|e| format!("Failed to get updated article: {}", e))?
         .ok_or_else(|| "Article not found after translation update".to_string())
+}
+
+/// 获取订阅刷新日志
+#[tauri::command]
+pub async fn get_feed_logs(feed_id: String, limit: Option<usize>, storage: State<'_, Arc<Storage>>) -> CommandResult<Vec<FeedLog>> {
+    let limit = limit.map(|l| l.min(500));
+    storage.get_feed_logs(&feed_id, limit)
+        .map_err(|e| format!("Failed to get feed logs: {}", e))
+}
+
+/// 获取所有订阅刷新日志
+#[tauri::command]
+pub async fn get_all_feed_logs(limit: Option<usize>, storage: State<'_, Arc<Storage>>) -> CommandResult<Vec<FeedLog>> {
+    let limit = limit.map(|l| l.min(500));
+    storage.get_all_feed_logs(limit)
+        .map_err(|e| format!("Failed to get all feed logs: {}", e))
 }
 
 pub fn process_new_articles_background(
