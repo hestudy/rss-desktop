@@ -62,6 +62,12 @@ export function QueueIndicator() {
 
     function handleClickOutside(e: MouseEvent) {
       const target = e.target as Node
+      
+      // 如果 Dialog 打开，不处理 click-outside
+      if (isDialogOpen) {
+        return
+      }
+      
       if (
         buttonRef.current && !buttonRef.current.contains(target) &&
         popoverRef.current && !popoverRef.current.contains(target)
@@ -85,7 +91,7 @@ export function QueueIndicator() {
       document.removeEventListener('keydown', handleKeyDown)
       window.removeEventListener('resize', updatePosition)
     }
-  }, [isOpen, updatePosition])
+  }, [isOpen, updatePosition, isDialogOpen])
 
   return (
     <>
