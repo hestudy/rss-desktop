@@ -15,6 +15,8 @@ pub struct Feed {
     pub use_full_content: bool,
     #[serde(default)]
     pub use_ai_summary: bool,
+    #[serde(default)]
+    pub use_ai_translation: bool,
 }
 
 /// RSS 文章
@@ -53,6 +55,8 @@ pub struct AddFeedRequest {
     pub use_full_content: bool,
     #[serde(default)]
     pub use_ai_summary: bool,
+    #[serde(default)]
+    pub use_ai_translation: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -62,6 +66,7 @@ pub struct UpdateFeedRequest {
     pub title: Option<String>,
     pub use_full_content: Option<bool>,
     pub use_ai_summary: Option<bool>,
+    pub use_ai_translation: Option<bool>,
 }
 
 /// 获取文章的请求参数

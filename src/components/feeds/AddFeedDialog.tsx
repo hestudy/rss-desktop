@@ -11,6 +11,7 @@ export function AddFeedDialog({ isOpen, onClose }: { isOpen: boolean; onClose: (
   const [url, setUrl] = useState('')
   const [useFullContent, setUseFullContent] = useState(false)
   const [useAiSummary, setUseAiSummary] = useState(false)
+  const [useAiTranslation, setUseAiTranslation] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { addFeed } = useRss()
@@ -34,10 +35,11 @@ export function AddFeedDialog({ isOpen, onClose }: { isOpen: boolean; onClose: (
     setError(null)
 
     try {
-      await addFeed(trimmedUrl, useFullContent, useAiSummary)
+      await addFeed(trimmedUrl, useFullContent, useAiSummary, useAiTranslation)
       setUrl('')
       setUseFullContent(false)
       setUseAiSummary(false)
+      setUseAiTranslation(false)
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : '添加失败')
@@ -94,6 +96,17 @@ export function AddFeedDialog({ isOpen, onClose }: { isOpen: boolean; onClose: (
                 className="w-4 h-4 rounded border-border text-primary focus:ring-primary"
               />
               <span className="text-sm text-foreground">自动生成 AI 摘要</span>
+            </label>
+            <label htmlFor="add-feed-ai-translation" className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                id="add-feed-ai-translation"
+                type="checkbox"
+                checked={useAiTranslation}
+                onChange={(e) => setUseAiTranslation(e.target.checked)}
+                disabled={isLoading}
+                className="w-4 h-4 rounded border-border text-primary focus:ring-primary"
+              />
+              <span className="text-sm text-foreground">自动 AI 翻译</span>
             </label>
           </div>
           <div className="flex justify-end gap-2 mt-6">

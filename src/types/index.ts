@@ -13,6 +13,7 @@ export interface Feed {
   updated_at: string
   use_full_content?: boolean
   use_ai_summary?: boolean
+  use_ai_translation?: boolean
 }
 
 /**

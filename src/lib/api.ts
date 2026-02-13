@@ -18,8 +18,8 @@ export class RssApi {
   /**
    * 添加 RSS 订阅
    */
-  static async addFeed(url: string, useFullContent?: boolean, useAiSummary?: boolean): Promise<Feed> {
-    return await invoke<Feed>('add_feed', { url, useFullContent, useAiSummary })
+  static async addFeed(url: string, useFullContent?: boolean, useAiSummary?: boolean, useAiTranslation?: boolean): Promise<Feed> {
+    return await invoke<Feed>('add_feed', { url, useFullContent, useAiSummary, useAiTranslation })
   }
 
   /**
@@ -126,8 +126,9 @@ export class RssApi {
     url?: string,
     useFullContent?: boolean,
     useAiSummary?: boolean,
+    useAiTranslation?: boolean,
   ): Promise<FeedWithUnreadCount> {
-    return await invoke<FeedWithUnreadCount>('update_feed_info', { id, title, url, useFullContent, useAiSummary })
+    return await invoke<FeedWithUnreadCount>('update_feed_info', { id, title, url, useFullContent, useAiSummary, useAiTranslation })
   }
 
   static async fetchFullContent(id: string): Promise<Article> {

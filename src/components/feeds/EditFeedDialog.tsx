@@ -19,6 +19,7 @@ export function EditFeedDialog({ isOpen, onClose, feed }: EditFeedDialogProps) {
   const [url, setUrl] = useState(feed.url)
   const [useFullContent, setUseFullContent] = useState(feed.use_full_content ?? false)
   const [useAiSummary, setUseAiSummary] = useState(feed.use_ai_summary ?? false)
+  const [useAiTranslation, setUseAiTranslation] = useState(feed.use_ai_translation ?? false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { updateFeed } = useRss()
@@ -29,6 +30,7 @@ export function EditFeedDialog({ isOpen, onClose, feed }: EditFeedDialogProps) {
       setUrl(feed.url)
       setUseFullContent(feed.use_full_content ?? false)
       setUseAiSummary(feed.use_ai_summary ?? false)
+      setUseAiTranslation(feed.use_ai_translation ?? false)
       setError(null)
     }
   }, [isOpen, feed])
@@ -57,8 +59,9 @@ export function EditFeedDialog({ isOpen, onClose, feed }: EditFeedDialogProps) {
     const urlChanged = trimmedUrl !== feed.url
     const fullContentChanged = useFullContent !== (feed.use_full_content ?? false)
     const aiSummaryChanged = useAiSummary !== (feed.use_ai_summary ?? false)
+    const aiTranslationChanged = useAiTranslation !== (feed.use_ai_translation ?? false)
 
-    if (!titleChanged && !urlChanged && !fullContentChanged && !aiSummaryChanged) {
+    if (!titleChanged && !urlChanged && !fullContentChanged && !aiSummaryChanged && !aiTranslationChanged) {
       onClose()
       return
     }
@@ -73,6 +76,7 @@ export function EditFeedDialog({ isOpen, onClose, feed }: EditFeedDialogProps) {
         urlChanged ? trimmedUrl : undefined,
         fullContentChanged ? useFullContent : undefined,
         aiSummaryChanged ? useAiSummary : undefined,
+        aiTranslationChanged ? useAiTranslation : undefined,
       )
       onClose()
     } catch (err) {
@@ -140,6 +144,17 @@ export function EditFeedDialog({ isOpen, onClose, feed }: EditFeedDialogProps) {
                 className="w-4 h-4 rounded border-border text-primary focus:ring-primary"
               />
               <span className="text-sm text-foreground">自动生成 AI 摘要</span>
+            </label>
+            <label htmlFor="edit-feed-ai-translation" className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                id="edit-feed-ai-translation"
+                type="checkbox"
+                checked={useAiTranslation}
+                onChange={(e) => setUseAiTranslation(e.target.checked)}
+                disabled={isLoading}
+                className="w-4 h-4 rounded border-border text-primary focus:ring-primary"
+              />
+              <span className="text-sm text-foreground">自动 AI 翻译</span>
             </label>
             {error && (
               <p className="text-sm text-destructive">{error}</p>

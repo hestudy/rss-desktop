@@ -11,9 +11,9 @@ interface RssContextType {
   showFavoritesOnly: boolean
   loadFeeds: () => Promise<void>
   loadArticles: (feedId?: string) => Promise<void>
-  addFeed: (url: string, useFullContent?: boolean, useAiSummary?: boolean) => Promise<Feed>
+  addFeed: (url: string, useFullContent?: boolean, useAiSummary?: boolean, useAiTranslation?: boolean) => Promise<Feed>
   removeFeed: (id: string) => Promise<void>
-  updateFeed: (id: string, title?: string, url?: string, useFullContent?: boolean, useAiSummary?: boolean) => Promise<void>
+  updateFeed: (id: string, title?: string, url?: string, useFullContent?: boolean, useAiSummary?: boolean, useAiTranslation?: boolean) => Promise<void>
   refreshFeed: (id: string) => Promise<void>
   refreshAllFeeds: () => Promise<void>
   silentRefreshAll: () => Promise<void>
@@ -77,11 +77,11 @@ export function RssProvider({ children }: RssProviderProps) {
     }
   }, [])
 
-  const addFeed = useCallback(async (url: string, useFullContent?: boolean, useAiSummary?: boolean) => {
+  const addFeed = useCallback(async (url: string, useFullContent?: boolean, useAiSummary?: boolean, useAiTranslation?: boolean) => {
     setIsLoading(true)
     setError(null)
     try {
-      const feed = await RssApi.addFeed(url, useFullContent, useAiSummary)
+      const feed = await RssApi.addFeed(url, useFullContent, useAiSummary, useAiTranslation)
       await loadFeeds()
       return feed
     } catch (err) {
@@ -113,11 +113,11 @@ export function RssProvider({ children }: RssProviderProps) {
     }
   }, [loadFeeds, selectedFeedId])
 
-  const updateFeed = useCallback(async (id: string, title?: string, url?: string, useFullContent?: boolean, useAiSummary?: boolean) => {
+  const updateFeed = useCallback(async (id: string, title?: string, url?: string, useFullContent?: boolean, useAiSummary?: boolean, useAiTranslation?: boolean) => {
     setIsLoading(true)
     setError(null)
     try {
-      const result = await RssApi.updateFeed(id, title, url, useFullContent, useAiSummary)
+      const result = await RssApi.updateFeed(id, title, url, useFullContent, useAiSummary, useAiTranslation)
       setFeeds(prev => prev.map(f =>
         f.feed.id === id ? result : f
       ))

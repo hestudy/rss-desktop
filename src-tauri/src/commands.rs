@@ -23,12 +23,13 @@ pub type CommandResult<T> = std::result::Result<T, String>;
 
 /// 添加 RSS 订阅
 #[tauri::command]
-pub async fn add_feed(url: String, use_full_content: Option<bool>, use_ai_summary: Option<bool>, storage: State<'_, Arc<Storage>>, app_state: State<'_, AppState>, queue: State<'_, Arc<TaskQueue>>) -> CommandResult<Feed> {
+pub async fn add_feed(url: String, use_full_content: Option<bool>, use_ai_summary: Option<bool>, use_ai_translation: Option<bool>, storage: State<'_, Arc<Storage>>, app_state: State<'_, AppState>, queue: State<'_, Arc<TaskQueue>>) -> CommandResult<Feed> {
     let (mut feed, articles) = fetch_feed(&url)
         .map_err(|e| format!("Failed to fetch feed: {}", e))?;
 
     feed.use_full_content = use_full_content.unwrap_or(false);
     feed.use_ai_summary = use_ai_summary.unwrap_or(false);
+    feed.use_ai_translation = use_ai_translation.unwrap_or(false);
 
     storage.add_feed(&feed)
         .map_err(|e| format!("Failed to save feed: {}", e))?;
@@ -374,6 +375,7 @@ pub async fn update_feed_info(
     url: Option<String>,
     use_full_content: Option<bool>,
     use_ai_summary: Option<bool>,
+    use_ai_translation: Option<bool>,
     storage: State<'_, Arc<Storage>>,
 ) -> CommandResult<FeedWithUnreadCount> {
     let mut feed = storage.get_feed(&id)
@@ -408,6 +410,10 @@ pub async fn update_feed_info(
 
     if let Some(uas) = use_ai_summary {
         feed.use_ai_summary = uas;
+    }
+
+    if let Some(uat) = use_ai_translation {
+        feed.use_ai_translation = uat;
     }
 
     feed.updated_at = chrono::Utc::now();
@@ -571,7 +577,7 @@ pub async fn translate_article(
 
 pub fn process_new_articles_background(
     storage: Arc<Storage>,
-    _data_dir: PathBuf,
+    data_dir: PathBuf,
     feed: &Feed,
     new_article_ids: Vec<String>,
     task_queue: Option<Arc<TaskQueue>>,
@@ -582,8 +588,9 @@ pub fn process_new_articles_background(
 
     let use_full_content = feed.use_full_content;
     let use_ai_summary = feed.use_ai_summary;
+    let use_ai_translation = feed.use_ai_translation;
 
-    if !use_full_content && !use_ai_summary {
+    if !use_full_content && !use_ai_summary && !use_ai_translation {
         return;
     }
 
@@ -596,6 +603,13 @@ pub fn process_new_articles_background(
     let feed_title = feed.title.clone();
 
     tauri::async_runtime::spawn(async move {
+        let target_lang = if use_ai_translation {
+            let ai_settings = crate::settings::load_ai_settings_from_dir(&data_dir);
+            ai_settings.language.clone()
+        } else {
+            String::new()
+        };
+
         for article_id in &new_article_ids {
             let article = match storage.get_article(article_id) {
                 Ok(Some(a)) => a,
@@ -604,6 +618,7 @@ pub fn process_new_articles_background(
 
             let needs_full_content = use_full_content && article.full_content.is_none();
             let needs_ai_summary = use_ai_summary && article.ai_summary.is_none();
+            let needs_ai_translation = use_ai_translation && article.ai_translation.is_none();
 
             if needs_full_content {
                 let mut task = QueueTask::new(
@@ -618,18 +633,38 @@ pub fn process_new_articles_background(
                         article_id: article_id.clone(),
                     });
                 }
+                if needs_ai_translation {
+                    task.on_complete.push(TaskType::AiTranslation {
+                        article_id: article_id.clone(),
+                        target_lang: target_lang.clone(),
+                    });
+                }
                 if let Err(e) = queue.submit(task).await {
                     warn!("[bg] Failed to queue full content task for {}: {}", article_id, e);
                 }
-            } else if needs_ai_summary {
-                let task = QueueTask::new(
-                    TaskType::AiSummary {
-                        article_id: article_id.clone(),
-                    },
-                    TaskPriority::Normal,
-                );
-                if let Err(e) = queue.submit(task).await {
-                    warn!("[bg] Failed to queue AI summary task for {}: {}", article_id, e);
+            } else {
+                if needs_ai_summary {
+                    let task = QueueTask::new(
+                        TaskType::AiSummary {
+                            article_id: article_id.clone(),
+                        },
+                        TaskPriority::Normal,
+                    );
+                    if let Err(e) = queue.submit(task).await {
+                        warn!("[bg] Failed to queue AI summary task for {}: {}", article_id, e);
+                    }
+                }
+                if needs_ai_translation {
+                    let task = QueueTask::new(
+                        TaskType::AiTranslation {
+                            article_id: article_id.clone(),
+                            target_lang: target_lang.clone(),
+                        },
+                        TaskPriority::Normal,
+                    );
+                    if let Err(e) = queue.submit(task).await {
+                        warn!("[bg] Failed to queue AI translation task for {}: {}", article_id, e);
+                    }
                 }
             }
         }

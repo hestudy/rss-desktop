@@ -11,7 +11,6 @@ use uuid::Uuid;
 use crate::ai_summarizer;
 use crate::ai_translator;
 use crate::content_extractor::fetch_and_extract_content;
-use crate::settings::AiSettings;
 use crate::storage::Storage;
 
 // ============= 类型定义 =============
@@ -519,7 +518,7 @@ async fn execute_task(
                 .ok_or_else(|| "Article content is empty".to_string())?
                 .to_string();
 
-            let ai_settings = load_ai_settings(data_dir);
+            let ai_settings = crate::settings::load_ai_settings_from_dir(data_dir);
             let settings_clone = ai_settings.clone();
 
             let summary = tauri::async_runtime::spawn_blocking(move || {
@@ -556,7 +555,7 @@ async fn execute_task(
                 .ok_or_else(|| "Article content is empty".to_string())?
                 .to_string();
 
-            let ai_settings = load_ai_settings(data_dir);
+            let ai_settings = crate::settings::load_ai_settings_from_dir(data_dir);
             let lang = target_lang.clone();
             let settings_clone = ai_settings.clone();
 
@@ -597,38 +596,6 @@ fn emit_progress(app_handle: &AppHandle, task: &QueueTask, status: &str, error: 
     };
 
     let _ = app_handle.emit("queue-task-progress", &event);
-}
-
-/// 从 store.json 加载 AI 设置
-fn load_ai_settings(data_dir: &std::path::Path) -> AiSettings {
-    use std::collections::HashMap;
-    use std::fs::File;
-    use std::io::BufReader;
-
-    let store_path = data_dir.join("store.json");
-    if !store_path.exists() {
-        return AiSettings::default();
-    }
-
-    let file = match File::open(&store_path) {
-        Ok(f) => f,
-        Err(_) => return AiSettings::default(),
-    };
-
-    if fs2::FileExt::lock_shared(&file).is_err() {
-        return AiSettings::default();
-    }
-
-    let reader = BufReader::new(file);
-    let store: HashMap<String, serde_json::Value> = match serde_json::from_reader(reader) {
-        Ok(s) => s,
-        Err(_) => return AiSettings::default(),
-    };
-
-    match store.get("ai_settings") {
-        Some(value) => serde_json::from_value(value.clone()).unwrap_or_default(),
-        None => AiSettings::default(),
-    }
 }
 
 // ============= 测试 =============
