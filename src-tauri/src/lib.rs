@@ -17,7 +17,7 @@ mod task_queue;
 mod queue_commands;
 
 // 导出常用类型
-pub use models::{Feed, Article, AddFeedRequest, UpdateFeedRequest, GetArticlesRequest, ApiResponse, FeedWithUnreadCount};
+pub use models::{Feed, Article, AddFeedRequest, UpdateFeedRequest, GetArticlesRequest, ApiResponse, FeedWithUnreadCount, FeedLog, LogArticleSummary};
 pub use error::{RssError, Result};
 pub use commands::AppState;
 pub use settings::{AiSettings, AppSettings, SchedulerState, PollInterval, NotificationType};
@@ -185,6 +185,8 @@ pub fn run() {
             commands::fetch_full_content,
             commands::generate_article_summary,
             commands::translate_article,
+            commands::get_feed_logs,
+            commands::get_all_feed_logs,
             scheduler_commands::get_settings,
             scheduler_commands::update_settings,
             scheduler_commands::get_ai_settings,

@@ -1,9 +1,12 @@
 import { useState } from 'react'
-import { Rss, Plus, Trash2, Settings, Star, RefreshCw, Pencil } from 'lucide-react'
+import { Rss, Plus, Trash2, Settings, Star, RefreshCw, Pencil, ScrollText, MoreHorizontal } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { ScrollArea } from '../ui/ScrollArea'
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '../ui/DropdownMenu'
 import { AddFeedDialog } from './AddFeedDialog'
 import { EditFeedDialog } from './EditFeedDialog'
+import { FeedLogDialog } from './FeedLogDialog'
+import { GlobalLogDialog } from './GlobalLogDialog'
 import { FeedIcon } from './FeedIcon'
 import { useConfirm } from '../ui/ConfirmDialog'
 import { useUnifiedSettings } from '../settings/UnifiedSettings'
@@ -31,6 +34,8 @@ export function FeedList() {
   const [showAddDialog, setShowAddDialog] = useState(false)
   const [refreshingId, setRefreshingId] = useState<string | null>(null)
   const [editingFeed, setEditingFeed] = useState<typeof feeds[number]['feed'] | null>(null)
+  const [logFeed, setLogFeed] = useState<typeof feeds[number]['feed'] | null>(null)
+  const [showGlobalLog, setShowGlobalLog] = useState(false)
 
   const handleRefreshAll = async () => {
     await refreshAllFeeds()
@@ -171,33 +176,44 @@ export function FeedList() {
                   </button>
                   <div
                     data-testid="feed-actions"
-                    className="absolute right-0 top-0 bottom-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity pr-2 pl-4 bg-gradient-to-l from-sidebar-hover from-70% to-transparent"
+                    className="absolute right-0 top-0 bottom-0 flex items-center opacity-0 group-hover:opacity-100 transition-opacity pr-2 pl-4 bg-gradient-to-l from-sidebar-hover from-70% to-transparent"
                   >
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => handleRefreshFeed(feed.id)}
-                      disabled={refreshingId === feed.id}
-                      className="h-7 w-7 p-0 text-sidebar-muted hover:text-sidebar-fg hover:bg-sidebar-hover"
-                    >
-                      <RefreshCw className={`w-3.5 h-3.5 ${refreshingId === feed.id ? 'animate-spin' : ''}`} />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => setEditingFeed(feed)}
-                      className="h-7 w-7 p-0 text-sidebar-muted hover:text-sidebar-fg hover:bg-sidebar-hover"
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => handleRemoveFeed(feed.id)}
-                      className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 w-7 p-0 text-sidebar-muted hover:text-sidebar-fg hover:bg-sidebar-hover"
+                        >
+                          <MoreHorizontal className="w-4 h-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onClick={() => handleRefreshFeed(feed.id)}
+                          disabled={refreshingId === feed.id}
+                        >
+                          <RefreshCw className={`w-3.5 h-3.5 ${refreshingId === feed.id ? 'animate-spin' : ''}`} />
+                          刷新
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setEditingFeed(feed)}>
+                          <Pencil className="w-3.5 h-3.5" />
+                          编辑
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setLogFeed(feed)}>
+                          <ScrollText className="w-3.5 h-3.5" />
+                          刷新日志
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onClick={() => handleRemoveFeed(feed.id)}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          删除
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </div>
               </div>
@@ -212,18 +228,29 @@ export function FeedList() {
           </div>
         </ScrollArea>
 
-        {/* 底部固定区域 - 刷新 + 队列 + 设置 */}
+        {/* 底部固定区域 - 刷新 + 日志 + 队列 + 设置 */}
         <div className="p-3 border-t border-sidebar-border flex items-center justify-between">
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={handleRefreshAll}
-            disabled={isLoading}
-            title="刷新全部"
-            className="text-sidebar-muted hover:text-sidebar-fg hover:bg-sidebar-hover"
-          >
-            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={handleRefreshAll}
+              disabled={isLoading}
+              title="刷新全部"
+              className="text-sidebar-muted hover:text-sidebar-fg hover:bg-sidebar-hover"
+            >
+              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setShowGlobalLog(true)}
+              title="刷新日志"
+              className="text-sidebar-muted hover:text-sidebar-fg hover:bg-sidebar-hover"
+            >
+              <ScrollText className="w-4 h-4" />
+            </Button>
+          </div>
           <QueueIndicator />
           <Button
             size="sm"
@@ -245,6 +272,18 @@ export function FeedList() {
           feed={editingFeed}
         />
       )}
+      {logFeed && (
+        <FeedLogDialog
+          isOpen={!!logFeed}
+          onClose={() => setLogFeed(null)}
+          feedId={logFeed.id}
+          feedTitle={logFeed.title}
+        />
+      )}
+      <GlobalLogDialog
+        isOpen={showGlobalLog}
+        onClose={() => setShowGlobalLog(false)}
+      />
     </>
   )
 }

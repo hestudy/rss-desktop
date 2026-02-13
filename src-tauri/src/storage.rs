@@ -1,5 +1,5 @@
 use crate::error::Result;
-use crate::models::{Article, Feed};
+use crate::models::{Article, Feed, FeedLog};
 use std::path::{Component, Path};
 
 // 存储层实现 - 使用 JSON 文件存储 + 文件锁
@@ -10,9 +10,13 @@ use std::sync::Mutex;
 
 const FEEDS_FILE: &str = "feeds.json";
 const ARTICLES_FILE: &str = "articles.json";
+const FEED_LOGS_FILE: &str = "feed_logs.json";
 
 /// 最大文章限制
 pub const MAX_ARTICLES_LIMIT: usize = 1000;
+
+/// 每个订阅最大日志条数
+const MAX_LOGS_PER_FEED: usize = 100;
 
 /// 验证路径是否安全，防止路径遍历攻击
 fn validate_data_dir(path: &Path) -> Result<()> {
@@ -62,12 +66,16 @@ impl Storage {
         // 初始化文件
         let feeds_path = data_dir.join(FEEDS_FILE);
         let articles_path = data_dir.join(ARTICLES_FILE);
+        let feed_logs_path = data_dir.join(FEED_LOGS_FILE);
 
         if !feeds_path.exists() {
             fs::write(&feeds_path, "[]")?;
         }
         if !articles_path.exists() {
             fs::write(&articles_path, "[]")?;
+        }
+        if !feed_logs_path.exists() {
+            fs::write(&feed_logs_path, "[]")?;
         }
 
         Ok(Self {
@@ -135,6 +143,10 @@ impl Storage {
             let mut articles = self.load_articles()?;
             articles.retain(|a| a.feed_id != id);
             self.save_articles(&articles)?;
+            // 同时删除该订阅的所有日志
+            let mut logs = self.load_feed_logs()?;
+            logs.retain(|l| l.feed_id != id);
+            self.save_feed_logs(&logs)?;
             Ok(())
         } else {
             Err(crate::error::RssError::FeedNotFound(id.to_string()))
@@ -408,6 +420,92 @@ impl Storage {
 
         fs::rename(&temp_path, &path)?;
         Ok(())
+    }
+
+    // ============= 日志存储方法 =============
+
+    fn get_feed_logs_path(&self) -> std::path::PathBuf {
+        self.data_dir.join(FEED_LOGS_FILE)
+    }
+
+    fn load_feed_logs(&self) -> Result<Vec<FeedLog>> {
+        let path = self.get_feed_logs_path();
+        let file = File::open(&path)?;
+        file.lock_shared()?;
+        let reader = BufReader::new(file);
+        let logs: Vec<FeedLog> = serde_json::from_reader(reader)?;
+        Ok(logs)
+    }
+
+    fn save_feed_logs(&self, logs: &[FeedLog]) -> Result<()> {
+        let path = self.get_feed_logs_path();
+        let temp_path = path.with_extension("tmp");
+
+        {
+            let file = OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .open(&temp_path)?;
+            file.lock_exclusive()?;
+
+            let json = serde_json::to_string_pretty(logs)?;
+            {
+                let mut writer = BufWriter::new(&file);
+                writer.write_all(json.as_bytes())?;
+                writer.flush()?;
+            }
+        }
+
+        fs::rename(&temp_path, &path)?;
+        Ok(())
+    }
+
+    /// 添加一条刷新日志，自动清理超出限制的旧日志
+    pub fn add_feed_log(&self, log: &FeedLog) -> Result<()> {
+        let _lock = self.acquire_write_lock()?;
+        let mut logs = self.load_feed_logs()?;
+        logs.push(log.clone());
+
+        // 清理该 feed 超出限制的旧日志
+        let feed_id = &log.feed_id;
+        let feed_log_count = logs.iter().filter(|l| l.feed_id == *feed_id).count();
+        if feed_log_count > MAX_LOGS_PER_FEED {
+            let to_remove = feed_log_count - MAX_LOGS_PER_FEED;
+            let mut removed = 0;
+            logs.retain(|l| {
+                if l.feed_id == *feed_id && removed < to_remove {
+                    removed += 1;
+                    false
+                } else {
+                    true
+                }
+            });
+        }
+
+        self.save_feed_logs(&logs)?;
+        Ok(())
+    }
+
+    /// 获取指定订阅的刷新日志（按时间倒序）
+    pub fn get_feed_logs(&self, feed_id: &str, limit: Option<usize>) -> Result<Vec<FeedLog>> {
+        let logs = self.load_feed_logs()?;
+        let mut feed_logs: Vec<FeedLog> = logs.into_iter().filter(|l| l.feed_id == feed_id).collect();
+        feed_logs.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        if let Some(limit) = limit {
+            feed_logs.truncate(limit);
+        }
+        Ok(feed_logs)
+    }
+
+    /// 获取所有订阅的刷新日志（按时间倒序）
+    pub fn get_all_feed_logs(&self, limit: Option<usize>) -> Result<Vec<FeedLog>> {
+        let mut logs = self.load_feed_logs()?;
+        logs.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        if let Some(limit) = limit {
+            logs.truncate(limit);
+        }
+        Ok(logs)
     }
 }
 
