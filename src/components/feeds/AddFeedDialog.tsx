@@ -82,7 +82,7 @@ export function AddFeedDialog({ isOpen, onClose }: { isOpen: boolean; onClose: (
                 checked={useFullContent}
                 onChange={(e) => setUseFullContent(e.target.checked)}
                 disabled={isLoading}
-                className="w-4 h-4 rounded border-border text-primary focus:ring-primary"
+                className="w-4 h-4 rounded border-border accent-primary focus:ring-primary"
               />
               <span className="text-sm text-foreground">自动抓取全文</span>
             </label>
@@ -93,7 +93,7 @@ export function AddFeedDialog({ isOpen, onClose }: { isOpen: boolean; onClose: (
                 checked={useAiSummary}
                 onChange={(e) => setUseAiSummary(e.target.checked)}
                 disabled={isLoading}
-                className="w-4 h-4 rounded border-border text-primary focus:ring-primary"
+                className="w-4 h-4 rounded border-border accent-primary focus:ring-primary"
               />
               <span className="text-sm text-foreground">自动生成 AI 摘要</span>
             </label>
@@ -104,7 +104,7 @@ export function AddFeedDialog({ isOpen, onClose }: { isOpen: boolean; onClose: (
                 checked={useAiTranslation}
                 onChange={(e) => setUseAiTranslation(e.target.checked)}
                 disabled={isLoading}
-                className="w-4 h-4 rounded border-border text-primary focus:ring-primary"
+                className="w-4 h-4 rounded border-border accent-primary focus:ring-primary"
               />
               <span className="text-sm text-foreground">自动 AI 翻译</span>
             </label>

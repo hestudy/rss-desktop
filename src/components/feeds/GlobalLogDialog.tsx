@@ -3,6 +3,7 @@ import { CheckCircle, XCircle, ChevronDown, ChevronRight, Clock, ExternalLink } 
 import { Dialog, DialogContent } from '../ui/Dialog'
 import { ScrollArea } from '../ui/ScrollArea'
 import { RssApi } from '../../lib/api'
+import { formatLogTime } from './LogEntry'
 import type { FeedLog } from '../../types'
 
 interface GlobalLogDialogProps {
@@ -48,17 +49,6 @@ export function GlobalLogDialog({ isOpen, onClose }: GlobalLogDialogProps) {
     })
   }
 
-  const formatTime = (timestamp: string) => {
-    const date = new Date(timestamp)
-    return date.toLocaleString('zh-CN', {
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    })
-  }
-
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-lg" title="全局刷新日志">
@@ -89,8 +79,8 @@ export function GlobalLogDialog({ isOpen, onClose }: GlobalLogDialogProps) {
                         : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
                       <span className="truncate flex-1 text-left">{feedTitle}</span>
                       <span className="text-xs text-muted-foreground flex-shrink-0">
-                        {successCount > 0 && <span className="text-green-500">{successCount}✓</span>}
-                        {failCount > 0 && <span className="text-red-500 ml-1">{failCount}✗</span>}
+                        {successCount > 0 && <span className="text-success">{successCount}✓</span>}
+                        {failCount > 0 && <span className="text-destructive ml-1">{failCount}✗</span>}
                       </span>
                     </button>
 
@@ -105,16 +95,25 @@ export function GlobalLogDialog({ isOpen, onClose }: GlobalLogDialogProps) {
                               <div
                                 className={`flex items-center gap-2 ${hasArticles ? 'cursor-pointer' : ''}`}
                                 onClick={() => hasArticles && setExpandedId(isExpanded ? null : log.id)}
+                                role={hasArticles ? 'button' : undefined}
+                                tabIndex={hasArticles ? 0 : undefined}
+                                aria-expanded={hasArticles ? isExpanded : undefined}
+                                onKeyDown={(e) => {
+                                  if (hasArticles && (e.key === 'Enter' || e.key === ' ')) {
+                                    e.preventDefault()
+                                    setExpandedId(isExpanded ? null : log.id)
+                                  }
+                                }}
                               >
                                 {log.success ? (
-                                  <CheckCircle className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
+                                  <CheckCircle className="w-3.5 h-3.5 text-success flex-shrink-0" />
                                 ) : (
-                                  <XCircle className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />
+                                  <XCircle className="w-3.5 h-3.5 text-destructive flex-shrink-0" />
                                 )}
 
                                 <span className="text-muted-foreground flex items-center gap-1">
                                   <Clock className="w-3 h-3" />
-                                  {formatTime(log.timestamp)}
+                                  {formatLogTime(log.timestamp)}
                                 </span>
 
                                 <span className="flex-1 text-right text-muted-foreground">
@@ -122,7 +121,7 @@ export function GlobalLogDialog({ isOpen, onClose }: GlobalLogDialogProps) {
                                     ? log.new_article_count > 0
                                       ? `+${log.new_article_count} 篇`
                                       : '无新文章'
-                                    : <span className="text-red-500">失败</span>}
+                                    : <span className="text-destructive">失败</span>}
                                 </span>
 
                                 <span className="text-muted-foreground">{log.duration_ms}ms</span>
@@ -135,7 +134,7 @@ export function GlobalLogDialog({ isOpen, onClose }: GlobalLogDialogProps) {
                               </div>
 
                               {log.error && (
-                                <div className="mt-1.5 text-xs text-red-500 bg-red-50 dark:bg-red-950/30 rounded p-1.5">
+                                <div className="mt-1.5 text-xs text-destructive bg-destructive/10 rounded p-1.5">
                                   {log.error}
                                 </div>
                               )}

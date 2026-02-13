@@ -119,7 +119,7 @@ export function ArticleCard({
             {isFavorite && (
               <Star
                 data-testid="favorite-indicator"
-                className="w-3 h-3 text-yellow-500 fill-yellow-500 ml-1"
+                className="w-3 h-3 text-warning fill-warning ml-1"
               />
             )}
           </div>

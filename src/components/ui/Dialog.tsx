@@ -1,4 +1,5 @@
 import { ReactNode, createContext, useContext, useState, useCallback } from 'react'
+import { X } from 'lucide-react'
 import { cn } from '../../lib/utils'
 
 interface DialogContextType {
@@ -67,7 +68,7 @@ export function DialogContent({
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200" onClick={close} />
       <div
         className={cn(
-          'relative z-[10001] bg-background rounded-xl shadow-xl border max-w-md w-full p-6',
+          'relative z-[10001] bg-background rounded-xl shadow-xl border border-border max-w-md w-full p-6',
           'animate-in zoom-in-95 duration-200',
           className
         )}
@@ -77,9 +78,10 @@ export function DialogContent({
             <h2 className="text-lg font-semibold">{title}</h2>
             <button
               onClick={close}
+              aria-label="关闭"
               className="text-muted-foreground hover:text-foreground transition-colors rounded-md p-1 hover:bg-accent"
             >
-              ✕
+              <X className="w-4 h-4" />
             </button>
           </div>
         )}

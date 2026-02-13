@@ -23,7 +23,7 @@ export function LogEntry({ log, compact = false }: LogEntryProps) {
   const hasArticles = log.new_articles.length > 0
 
   return (
-    <div className={`border rounded-${compact ? 'md' : 'lg'} p-${compact ? '2' : '3'} text-${compact ? 'xs' : 'sm'}`}>
+    <div className={compact ? 'border rounded-md p-2 text-xs' : 'border rounded-lg p-3 text-sm'}>
       <div
         className={`flex items-center gap-2 ${hasArticles ? 'cursor-pointer' : ''}`}
         onClick={() => hasArticles && setIsExpanded(!isExpanded)}
@@ -38,9 +38,9 @@ export function LogEntry({ log, compact = false }: LogEntryProps) {
         }}
       >
         {log.success ? (
-          <CheckCircle className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
+          <CheckCircle className="w-3.5 h-3.5 text-success flex-shrink-0" />
         ) : (
-          <XCircle className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />
+          <XCircle className="w-3.5 h-3.5 text-destructive flex-shrink-0" />
         )}
 
         <span className="text-muted-foreground flex items-center gap-1">
@@ -53,7 +53,7 @@ export function LogEntry({ log, compact = false }: LogEntryProps) {
             ? log.new_article_count > 0
               ? `+${log.new_article_count} 篇`
               : '无新文章'
-            : <span className="text-red-500">失败</span>}
+            : <span className="text-destructive">失败</span>}
         </span>
 
         <span className="text-muted-foreground text-xs">{log.duration_ms}ms</span>
@@ -66,7 +66,7 @@ export function LogEntry({ log, compact = false }: LogEntryProps) {
       </div>
 
       {log.error && (
-        <div className="mt-1.5 text-xs text-red-500 bg-red-50 dark:bg-red-950/30 rounded p-1.5">
+        <div className="mt-1.5 text-xs text-destructive bg-destructive/10 rounded p-1.5">
           {log.error}
         </div>
       )}

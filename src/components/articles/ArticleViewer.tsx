@@ -477,7 +477,7 @@ export function ArticleViewer({
           <button
             onClick={handleToggleFavorite}
             className={`p-2 rounded-lg hover:bg-muted transition-colors ${
-              isFavorite ? 'text-yellow-500' : 'text-muted-foreground hover:text-foreground'
+              isFavorite ? 'text-warning' : 'text-muted-foreground hover:text-foreground'
             }`}
             title={isFavorite ? '取消收藏 (F)' : '收藏 (F)'}
           >

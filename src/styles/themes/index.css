@@ -59,6 +59,14 @@
   --color-read-background: #f7f6f3;
   --color-read-foreground: #a0aec0;
   --color-card-hover: var(--color-accent);
+
+  /* Popover */
+  --color-popover: #ffffff;
+  --color-popover-foreground: #2d3748;
+
+  /* 语义化状态颜色 */
+  --color-success: #22c55e;
+  --color-warning: #eab308;
 }
 
 /* ==================== 护眼主题 (默认) ==================== */
@@ -85,6 +93,14 @@
   /* 已读状态 */
   --color-read-background: #f7f6f3;
   --color-read-foreground: #a0aec0;
+
+  /* Popover */
+  --color-popover: #ffffff;
+  --color-popover-foreground: #2d3748;
+
+  /* 状态颜色 */
+  --color-success: #22c55e;
+  --color-warning: #eab308;
 }
 
 [data-theme="eye-care"][data-mode="dark"] {
@@ -113,6 +129,14 @@
 
   /* 卡片悬停 */
   --color-card-hover: #2d2220;
+
+  /* Popover */
+  --color-popover: #252525;
+  --color-popover-foreground: #d4d4d4;
+
+  /* 状态颜色 */
+  --color-success: #4ade80;
+  --color-warning: #facc15;
 }
 
 /* ==================== 羊皮纸主题 ==================== */
@@ -138,6 +162,14 @@
 
   --color-read-background: #f0e6d2;
   --color-read-foreground: #a1887f;
+
+  /* Popover */
+  --color-popover: #faf6ee;
+  --color-popover-foreground: #3e2723;
+
+  /* 状态颜色 */
+  --color-success: #22c55e;
+  --color-warning: #eab308;
 }
 
 [data-theme="paper"][data-mode="dark"] {
@@ -163,6 +195,14 @@
   --color-read-background: #302719;
   --color-read-foreground: #7a6e62;
   --color-card-hover: #3d2e22;
+
+  /* Popover */
+  --color-popover: #362d1e;
+  --color-popover-foreground: #d7ccc8;
+
+  /* 状态颜色 */
+  --color-success: #4ade80;
+  --color-warning: #facc15;
 }
 
 /* ==================== 墨水屏主题 ==================== */
@@ -188,6 +228,14 @@
 
   --color-read-background: #fafafa;
   --color-read-foreground: #999999;
+
+  /* Popover */
+  --color-popover: #ffffff;
+  --color-popover-foreground: #000000;
+
+  /* 状态颜色 */
+  --color-success: #22c55e;
+  --color-warning: #eab308;
 }
 
 [data-theme="eink"][data-mode="dark"] {
@@ -213,9 +261,24 @@
   --color-read-background: #0f0f0f;
   --color-read-foreground: #555555;
   --color-card-hover: #1e1410;
+
+  /* Popover */
+  --color-popover: #141414;
+  --color-popover-foreground: #e8e8e8;
+
+  /* 状态颜色 */
+  --color-success: #4ade80;
+  --color-warning: #facc15;
 }
 
 /* ==================== 全局样式 ==================== */
+
+/* 基础颜色：确保所有元素默认继承主题前景色 */
+html {
+  color: var(--color-foreground);
+  background-color: var(--color-background);
+}
+
 * {
   transition-property: color, background-color, border-color;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
@@ -338,6 +401,11 @@
 }
 
 [data-mode="dark"] input[type="range"] {
+  accent-color: var(--color-primary);
+}
+
+/* 兜底：确保未使用 Tailwind accent-primary 类的 checkbox 也能正确显示 */
+[data-mode="dark"] input[type="checkbox"] {
   accent-color: var(--color-primary);
 }
 

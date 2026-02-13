@@ -56,7 +56,7 @@ export function ConfirmProvider({ children }: ConfirmProviderProps) {
       {isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200" onClick={handleCancel} />
-          <div className="relative z-50 bg-background rounded-xl shadow-xl border max-w-sm w-full p-6 animate-in zoom-in-95 duration-200">
+          <div className="relative z-50 bg-background rounded-xl shadow-xl border border-border max-w-sm w-full p-6 animate-in zoom-in-95 duration-200">
             {title && (
               <h3 className="text-lg font-semibold mb-3">{title}</h3>
             )}

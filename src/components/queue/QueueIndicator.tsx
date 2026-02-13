@@ -107,7 +107,7 @@ export function QueueIndicator() {
         {activeCount > 0 && (
           <span
             data-testid="queue-badge"
-            className="absolute -top-1 -right-1 bg-sidebar-active text-white text-[10px] font-medium min-w-[1rem] h-4 px-1 rounded-full flex items-center justify-center"
+            className="absolute -top-1 -right-1 bg-sidebar-active text-badge-fg text-[10px] font-medium min-w-[1rem] h-4 px-1 rounded-full flex items-center justify-center"
           >
             {activeCount}
           </span>
