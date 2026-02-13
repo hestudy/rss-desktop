@@ -56,11 +56,17 @@ pub async fn process_feed_refresh(
     let feed_id = feed.id.clone();
     let feed_url = feed.url.clone();
 
-    let existing_links: std::collections::HashSet<String> = storage
+    let existing_articles = storage
         .get_articles(Some(&feed_id), None)
-        .unwrap_or_default()
-        .into_iter()
-        .map(|a| a.link)
+        .unwrap_or_default();
+    let existing_links: std::collections::HashSet<String> = existing_articles
+        .iter()
+        .map(|a| a.link.clone())
+        .collect();
+    let existing_guids: std::collections::HashSet<String> = existing_articles
+        .iter()
+        .filter_map(|a| a.guid.clone())
+        .filter(|g| !g.is_empty())
         .collect();
 
     let url_for_fetch = feed_url.clone();
@@ -76,7 +82,10 @@ pub async fn process_feed_refresh(
     for article in &articles {
         let mut article = article.clone();
         article.feed_id = feed_id.clone();
-        let is_new = !existing_links.contains(&article.link);
+        let is_new = match &article.guid {
+            Some(guid) if !guid.is_empty() => !existing_guids.contains(guid),
+            _ => !existing_links.contains(&article.link),
+        };
         if is_new {
             new_article_ids.push(article.id.clone());
             new_article_summaries.push(LogArticleSummary {

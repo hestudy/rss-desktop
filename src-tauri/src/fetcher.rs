@@ -119,6 +119,11 @@ pub fn fetch_feed(url: &str) -> Result<FeedResult> {
                 .map(|l| l.href.to_string())
                 .unwrap_or_else(|| "about:blank".to_string());
 
+            let guid = {
+                let trimmed = entry.id.trim();
+                if trimmed.is_empty() { None } else { Some(trimmed.to_string()) }
+            };
+
             let published_at = entry.published.or(entry.updated);
             let content = entry.content.and_then(|c| c.body);
 
@@ -138,6 +143,7 @@ pub fn fetch_feed(url: &str) -> Result<FeedResult> {
                 ai_summary: None,
                 ai_translation: None,
                 ai_translated_title: None,
+                guid,
             })
         })
         .take(MAX_ARTICLES_PER_FETCH) // 限制文章数量

@@ -156,11 +156,7 @@ impl Storage {
     pub fn add_article(&self, article: &Article) -> Result<()> {
         let _lock = self.acquire_write_lock()?;
         let mut articles = self.load_articles()?;
-        // 检查是否已存在（通过链接+订阅源去重）
-        if !articles
-            .iter()
-            .any(|a| a.link == article.link && a.feed_id == article.feed_id)
-        {
+        if !articles.iter().any(|a| a.is_duplicate_of(article)) {
             articles.push(article.clone());
             self.save_articles(&articles)?;
         }
@@ -574,6 +570,7 @@ mod tests {
             ai_summary: None,
             ai_translation: None,
             ai_translated_title: None,
+            guid: None,
         }
     }
 
@@ -632,11 +629,7 @@ mod tests {
 
         fn add_article(&self, article: &Article) -> Result<()> {
             let mut articles = self.articles.lock().unwrap();
-            // 检查是否已存在
-            if !articles
-                .iter()
-                .any(|a| a.link == article.link && a.feed_id == article.feed_id)
-            {
+            if !articles.iter().any(|a| a.is_duplicate_of(article)) {
                 articles.push(article.clone());
             }
             Ok(())
@@ -1461,5 +1454,111 @@ mod tests {
         let storage = TestStorage::new();
         let result = storage.update_article_ai_translation("nonexistent", "content", None);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_article_deduplication_by_guid() {
+        let storage = TestStorage::new();
+        let feed = create_test_feed();
+        storage.add_feed(&feed).unwrap();
+
+        // 第一篇文章带 guid
+        let mut article1 = create_test_article(&feed.id);
+        article1.guid = Some("unique-guid-123".to_string());
+        article1.link = "https://example.com/article/1".to_string();
+        storage.add_article(&article1).unwrap();
+
+        // 第二篇文章：相同 guid，不同 link（模拟 link 带追踪参数变化）
+        let mut article2 = create_test_article(&feed.id);
+        article2.guid = Some("unique-guid-123".to_string());
+        article2.link = "https://example.com/article/1?utm_source=rss".to_string();
+        storage.add_article(&article2).unwrap();
+
+        let articles = storage.get_articles(Some(&feed.id), None).unwrap();
+        assert_eq!(articles.len(), 1, "Should deduplicate articles by guid+feed_id");
+    }
+
+    #[test]
+    fn test_article_deduplication_guid_different_feeds() {
+        let storage = TestStorage::new();
+        let feed1 = create_test_feed();
+        let feed2 = create_test_feed();
+        storage.add_feed(&feed1).unwrap();
+        storage.add_feed(&feed2).unwrap();
+
+        // 不同 feed 中相同 guid 的文章不应被去重
+        let mut article1 = create_test_article(&feed1.id);
+        article1.guid = Some("same-guid".to_string());
+        storage.add_article(&article1).unwrap();
+
+        let mut article2 = create_test_article(&feed2.id);
+        article2.guid = Some("same-guid".to_string());
+        storage.add_article(&article2).unwrap();
+
+        let all = storage.get_articles(None, None).unwrap();
+        assert_eq!(all.len(), 2, "Same guid in different feeds should not be deduped");
+    }
+
+    #[test]
+    fn test_article_deduplication_no_guid_falls_back_to_link() {
+        let storage = TestStorage::new();
+        let feed = create_test_feed();
+        storage.add_feed(&feed).unwrap();
+
+        // 没有 guid 的文章应 fallback 到 link 去重
+        let mut article1 = create_test_article(&feed.id);
+        article1.guid = None;
+        article1.link = "https://example.com/same-link".to_string();
+        storage.add_article(&article1).unwrap();
+
+        let mut article2 = create_test_article(&feed.id);
+        article2.guid = None;
+        article2.link = "https://example.com/same-link".to_string();
+        storage.add_article(&article2).unwrap();
+
+        let articles = storage.get_articles(Some(&feed.id), None).unwrap();
+        assert_eq!(articles.len(), 1, "Should fallback to link dedup when no guid");
+    }
+
+    #[test]
+    fn test_article_deduplication_empty_guid_falls_back_to_link() {
+        let storage = TestStorage::new();
+        let feed = create_test_feed();
+        storage.add_feed(&feed).unwrap();
+
+        // guid 为 Some("") 时应 fallback 到 link 去重
+        let mut article1 = create_test_article(&feed.id);
+        article1.guid = Some("".to_string());
+        article1.link = "https://example.com/same-link".to_string();
+        storage.add_article(&article1).unwrap();
+
+        let mut article2 = create_test_article(&feed.id);
+        article2.guid = Some("valid-guid".to_string());
+        article2.link = "https://example.com/same-link".to_string();
+        storage.add_article(&article2).unwrap();
+
+        let articles = storage.get_articles(Some(&feed.id), None).unwrap();
+        assert_eq!(articles.len(), 1, "Empty guid should fallback to link dedup");
+    }
+
+    #[test]
+    fn test_article_deduplication_one_has_guid_other_none_same_link() {
+        let storage = TestStorage::new();
+        let feed = create_test_feed();
+        storage.add_feed(&feed).unwrap();
+
+        let mut article1 = create_test_article(&feed.id);
+        article1.guid = Some("guid-1".to_string());
+        article1.link = "https://example.com/same-link".to_string();
+        storage.add_article(&article1).unwrap();
+
+        // guid=None 的文章与 guid=Some 的文章，相同 link → fallback 到 link 去重
+        let mut article2 = create_test_article(&feed.id);
+        article2.guid = None;
+        article2.link = "https://example.com/same-link".to_string();
+        storage.add_article(&article2).unwrap();
+
+        let articles = storage.get_articles(Some(&feed.id), None).unwrap();
+        assert_eq!(articles.len(), 1, "Mismatched guid presence should fallback to link dedup");
     }
 }

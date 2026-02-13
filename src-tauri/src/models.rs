@@ -49,6 +49,25 @@ pub struct Article {
     /// AI 翻译的标题
     #[serde(default)]
     pub ai_translated_title: Option<String>,
+    /// RSS 原始 GUID（用于去重）
+    #[serde(default)]
+    pub guid: Option<String>,
+}
+
+impl Article {
+    /// 判断两篇文章是否为同一篇（同 feed 内去重）
+    /// 优先用 guid+feed_id，fallback 到 link+feed_id
+    pub fn is_duplicate_of(&self, other: &Article) -> bool {
+        if self.feed_id != other.feed_id {
+            return false;
+        }
+        if let (Some(ref g1), Some(ref g2)) = (&self.guid, &other.guid) {
+            if !g1.is_empty() && !g2.is_empty() {
+                return g1 == g2;
+            }
+        }
+        self.link == other.link
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
