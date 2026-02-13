@@ -1,6 +1,5 @@
 use crate::settings::{AppSettings, SchedulerState};
 use crate::storage::Storage;
-use crate::fetcher::fetch_feed;
 use crate::scheduler::{calculate_next_run_time, calculate_retry_backoff};
 use crate::task_queue::TaskQueue;
 use chrono::Utc;
@@ -222,66 +221,66 @@ impl BackgroundScheduler {
         let feeds = storage.get_all_feeds()
             .map_err(|e| format!("Failed to get feeds: {}", e))?;
 
+        let semaphore = Arc::new(tokio::sync::Semaphore::new(3));
+        let mut handles = Vec::new();
+
         for feed in feeds {
-            let feed_id = feed.id.clone();
-            let feed_url = feed.url.clone();
-            let feed_title = feed.title.clone();
+            let sem = semaphore.clone();
+            let storage = storage.clone();
+            let data_dir = data_dir.clone();
+            let task_queue = task_queue.clone();
+            let event_tx = event_tx.clone();
 
-            let existing_links: std::collections::HashSet<String> = storage.get_articles(Some(&feed_id), None)
-                .unwrap_or_default()
-                .into_iter()
-                .map(|a| a.link)
-                .collect();
-
-            let (_feed, articles) = fetch_feed(&feed_url)
-                .map_err(|e| format!("Failed to fetch {}: {}", feed_title, e))?;
-
-            let mut new_article_ids = Vec::new();
-            for article in &articles {
-                if !existing_links.contains(&article.link) {
-                    new_article_ids.push(article.id.clone());
-                }
-            }
-
-            let new_count = new_article_ids.len();
-
-            if new_count > 0 {
-                for article in &articles {
-                    let mut article = article.clone();
-                    article.feed_id = feed_id.clone();
-                    let _ = storage.add_article(&article);
-                }
-
-                let mut updated_feed = feed.clone();
-                updated_feed.updated_at = Utc::now();
-                let _ = storage.update_feed(&updated_feed);
-
-                let summaries: Vec<ArticleSummary> = articles.iter()
-                    .filter(|a| !existing_links.contains(&a.link))
-                    .map(|a| ArticleSummary {
-                        id: a.id.clone(),
-                        title: a.title.clone(),
-                        url: a.link.clone(),
-                    })
-                    .collect();
-
-                let event = NewArticlesEvent {
-                    feed_id: feed_id.clone(),
-                    feed_title,
-                    new_count,
-                    articles: summaries,
+            let handle = tokio::spawn(async move {
+                let _permit = match sem.acquire().await {
+                    Ok(p) => p,
+                    Err(_) => return,
                 };
 
-                let _ = event_tx.send(event);
+                let feed_id = feed.id.clone();
+                let feed_title = feed.title.clone();
 
-                crate::commands::process_new_articles_background(
-                    storage.clone(),
-                    data_dir.clone(),
+                match crate::commands::process_feed_refresh(
                     &feed,
-                    new_article_ids,
-                    task_queue.clone(),
-                );
-            }
+                    &storage,
+                    &data_dir,
+                    task_queue.as_ref(),
+                ).await {
+                    Ok((_updated_feed, new_count, _unread_count)) => {
+                        if new_count > 0 {
+                            let articles = storage.get_articles(Some(&feed_id), Some(new_count))
+                                .unwrap_or_default();
+
+                            let summaries: Vec<ArticleSummary> = articles.iter()
+                                .take(new_count)
+                                .map(|a| ArticleSummary {
+                                    id: a.id.clone(),
+                                    title: a.title.clone(),
+                                    url: a.link.clone(),
+                                })
+                                .collect();
+
+                            let event = NewArticlesEvent {
+                                feed_id,
+                                feed_title,
+                                new_count,
+                                articles: summaries,
+                            };
+
+                            let _ = event_tx.send(event);
+                        }
+                    }
+                    Err(e) => {
+                        warn!("[scheduler] Failed to refresh {}: {}", feed_title, e);
+                    }
+                }
+            });
+
+            handles.push(handle);
+        }
+
+        for handle in handles {
+            let _ = handle.await;
         }
 
         Ok(())

@@ -46,8 +46,8 @@ export class RssApi {
   /**
    * 刷新所有订阅
    */
-  static async refreshAllFeeds(): Promise<FeedWithUnreadCount[]> {
-    return await invoke<FeedWithUnreadCount[]>('refresh_all_feeds')
+  static async refreshAllFeeds(): Promise<void> {
+    await invoke<void>('refresh_all_feeds')
   }
 
   /**

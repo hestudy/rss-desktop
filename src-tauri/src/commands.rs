@@ -6,11 +6,33 @@ use crate::ai_translator;
 use crate::settings::AiSettings;
 use crate::storage::{Storage, MAX_ARTICLES_LIMIT};
 use crate::task_queue::{TaskQueue, TaskType, TaskPriority, QueueTask};
-use tauri::State;
+use tauri::{State, Emitter};
 use std::path::PathBuf;
 use std::sync::Arc;
 use fs2::FileExt;
 use log::{warn, info};
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct FeedRefreshedEvent {
+    pub feed: FeedWithUnreadCount,
+    pub new_article_count: usize,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct FeedRefreshProgressEvent {
+    pub feed_id: String,
+    pub feed_title: String,
+    pub status: String,
+    pub current: usize,
+    pub total: usize,
+    pub error: Option<String>,
+}
+
+impl FeedRefreshProgressEvent {
+    fn new(feed_id: String, feed_title: String, status: &str, completed: usize, total: usize, error: Option<String>) -> Self {
+        Self { feed_id, feed_title, status: status.to_string(), current: completed, total, error }
+    }
+}
 
 /// 应用状态，包含存储实例
 #[derive(Clone)]
@@ -21,11 +43,80 @@ pub struct AppState {
 /// 错误类型用于 Tauri 命令
 pub type CommandResult<T> = std::result::Result<T, String>;
 
+/// 公共函数：刷新单个 feed 的完整流程
+/// 获取已有链接 → spawn_blocking(fetch_feed) → 去重 → 保存 → 处理新文章
+/// 返回 (updated_feed, new_count, unread_count)
+pub async fn process_feed_refresh(
+    feed: &Feed,
+    storage: &Arc<Storage>,
+    data_dir: &PathBuf,
+    queue: Option<&Arc<TaskQueue>>,
+) -> Result<(Feed, usize, usize), String> {
+    let feed_id = feed.id.clone();
+    let feed_url = feed.url.clone();
+
+    let existing_links: std::collections::HashSet<String> = storage
+        .get_articles(Some(&feed_id), None)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|a| a.link)
+        .collect();
+
+    let url_for_fetch = feed_url.clone();
+    let (_fetched, articles) = tauri::async_runtime::spawn_blocking(move || {
+        fetch_feed(&url_for_fetch)
+    })
+    .await
+    .map_err(|e| format!("Fetch task join error: {}", e))?
+    .map_err(|e| format!("Failed to fetch feed: {}", e))?;
+
+    let mut new_article_ids = Vec::new();
+    for article in &articles {
+        let mut article = article.clone();
+        article.feed_id = feed_id.clone();
+        let is_new = !existing_links.contains(&article.link);
+        if is_new {
+            new_article_ids.push(article.id.clone());
+        }
+        storage
+            .add_article(&article)
+            .map_err(|e| format!("Failed to save article: {}", e))?;
+    }
+
+    let new_count = new_article_ids.len();
+
+    let mut updated_feed = feed.clone();
+    updated_feed.updated_at = chrono::Utc::now();
+    storage
+        .update_feed(&updated_feed)
+        .map_err(|e| format!("Failed to update feed: {}", e))?;
+
+    let unread_count = storage.get_unread_count(&feed_id).unwrap_or(0);
+
+    if !new_article_ids.is_empty() {
+        let queue_clone = queue.cloned();
+        process_new_articles_background(
+            storage.clone(),
+            data_dir.clone(),
+            feed,
+            new_article_ids,
+            queue_clone,
+        );
+    }
+
+    Ok((updated_feed, new_count, unread_count))
+}
+
 /// 添加 RSS 订阅
 #[tauri::command]
 pub async fn add_feed(url: String, use_full_content: Option<bool>, use_ai_summary: Option<bool>, use_ai_translation: Option<bool>, storage: State<'_, Arc<Storage>>, app_state: State<'_, AppState>, queue: State<'_, Arc<TaskQueue>>) -> CommandResult<Feed> {
-    let (mut feed, articles) = fetch_feed(&url)
-        .map_err(|e| format!("Failed to fetch feed: {}", e))?;
+    let url_for_fetch = url.clone();
+    let (mut feed, articles) = tauri::async_runtime::spawn_blocking(move || {
+        fetch_feed(&url_for_fetch)
+    })
+    .await
+    .map_err(|e| format!("Fetch task join error: {}", e))?
+    .map_err(|e| format!("Failed to fetch feed: {}", e))?;
 
     feed.use_full_content = use_full_content.unwrap_or(false);
     feed.use_ai_summary = use_ai_summary.unwrap_or(false);
@@ -85,43 +176,13 @@ pub async fn refresh_feed(id: String, storage: State<'_, Arc<Storage>>, app_stat
         .map_err(|e| format!("Failed to get feed: {}", e))?
         .ok_or_else(|| "Feed not found".to_string())?;
 
-    let existing_links: std::collections::HashSet<String> = storage.get_articles(Some(&id), None)
-        .unwrap_or_default()
-        .into_iter()
-        .map(|a| a.link)
-        .collect();
-
-    let (_feed, articles) = fetch_feed(&existing_feed.url)
-        .map_err(|e| format!("Failed to fetch feed: {}", e))?;
-
-    let mut new_article_ids = Vec::new();
-    for article in &articles {
-        let mut article = article.clone();
-        article.feed_id = id.clone();
-        let is_new = !existing_links.contains(&article.link);
-        if is_new {
-            new_article_ids.push(article.id.clone());
-        }
-        storage.add_article(&article)
-            .map_err(|e| format!("Failed to save article: {}", e))?;
-    }
-
-    let mut updated_feed = existing_feed.clone();
-    updated_feed.updated_at = chrono::Utc::now();
-    storage.update_feed(&updated_feed)
-        .map_err(|e| format!("Failed to update feed: {}", e))?;
-
-    let unread_count = storage.get_unread_count(&id).unwrap_or(0);
-
-    if !new_article_ids.is_empty() {
-        process_new_articles_background(
-            storage.inner().clone(),
-            app_state.data_dir.clone(),
-            &existing_feed,
-            new_article_ids,
-            Some(queue.inner().clone()),
-        );
-    }
+    let (updated_feed, _new_count, unread_count) = process_feed_refresh(
+        &existing_feed,
+        storage.inner(),
+        &app_state.data_dir,
+        Some(queue.inner()),
+    )
+    .await?;
 
     Ok(FeedWithUnreadCount {
         feed: updated_feed,
@@ -130,59 +191,82 @@ pub async fn refresh_feed(id: String, storage: State<'_, Arc<Storage>>, app_stat
 }
 
 #[tauri::command]
-pub async fn refresh_all_feeds(storage: State<'_, Arc<Storage>>, app_state: State<'_, AppState>, queue: State<'_, Arc<TaskQueue>>) -> CommandResult<Vec<FeedWithUnreadCount>> {
+pub async fn refresh_all_feeds(
+    storage: State<'_, Arc<Storage>>,
+    app_state: State<'_, AppState>,
+    queue: State<'_, Arc<TaskQueue>>,
+    app_handle: tauri::AppHandle,
+) -> CommandResult<()> {
     let feeds = storage.get_all_feeds()
         .map_err(|e| format!("Failed to get feeds: {}", e))?;
 
-    let mut result = Vec::new();
+    let total = feeds.len();
+    let storage = storage.inner().clone();
+    let data_dir = app_state.data_dir.clone();
+    let queue = queue.inner().clone();
+    let app_handle_for_done = app_handle.clone();
 
-    for feed in feeds {
-        let feed_id = feed.id.clone();
-        let feed_url = feed.url.clone();
+    tokio::spawn(async move {
+        let semaphore = Arc::new(tokio::sync::Semaphore::new(3));
+        let completed_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let mut handles = Vec::new();
 
-        let existing_links: std::collections::HashSet<String> = storage.get_articles(Some(&feed_id), None)
-            .unwrap_or_default()
-            .into_iter()
-            .map(|a| a.link)
-            .collect();
+        for feed in feeds {
+            let sem = semaphore.clone();
+            let storage = storage.clone();
+            let data_dir = data_dir.clone();
+            let queue = queue.clone();
+            let app_handle = app_handle.clone();
+            let completed_count = completed_count.clone();
+            let feed_id = feed.id.clone();
+            let feed_title = feed.title.clone();
 
-        if let Ok((_fetched, articles)) = fetch_feed(&feed_url) {
-            let mut new_article_ids = Vec::new();
-            for article in &articles {
-                let mut article = article.clone();
-                article.feed_id = feed_id.clone();
-                let is_new = !existing_links.contains(&article.link);
-                if is_new {
-                    new_article_ids.push(article.id.clone());
+            let handle = tokio::spawn(async move {
+                let _permit = sem.acquire().await.ok()?;
+
+                let _ = app_handle.emit("feed-refresh-progress", FeedRefreshProgressEvent::new(
+                    feed_id.clone(), feed_title.clone(), "started",
+                    completed_count.load(std::sync::atomic::Ordering::Relaxed), total, None,
+                ));
+
+                match process_feed_refresh(&feed, &storage, &data_dir, Some(&queue)).await {
+                    Ok((updated_feed, new_count, unread_count)) => {
+                        let done = completed_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+                        let _ = app_handle.emit("feed-refreshed", FeedRefreshedEvent {
+                            feed: FeedWithUnreadCount {
+                                feed: updated_feed,
+                                unread_count,
+                            },
+                            new_article_count: new_count,
+                        });
+                        let _ = app_handle.emit("feed-refresh-progress", FeedRefreshProgressEvent::new(
+                            feed_id, feed_title, "completed", done, total, None,
+                        ));
+                    }
+                    Err(e) => {
+                        let done = completed_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+                        warn!("[refresh_all] Failed to refresh {}: {}", feed_title, e);
+                        let _ = app_handle.emit("feed-refresh-progress", FeedRefreshProgressEvent::new(
+                            feed_id, feed_title, "failed", done, total, Some(e),
+                        ));
+                    }
                 }
-                let _ = storage.add_article(&article);
-            }
 
-            if !new_article_ids.is_empty() {
-                process_new_articles_background(
-                    storage.inner().clone(),
-                    app_state.data_dir.clone(),
-                    &feed,
-                    new_article_ids,
-                    Some(queue.inner().clone()),
-                );
-            }
+                Some(())
+            });
+
+            handles.push(handle);
         }
 
-        let mut updated_feed = feed.clone();
-        updated_feed.updated_at = chrono::Utc::now();
-        if storage.update_feed(&updated_feed).is_err() {
-            updated_feed = feed.clone();
+        for handle in handles {
+            let _ = handle.await;
         }
 
-        let unread_count = storage.get_unread_count(&feed_id).unwrap_or(0);
-        result.push(FeedWithUnreadCount {
-            feed: updated_feed,
-            unread_count,
-        });
-    }
+        let _ = app_handle_for_done.emit("feed-refresh-all-done", total);
+        info!("[refresh_all] All {} feeds refreshed", total);
+    });
 
-    Ok(result)
+    Ok(())
 }
 
 /// 获取文章列表
@@ -438,11 +522,16 @@ pub async fn fetch_full_content(id: String, storage: State<'_, Arc<Storage>>) ->
     info!("[FullContent] Fetching for article \"{}\" ({})", article.title, article.link);
     let start = std::time::Instant::now();
 
-    let content = fetch_and_extract_content(&article.link)
-        .map_err(|e| {
-            warn!("[FullContent] Failed for \"{}\": {}", article.title, e);
-            e.to_string()
-        })?;
+    let link = article.link.clone();
+    let content = tauri::async_runtime::spawn_blocking(move || {
+        fetch_and_extract_content(&link)
+    })
+    .await
+    .map_err(|e| format!("Fetch content task join error: {}", e))?
+    .map_err(|e| {
+        warn!("[FullContent] Failed for \"{}\": {}", article.title, e);
+        e.to_string()
+    })?;
 
     info!(
         "[FullContent] Done in {:.1}s, content_len={}",

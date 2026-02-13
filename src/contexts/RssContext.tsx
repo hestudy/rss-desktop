@@ -1,5 +1,6 @@
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react'
-import type { Feed, Article, FeedWithUnreadCount } from '../types'
+import { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from 'react'
+import { listen } from '@tauri-apps/api/event'
+import type { Feed, Article, FeedWithUnreadCount, FeedRefreshedEvent, FeedRefreshProgressEvent, RefreshProgress } from '../types'
 import { RssApi } from '../lib/api'
 
 interface RssContextType {
@@ -9,6 +10,7 @@ interface RssContextType {
   isLoading: boolean
   error: string | null
   showFavoritesOnly: boolean
+  refreshProgress: RefreshProgress
   loadFeeds: () => Promise<void>
   loadArticles: (feedId?: string) => Promise<void>
   addFeed: (url: string, useFullContent?: boolean, useAiSummary?: boolean, useAiTranslation?: boolean) => Promise<Feed>
@@ -48,6 +50,15 @@ export function RssProvider({ children }: RssProviderProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false)
+  const [refreshProgress, setRefreshProgress] = useState<RefreshProgress>({
+    isRefreshing: false,
+    current: 0,
+    total: 0,
+    currentFeedTitle: '',
+  })
+
+  const selectedFeedIdRef = useRef(selectedFeedId)
+  selectedFeedIdRef.current = selectedFeedId
 
   const loadFeeds = useCallback(async () => {
     setIsLoading(true)
@@ -77,6 +88,69 @@ export function RssProvider({ children }: RssProviderProps) {
       setIsLoading(false)
     }
   }, [])
+
+  // 监听后端 feed-refreshed 和 feed-refresh-progress 事件
+  useEffect(() => {
+    const unlisteners: (() => void)[] = []
+    let reloadTimer: ReturnType<typeof setTimeout> | null = null
+
+    const debouncedReloadArticles = () => {
+      if (reloadTimer) clearTimeout(reloadTimer)
+      reloadTimer = setTimeout(() => {
+        const currentFeedId = selectedFeedIdRef.current
+        loadArticles(currentFeedId || undefined)
+      }, 500)
+    }
+
+    listen<FeedRefreshedEvent>('feed-refreshed', (event) => {
+      const { feed, new_article_count } = event.payload
+      setFeeds(prev => {
+        const exists = prev.some(f => f.feed.id === feed.feed.id)
+        if (exists) {
+          return prev.map(f => f.feed.id === feed.feed.id ? feed : f)
+        }
+        return [...prev, feed]
+      })
+      if (new_article_count > 0) {
+        const currentFeedId = selectedFeedIdRef.current
+        if (currentFeedId === feed.feed.id || currentFeedId === null) {
+          debouncedReloadArticles()
+        }
+      }
+    }).then(fn => unlisteners.push(fn))
+
+    listen<FeedRefreshProgressEvent>('feed-refresh-progress', (event) => {
+      const { feed_title, status, current, total } = event.payload
+      if (status === 'started') {
+        setRefreshProgress(prev => ({
+          isRefreshing: true,
+          current: prev.current,
+          total,
+          currentFeedTitle: feed_title,
+        }))
+      } else if (status === 'completed' || status === 'failed') {
+        setRefreshProgress({
+          isRefreshing: true,
+          current,
+          total,
+          currentFeedTitle: feed_title,
+        })
+      }
+    }).then(fn => unlisteners.push(fn))
+
+    listen<number>('feed-refresh-all-done', () => {
+      setRefreshProgress(prev => ({
+        ...prev,
+        isRefreshing: false,
+        currentFeedTitle: '',
+      }))
+    }).then(fn => unlisteners.push(fn))
+
+    return () => {
+      if (reloadTimer) clearTimeout(reloadTimer)
+      unlisteners.forEach(fn => fn())
+    }
+  }, [loadArticles])
 
   const addFeed = useCallback(async (url: string, useFullContent?: boolean, useAiSummary?: boolean, useAiTranslation?: boolean) => {
     setIsLoading(true)
@@ -153,30 +227,24 @@ export function RssProvider({ children }: RssProviderProps) {
   }, [loadArticles, selectedFeedId])
 
   const refreshAllFeeds = useCallback(async () => {
-    setIsLoading(true)
     setError(null)
+    setRefreshProgress({ isRefreshing: true, current: 0, total: 0, currentFeedTitle: '' })
     try {
-      const results = await RssApi.refreshAllFeeds()
-      setFeeds(results)
-      // 如果有选中的订阅，重新加载文章
-      if (selectedFeedId) {
-        await loadArticles(selectedFeedId)
-      }
+      await RssApi.refreshAllFeeds()
+      // 后端立即返回，实际刷新通过事件增量更新
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to refresh feeds')
+      setRefreshProgress(prev => ({ ...prev, isRefreshing: false }))
       throw err
-    } finally {
-      setIsLoading(false)
     }
-  }, [loadArticles, selectedFeedId])
+  }, [])
 
   const silentRefreshAll = useCallback(async () => {
     try {
-      const results = await RssApi.refreshAllFeeds()
-      setFeeds(results)
-    } catch (err) {
-      // 静默刷新失败不影响用户体验，仅记录日志
-      console.warn('Silent refresh failed:', err instanceof Error ? err.message : err)
+      await RssApi.refreshAllFeeds()
+      // 后端立即返回，实际刷新通过事件增量更新
+    } catch {
+      // 静默刷新失败不影响用户体验
     }
   }, [])
 
@@ -271,6 +339,7 @@ export function RssProvider({ children }: RssProviderProps) {
     isLoading,
     error,
     showFavoritesOnly,
+    refreshProgress,
     loadFeeds,
     loadArticles,
     addFeed,

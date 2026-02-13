@@ -19,10 +19,11 @@ export function ArticleList() {
     showFavoritesOnly,
     refreshFeed,
     refreshAllFeeds,
+    refreshProgress,
   } = useRss()
 
   const { selectedArticleId, selectArticle } = useReader()
-  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [isSingleRefreshing, setIsSingleRefreshing] = useState(false)
 
   useEffect(() => {
     if (!showFavoritesOnly) {
@@ -48,15 +49,15 @@ export function ArticleList() {
   }
 
   const handleRefresh = async () => {
-    setIsRefreshing(true)
-    try {
-      if (selectedFeedId) {
+    if (selectedFeedId) {
+      setIsSingleRefreshing(true)
+      try {
         await refreshFeed(selectedFeedId)
-      } else {
-        await refreshAllFeeds()
+      } finally {
+        setIsSingleRefreshing(false)
       }
-    } finally {
-      setIsRefreshing(false)
+    } else {
+      await refreshAllFeeds()
     }
   }
 
@@ -82,7 +83,7 @@ export function ArticleList() {
         unreadCount={unreadCount}
         onRefresh={handleRefresh}
         onMarkAllRead={handleMarkAllRead}
-        isRefreshing={isRefreshing}
+        isRefreshing={isSingleRefreshing || refreshProgress.isRefreshing}
         hideFilter
         hideMarkAllRead={showFavoritesOnly || unreadCount === 0}
       />

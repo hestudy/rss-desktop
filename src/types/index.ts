@@ -142,3 +142,24 @@ export interface TaskProgressEvent {
   status: string
   error: string | null
 }
+
+export interface FeedRefreshedEvent {
+  feed: FeedWithUnreadCount
+  new_article_count: number
+}
+
+export interface FeedRefreshProgressEvent {
+  feed_id: string
+  feed_title: string
+  status: 'started' | 'completed' | 'failed'
+  current: number
+  total: number
+  error: string | null
+}
+
+export interface RefreshProgress {
+  isRefreshing: boolean
+  current: number
+  total: number
+  currentFeedTitle: string
+}
