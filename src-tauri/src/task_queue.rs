@@ -559,20 +559,33 @@ async fn execute_task(
             let lang = target_lang.clone();
             let settings_clone = ai_settings.clone();
 
-            let translation = tauri::async_runtime::spawn_blocking(move || {
+            let content_handle = tauri::async_runtime::spawn_blocking(move || {
                 ai_translator::translate_content(&content, &lang, &settings_clone)
-            })
-            .await
-            .map_err(|e| format!("Translation task join error: {}", e))??;
+            });
+
+            let title_for_task = article.title.clone();
+            let lang_for_title = target_lang.clone();
+            let settings_for_title = ai_settings.clone();
+            let title_handle = tauri::async_runtime::spawn_blocking(move || {
+                ai_translator::translate_title(&title_for_task, &lang_for_title, &settings_for_title)
+            });
+
+            let (content_result, title_result) = tokio::join!(content_handle, title_handle);
+            let translation = content_result
+                .map_err(|e| format!("Translation task join error: {}", e))??;
+            let translated_title = title_result
+                .map_err(|e| format!("Title translation task join error: {}", e))?
+                .ok();
 
             storage
-                .update_article_ai_translation(article_id, &translation)
+                .update_article_ai_translation(article_id, &translation, translated_title.as_deref())
                 .map_err(|e| format!("Failed to save translation: {}", e))?;
 
             info!(
-                "[Queue] Translated article {}, len={}",
+                "[Queue] Translated article {}, len={}, title_translated={}",
                 article_id,
-                translation.len()
+                translation.len(),
+                translated_title.is_some()
             );
             Ok(())
         }

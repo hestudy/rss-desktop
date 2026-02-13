@@ -299,11 +299,17 @@ impl Storage {
         }
     }
 
-    pub fn update_article_ai_translation(&self, id: &str, ai_translation: &str) -> Result<()> {
+    pub fn update_article_ai_translation(
+        &self,
+        id: &str,
+        ai_translation: &str,
+        ai_translated_title: Option<&str>,
+    ) -> Result<()> {
         let _lock = self.acquire_write_lock()?;
         let mut articles = self.load_articles()?;
         if let Some(article) = articles.iter_mut().find(|a| a.id == id) {
             article.ai_translation = Some(ai_translation.to_string());
+            article.ai_translated_title = ai_translated_title.map(|s| s.to_string());
             self.save_articles(&articles)?;
             Ok(())
         } else {
@@ -469,6 +475,7 @@ mod tests {
             full_content: None,
             ai_summary: None,
             ai_translation: None,
+            ai_translated_title: None,
         }
     }
 
@@ -666,10 +673,16 @@ mod tests {
             }
         }
 
-        fn update_article_ai_translation(&self, id: &str, ai_translation: &str) -> Result<()> {
+        fn update_article_ai_translation(
+            &self,
+            id: &str,
+            ai_translation: &str,
+            ai_translated_title: Option<&str>,
+        ) -> Result<()> {
             let mut articles = self.articles.lock().unwrap();
             if let Some(article) = articles.iter_mut().find(|a| a.id == id) {
                 article.ai_translation = Some(ai_translation.to_string());
+                article.ai_translated_title = ai_translated_title.map(|s| s.to_string());
                 Ok(())
             } else {
                 Err(crate::error::RssError::StorageError(format!(
@@ -1314,17 +1327,41 @@ mod tests {
 
         let translation = "This is the translated content";
         storage
-            .update_article_ai_translation(&article.id, translation)
+            .update_article_ai_translation(&article.id, translation, None)
             .expect("Failed to update ai_translation");
 
         let retrieved = storage.get_article(&article.id).unwrap().unwrap();
         assert_eq!(retrieved.ai_translation, Some(translation.to_string()),);
+        assert_eq!(retrieved.ai_translated_title, None);
+    }
+
+    #[test]
+    fn test_update_ai_translation_with_title() {
+        let storage = TestStorage::new();
+        let feed = create_test_feed();
+        let article = create_test_article(&feed.id);
+
+        storage.add_feed(&feed).unwrap();
+        storage.add_article(&article).unwrap();
+
+        let translation = "翻译后的内容";
+        let translated_title = "翻译后的标题";
+        storage
+            .update_article_ai_translation(&article.id, translation, Some(translated_title))
+            .expect("Failed to update ai_translation with title");
+
+        let retrieved = storage.get_article(&article.id).unwrap().unwrap();
+        assert_eq!(retrieved.ai_translation, Some(translation.to_string()));
+        assert_eq!(
+            retrieved.ai_translated_title,
+            Some(translated_title.to_string())
+        );
     }
 
     #[test]
     fn test_update_ai_translation_nonexistent_article() {
         let storage = TestStorage::new();
-        let result = storage.update_article_ai_translation("nonexistent", "content");
+        let result = storage.update_article_ai_translation("nonexistent", "content", None);
         assert!(result.is_err());
     }
 }

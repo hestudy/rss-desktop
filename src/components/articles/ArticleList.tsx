@@ -102,7 +102,7 @@ export function ArticleList() {
                 <ArticleCard
                   key={article.id}
                   id={article.id}
-                  title={article.title}
+                  title={article.ai_translated_title || article.title}
                   description={article.description}
                   feedName={!selectedFeedId && !showFavoritesOnly ? getFeedName(article.feed_id) : undefined}
                   publishedAt={article.published_at || article.created_at}

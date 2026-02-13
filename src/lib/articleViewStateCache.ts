@@ -43,7 +43,7 @@ export function createDefaultState(article?: { full_content?: string; ai_summary
     summaryCollapsed: false,
     aiTranslation: article?.ai_translation ?? null,
     isTranslating: false,
-    showTranslation: false,
+    showTranslation: !!article?.ai_translation,
     fetchError: null,
     hasAttemptedAutoFetch: false,
     hasAttemptedAutoSummary: false,

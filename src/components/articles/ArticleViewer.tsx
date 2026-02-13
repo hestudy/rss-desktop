@@ -573,7 +573,11 @@ export function ArticleViewer({
       <div className="flex-1 overflow-y-auto px-8 py-6 scroll-smooth" ref={contentRef} onScroll={handleScroll}>
         <article className="mx-auto" style={getContentStyle()}>
           {/* 文章标题 */}
-          <h1 className="text-2xl font-bold mb-4 text-foreground">{article.title}</h1>
+          <h1 className="text-2xl font-bold mb-4 text-foreground">
+            {showTranslation && article.ai_translated_title
+              ? article.ai_translated_title
+              : article.title}
+          </h1>
 
           {/* 文章元信息 */}
           <div className="flex items-center gap-4 text-sm text-muted-foreground mb-8 pb-4 border-b border-border/60">

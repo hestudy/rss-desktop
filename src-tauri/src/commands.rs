@@ -550,23 +550,37 @@ pub async fn translate_article(
         article.title, lang, settings.model, content.len()
     );
 
+    let lang_clone = lang.clone();
     let settings_for_task = settings.clone();
     let start = std::time::Instant::now();
-    let translation = tauri::async_runtime::spawn_blocking(move || {
-        ai_translator::translate_content(&content, &lang, &settings_for_task)
-    })
-    .await
-    .map_err(|e| format!("Translation task join error: {}", e))??;
+    let content_handle = tauri::async_runtime::spawn_blocking(move || {
+        ai_translator::translate_content(&content, &lang_clone, &settings_for_task)
+    });
+
+    let title_for_task = article.title.clone();
+    let lang_for_title = lang.clone();
+    let settings_for_title = settings.clone();
+    let title_handle = tauri::async_runtime::spawn_blocking(move || {
+        ai_translator::translate_title(&title_for_task, &lang_for_title, &settings_for_title)
+    });
+
+    let (content_result, title_result) = tokio::join!(content_handle, title_handle);
+    let translation = content_result
+        .map_err(|e| format!("Translation task join error: {}", e))??;
+    let translated_title = title_result
+        .map_err(|e| format!("Title translation task join error: {}", e))?
+        .ok();
 
     info!(
-        "[AITranslate] Done for \"{}\" in {:.1}s, output_len={}",
+        "[AITranslate] Done for \"{}\" in {:.1}s, output_len={}, title_translated={}",
         article.title,
         start.elapsed().as_secs_f64(),
-        translation.len()
+        translation.len(),
+        translated_title.is_some()
     );
 
     storage
-        .update_article_ai_translation(&id, &translation)
+        .update_article_ai_translation(&id, &translation, translated_title.as_deref())
         .map_err(|e| format!("Failed to save translation: {}", e))?;
 
     storage

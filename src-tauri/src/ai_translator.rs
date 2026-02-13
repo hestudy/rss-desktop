@@ -6,6 +6,7 @@ use std::time::Instant;
 const CHUNK_MAX_CHARS: usize = 3000;
 const MAX_RETRIES: u32 = 2;
 const RETRY_DELAY_MS: u64 = 1000;
+const TITLE_MAX_TOKENS: u32 = 256;
 
 const BLOCK_TAGS: &[&str] = &[
     "<p>",
@@ -129,20 +130,12 @@ fn split_into_chunks(html: &str) -> Vec<String> {
 
 fn call_translate_api(
     content: &str,
-    target_lang: &str,
+    system_prompt: &str,
+    max_tokens: u32,
     settings: &AiSettings,
 ) -> Result<String, String> {
     let base = settings.api_endpoint.trim_end_matches('/');
     let endpoint = format!("{}/chat/completions", base);
-
-    let system_prompt = format!(
-        "你是一个专业的翻译助手。请将用户提供的文章内容准确翻译为{}。\
-         要求：1) 保留原文中所有的 HTML 标签和结构不变，只翻译标签内的文本内容；\
-         2) 翻译要自然流畅；3) 只输出翻译后的 HTML，不要添加任何解释或注释。",
-        target_lang
-    );
-
-    let output_tokens = ((content.len() as u32) * 2).max(1000).min(16000);
 
     let body = serde_json::json!({
         "model": settings.model,
@@ -150,7 +143,7 @@ fn call_translate_api(
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": content}
         ],
-        "max_tokens": output_tokens,
+        "max_tokens": max_tokens,
         "temperature": 0.3
     });
 
@@ -199,6 +192,30 @@ fn call_translate_api(
         .ok_or_else(|| "AI response missing choices[0].message.content".to_string())
 }
 
+pub fn translate_title(
+    title: &str,
+    target_lang: &str,
+    settings: &AiSettings,
+) -> Result<String, String> {
+    if settings.api_key.trim().is_empty() {
+        return Err("AI API key is empty".to_string());
+    }
+    if settings.model.trim().is_empty() {
+        return Err("AI model is empty".to_string());
+    }
+    if title.trim().is_empty() {
+        return Err("Title is empty".to_string());
+    }
+
+    let system_prompt = format!(
+        "你是一个专业的翻译助手。请将用户提供的标题准确翻译为{}。\
+         只输出翻译后的标题文本，不要添加任何解释、引号或额外标点。",
+        target_lang
+    );
+
+    call_translate_api(title, &system_prompt, TITLE_MAX_TOKENS, settings)
+}
+
 pub fn translate_content(
     content: &str,
     target_lang: &str,
@@ -218,13 +235,21 @@ pub fn translate_content(
 
     let chunks = split_into_chunks(content);
 
+    let content_system_prompt = format!(
+        "你是一个专业的翻译助手。请将用户提供的文章内容准确翻译为{}。\
+         要求：1) 保留原文中所有的 HTML 标签和结构不变，只翻译标签内的文本内容；\
+         2) 翻译要自然流畅；3) 只输出翻译后的 HTML，不要添加任何解释或注释。",
+        target_lang
+    );
+
     if chunks.len() == 1 {
         info!(
             "[Translate] Single chunk ({}chars), no splitting needed",
             content.len()
         );
+        let output_tokens = ((content.len() as u32) * 2).max(1000).min(16000);
         let start = Instant::now();
-        let result = call_translate_api(&chunks[0], target_lang, settings);
+        let result = call_translate_api(&chunks[0], &content_system_prompt, output_tokens, settings);
         info!("[Translate] Done in {:.1}s", start.elapsed().as_secs_f64());
         return result;
     }
@@ -249,6 +274,7 @@ pub fn translate_content(
         let batch_start = Instant::now();
 
         let batch_results: Vec<Result<String, String>> = std::thread::scope(|s| {
+            let prompt_ref = &content_system_prompt;
             let handles: Vec<_> = batch
                 .iter()
                 .enumerate()
@@ -285,7 +311,7 @@ pub fn translate_content(
                                     RETRY_DELAY_MS * attempt as u64,
                                 ));
                             }
-                            match call_translate_api(chunk, target_lang, settings) {
+                            match call_translate_api(chunk, prompt_ref, ((chunk.len() as u32) * 2).max(1000).min(16000), settings) {
                                 Ok(translated) => {
                                     info!(
                                         "[Translate] Chunk {}/{} done in {:.1}s{}",
@@ -428,5 +454,39 @@ mod tests {
         let result = translate_content("<div>   </div>", "中文", &settings);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("empty after preprocessing"));
+    }
+
+    #[test]
+    fn test_translate_title_empty_api_key() {
+        let settings = AiSettings {
+            api_key: "".to_string(),
+            ..AiSettings::default()
+        };
+        let result = translate_title("Hello World", "中文", &settings);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("API key is empty"));
+    }
+
+    #[test]
+    fn test_translate_title_empty_model() {
+        let settings = AiSettings {
+            api_key: "test-key".to_string(),
+            model: "".to_string(),
+            ..AiSettings::default()
+        };
+        let result = translate_title("Hello World", "中文", &settings);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("model is empty"));
+    }
+
+    #[test]
+    fn test_translate_title_empty_title() {
+        let settings = AiSettings {
+            api_key: "test-key".to_string(),
+            ..AiSettings::default()
+        };
+        let result = translate_title("", "中文", &settings);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Title is empty"));
     }
 }

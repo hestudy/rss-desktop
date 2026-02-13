@@ -39,6 +39,8 @@ export interface Article {
   ai_summary?: string
   /** AI 翻译的内容 */
   ai_translation?: string
+  /** AI 翻译的标题 */
+  ai_translated_title?: string
 }
 
 /**
