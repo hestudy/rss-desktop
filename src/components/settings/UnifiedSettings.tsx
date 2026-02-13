@@ -11,11 +11,14 @@ import {
   Monitor,
   Rss,
   Sparkles,
+  Coins,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useTheme, type ThemePreset, type ThemeMode } from '@/contexts/ThemeContext'
 import { useReader } from '@/contexts/ReaderContext'
 import { DEFAULT_READER_SETTINGS } from '@/types'
+import { RssApi } from '@/lib/api'
+import type { AiUsageSummary } from '@/types'
 import {
   getSettings,
   updateSettings,
@@ -31,7 +34,7 @@ import {
 
 // ============= 设置面板 Context =============
 
-type SettingsTab = 'appearance' | 'reading' | 'notification' | 'ai' | 'about'
+type SettingsTab = 'appearance' | 'reading' | 'notification' | 'ai' | 'ai-usage' | 'about'
 
 interface UnifiedSettingsContextType {
   open: boolean
@@ -77,6 +80,7 @@ const NAV_ITEMS: { key: SettingsTab; label: string; icon: React.ReactNode }[] = 
   { key: 'reading', label: '阅读', icon: <BookOpen className="w-4 h-4" /> },
   { key: 'notification', label: '通知', icon: <Bell className="w-4 h-4" /> },
   { key: 'ai', label: 'AI', icon: <Sparkles className="w-4 h-4" /> },
+  { key: 'ai-usage', label: 'AI 费用', icon: <Coins className="w-4 h-4" /> },
   { key: 'about', label: '关于', icon: <Info className="w-4 h-4" /> },
 ]
 
@@ -162,6 +166,7 @@ function UnifiedSettingsPanel({ initialTab, onClose }: UnifiedSettingsPanelProps
             {activeTab === 'reading' && <ReadingSection />}
             {activeTab === 'notification' && <NotificationSection />}
             {activeTab === 'ai' && <AiSection />}
+            {activeTab === 'ai-usage' && <AiUsageSection />}
             {activeTab === 'about' && <AboutSection />}
           </div>
         </div>
@@ -596,6 +601,230 @@ function AiSection() {
           rows={3}
           className="w-full px-3 py-2 rounded-lg border border-border bg-card text-foreground text-sm resize-none"
         />
+      </div>
+    </div>
+  )
+}
+
+// ============= AI 费用统计 =============
+
+function AiUsageSection() {
+  const [summary, setSummary] = useState<AiUsageSummary | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [clearing, setClearing] = useState(false)
+  const [showConfirm, setShowConfirm] = useState(false)
+  const [aiSettings, setAiSettings] = useState<AiSettings>(DEFAULT_AI_SETTINGS)
+  const [savingPrice, setSavingPrice] = useState(false)
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(null)
+
+  const loadData = useCallback(async () => {
+    try {
+      const [s, ai] = await Promise.all([
+        RssApi.getAiUsageSummary(),
+        getAiSettings(),
+      ])
+      setSummary(s)
+      setAiSettings(ai)
+    } catch {
+      // silent
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [])
+
+  const handleClear = async () => {
+    setClearing(true)
+    try {
+      await RssApi.clearAiUsageRecords()
+      await loadData()
+    } catch {
+      // silent
+    } finally {
+      setClearing(false)
+      setShowConfirm(false)
+    }
+  }
+
+  const handlePriceChange = (field: 'customInputPrice' | 'customOutputPrice', value: string) => {
+    const numValue = value === '' ? null : Number(value)
+    const updated = { ...aiSettings, [field]: numValue }
+    setAiSettings(updated)
+
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(async () => {
+      setSavingPrice(true)
+      try {
+        await updateAiSettings({ [field]: numValue })
+        const s = await RssApi.getAiUsageSummary()
+        setSummary(s)
+      } catch {
+        // silent
+      } finally {
+        setSavingPrice(false)
+      }
+    }, 600)
+  }
+
+  const formatCost = (cost: number) => {
+    if (cost < 0.01) return `$${cost.toFixed(6)}`
+    if (cost < 1) return `$${cost.toFixed(4)}`
+    return `$${cost.toFixed(2)}`
+  }
+
+  const formatTokens = (tokens: number) => {
+    if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M`
+    if (tokens >= 1_000) return `${(tokens / 1_000).toFixed(1)}K`
+    return tokens.toString()
+  }
+
+  if (loading) {
+    return <div className="text-sm text-muted-foreground">加载中...</div>
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* 概览卡片 */}
+      {summary && (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="p-3 rounded-lg border border-border bg-muted/30">
+            <div className="text-xs text-muted-foreground">总 Token</div>
+            <div className="text-lg font-semibold mt-1">{formatTokens(summary.total_tokens)}</div>
+          </div>
+          <div className="p-3 rounded-lg border border-border bg-muted/30">
+            <div className="text-xs text-muted-foreground">预估费用</div>
+            <div className="text-lg font-semibold mt-1">{formatCost(summary.total_cost)}</div>
+          </div>
+          <div className="p-3 rounded-lg border border-border bg-muted/30">
+            <div className="text-xs text-muted-foreground">调用次数</div>
+            <div className="text-lg font-semibold mt-1">{summary.total_calls}</div>
+          </div>
+          <div className="p-3 rounded-lg border border-border bg-muted/30">
+            <div className="text-xs text-muted-foreground">Input / Output</div>
+            <div className="text-sm font-medium mt-1">
+              {formatTokens(summary.total_prompt_tokens)} / {formatTokens(summary.total_completion_tokens)}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 按操作类型统计 */}
+      {summary && summary.total_calls > 0 && (
+        <div>
+          <h3 className="text-sm font-medium text-foreground mb-3">按类型统计</h3>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between py-2 px-3 rounded-lg border border-border">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-blue-500" />
+                <span className="text-sm">摘要</span>
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {summary.summary_calls} 次 · {formatTokens(summary.summary_tokens)} tokens · {formatCost(summary.summary_cost)}
+              </div>
+            </div>
+            <div className="flex items-center justify-between py-2 px-3 rounded-lg border border-border">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-green-500" />
+                <span className="text-sm">翻译</span>
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {summary.translation_calls} 次 · {formatTokens(summary.translation_tokens)} tokens · {formatCost(summary.translation_cost)}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 每日趋势 */}
+      {summary && summary.daily_stats.length > 0 && (
+        <div>
+          <h3 className="text-sm font-medium text-foreground mb-3">每日趋势</h3>
+          <div className="space-y-1 max-h-48 overflow-y-auto">
+            {[...summary.daily_stats].reverse().map((day) => (
+              <div key={day.date} className="flex items-center justify-between py-1.5 px-3 rounded border border-border text-sm">
+                <span className="text-muted-foreground">{day.date}</span>
+                <div className="flex items-center gap-3">
+                  <span>{day.calls} 次</span>
+                  <span className="text-muted-foreground">{formatTokens(day.total_tokens)}</span>
+                  <span className="font-medium">{formatCost(day.cost)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 自定义价格 */}
+      <div>
+        <h3 className="text-sm font-medium text-foreground mb-1">自定义价格</h3>
+        <p className="text-xs text-muted-foreground mb-3">
+          留空则使用内置价格（单位：$/百万 tokens）{savingPrice && ' · 保存中...'}
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label htmlFor="custom-input-price" className="text-xs text-muted-foreground">Input 价格</label>
+            <input
+              id="custom-input-price"
+              type="number"
+              step="0.01"
+              min="0"
+              value={aiSettings.customInputPrice ?? ''}
+              onChange={(e) => handlePriceChange('customInputPrice', e.target.value)}
+              placeholder="自动"
+              className="w-full mt-1 px-3 py-2 rounded-lg border border-border bg-card text-foreground text-sm"
+            />
+          </div>
+          <div>
+            <label htmlFor="custom-output-price" className="text-xs text-muted-foreground">Output 价格</label>
+            <input
+              id="custom-output-price"
+              type="number"
+              step="0.01"
+              min="0"
+              value={aiSettings.customOutputPrice ?? ''}
+              onChange={(e) => handlePriceChange('customOutputPrice', e.target.value)}
+              placeholder="自动"
+              className="w-full mt-1 px-3 py-2 rounded-lg border border-border bg-card text-foreground text-sm"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* 清空记录 */}
+      <div>
+        {!showConfirm ? (
+          <button
+            onClick={() => setShowConfirm(true)}
+            className="w-full py-2 px-4 rounded-lg border border-border text-sm text-muted-foreground hover:bg-muted/50 transition-colors"
+          >
+            清空历史记录
+          </button>
+        ) : (
+          <div className="flex gap-2">
+            <button
+              onClick={handleClear}
+              disabled={clearing}
+              className="flex-1 py-2 px-4 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90 transition-colors disabled:opacity-50"
+            >
+              {clearing ? '清空中...' : '确认清空'}
+            </button>
+            <button
+              onClick={() => setShowConfirm(false)}
+              className="flex-1 py-2 px-4 rounded-lg border border-border text-sm text-muted-foreground hover:bg-muted/50 transition-colors"
+            >
+              取消
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )

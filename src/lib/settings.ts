@@ -71,6 +71,8 @@ export interface AiSettings {
   enableAutoSummary: boolean
   language: string
   maxConcurrency: number
+  customInputPrice?: number | null
+  customOutputPrice?: number | null
 }
 
 export const DEFAULT_AI_SETTINGS: AiSettings = {
@@ -82,6 +84,8 @@ export const DEFAULT_AI_SETTINGS: AiSettings = {
   enableAutoSummary: false,
   language: 'zh-CN',
   maxConcurrency: 3,
+  customInputPrice: null,
+  customOutputPrice: null,
 }
 
 export const AiSettingsSchema = z.object({
@@ -93,6 +97,8 @@ export const AiSettingsSchema = z.object({
   enableAutoSummary: z.boolean().default(false),
   language: z.string().default('zh-CN'),
   maxConcurrency: z.number().int().min(1).max(10).default(3),
+  customInputPrice: z.number().min(0).nullable().optional().default(null),
+  customOutputPrice: z.number().min(0).nullable().optional().default(null),
 })
 
 /**

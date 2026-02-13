@@ -177,6 +177,14 @@ pub struct AiSettings {
 
     #[serde(default = "default_max_concurrency")]
     pub max_concurrency: u32,
+
+    /// 自定义 input 价格（$/M tokens），留空使用内置价格
+    #[serde(default)]
+    pub custom_input_price: Option<f64>,
+
+    /// 自定义 output 价格（$/M tokens），留空使用内置价格
+    #[serde(default)]
+    pub custom_output_price: Option<f64>,
 }
 
 fn default_api_endpoint() -> String {
@@ -215,6 +223,8 @@ impl Default for AiSettings {
             enable_auto_summary: false,
             language: default_language(),
             max_concurrency: default_max_concurrency(),
+            custom_input_price: None,
+            custom_output_price: None,
         }
     }
 }
@@ -434,6 +444,8 @@ mod tests {
             enable_auto_summary: true,
             language: "en-US".to_string(),
             max_concurrency: 5,
+            custom_input_price: None,
+            custom_output_price: None,
         };
 
         let json = serde_json::to_string(&settings).unwrap();

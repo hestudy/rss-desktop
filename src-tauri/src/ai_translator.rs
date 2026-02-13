@@ -1,3 +1,4 @@
+use crate::models::AiUsageRecord;
 use crate::settings::AiSettings;
 use log::{debug, info, warn};
 use serde_json::Value;
@@ -133,7 +134,7 @@ fn call_translate_api(
     system_prompt: &str,
     max_tokens: u32,
     settings: &AiSettings,
-) -> Result<String, String> {
+) -> Result<(String, u32, u32), String> {
     let base = settings.api_endpoint.trim_end_matches('/');
     let endpoint = format!("{}/chat/completions", base);
 
@@ -181,7 +182,16 @@ fn call_translate_api(
         .into_json()
         .map_err(|e| format!("Failed to parse AI response JSON: {}", e))?;
 
-    json.get("choices")
+    let prompt_tokens = json.get("usage")
+        .and_then(|u| u.get("prompt_tokens"))
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0) as u32;
+    let completion_tokens = json.get("usage")
+        .and_then(|u| u.get("completion_tokens"))
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0) as u32;
+
+    let text = json.get("choices")
         .and_then(|c| c.as_array())
         .and_then(|arr| arr.first())
         .and_then(|choice| choice.get("message"))
@@ -189,14 +199,16 @@ fn call_translate_api(
         .and_then(|content| content.as_str())
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
-        .ok_or_else(|| "AI response missing choices[0].message.content".to_string())
+        .ok_or_else(|| "AI response missing choices[0].message.content".to_string())?;
+
+    Ok((text, prompt_tokens, completion_tokens))
 }
 
 pub fn translate_title(
     title: &str,
     target_lang: &str,
     settings: &AiSettings,
-) -> Result<String, String> {
+) -> Result<(String, u32, u32), String> {
     if settings.api_key.trim().is_empty() {
         return Err("AI API key is empty".to_string());
     }
@@ -220,7 +232,8 @@ pub fn translate_content(
     content: &str,
     target_lang: &str,
     settings: &AiSettings,
-) -> Result<String, String> {
+    article_id: Option<&str>,
+) -> Result<(String, AiUsageRecord), String> {
     if settings.api_key.trim().is_empty() {
         return Err("AI API key is empty".to_string());
     }
@@ -249,9 +262,10 @@ pub fn translate_content(
         );
         let output_tokens = ((content.len() as u32) * 2).max(1000).min(16000);
         let start = Instant::now();
-        let result = call_translate_api(&chunks[0], &content_system_prompt, output_tokens, settings);
-        info!("[Translate] Done in {:.1}s", start.elapsed().as_secs_f64());
-        return result;
+        let (text, pt, ct) = call_translate_api(&chunks[0], &content_system_prompt, output_tokens, settings)?;
+        info!("[Translate] Done in {:.1}s, tokens={}+{}", start.elapsed().as_secs_f64(), pt, ct);
+        let usage = AiUsageRecord::new("translation", &settings.model, pt, ct, article_id);
+        return Ok((text, usage));
     }
 
     let chunk_count = chunks.len();
@@ -263,6 +277,8 @@ pub fn translate_content(
     );
     let total_start = Instant::now();
     let mut translated_parts: Vec<String> = Vec::with_capacity(chunk_count);
+    let mut total_prompt_tokens: u32 = 0;
+    let mut total_completion_tokens: u32 = 0;
 
     for (batch_idx, batch) in chunks.chunks(max_concurrent).enumerate() {
         info!(
@@ -273,7 +289,7 @@ pub fn translate_content(
         );
         let batch_start = Instant::now();
 
-        let batch_results: Vec<Result<String, String>> = std::thread::scope(|s| {
+        let batch_results: Vec<Result<(String, u32, u32), String>> = std::thread::scope(|s| {
             let prompt_ref = &content_system_prompt;
             let handles: Vec<_> = batch
                 .iter()
@@ -287,7 +303,7 @@ pub fn translate_content(
                                 global_idx + 1,
                                 chunk_count
                             );
-                            return Ok(chunk.to_string());
+                            return Ok((chunk.to_string(), 0, 0));
                         }
                         debug!(
                             "[Translate] Chunk {}/{} starting ({}chars)",
@@ -359,17 +375,30 @@ pub fn translate_content(
         );
 
         for result in batch_results {
-            translated_parts.push(result?);
+            let (text, pt, ct) = result?;
+            translated_parts.push(text);
+            total_prompt_tokens += pt;
+            total_completion_tokens += ct;
         }
     }
 
     info!(
-        "[Translate] All {} chunks completed in {:.1}s",
+        "[Translate] All {} chunks completed in {:.1}s, tokens={}+{}",
         chunk_count,
-        total_start.elapsed().as_secs_f64()
+        total_start.elapsed().as_secs_f64(),
+        total_prompt_tokens,
+        total_completion_tokens
     );
 
-    Ok(translated_parts.join(""))
+    let usage = AiUsageRecord::new(
+        "translation",
+        &settings.model,
+        total_prompt_tokens,
+        total_completion_tokens,
+        article_id,
+    );
+
+    Ok((translated_parts.join(""), usage))
 }
 
 #[cfg(test)]
@@ -428,7 +457,7 @@ mod tests {
             api_key: "".to_string(),
             ..AiSettings::default()
         };
-        let result = translate_content("hello", "中文", &settings);
+        let result = translate_content("hello", "中文", &settings, None);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("API key is empty"));
     }
@@ -440,7 +469,7 @@ mod tests {
             model: "".to_string(),
             ..AiSettings::default()
         };
-        let result = translate_content("hello", "中文", &settings);
+        let result = translate_content("hello", "中文", &settings, None);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("model is empty"));
     }
@@ -451,7 +480,7 @@ mod tests {
             api_key: "test-key".to_string(),
             ..AiSettings::default()
         };
-        let result = translate_content("<div>   </div>", "中文", &settings);
+        let result = translate_content("<div>   </div>", "中文", &settings, None);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("empty after preprocessing"));
     }

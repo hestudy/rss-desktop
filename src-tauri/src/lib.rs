@@ -13,6 +13,7 @@ mod notifications;
 mod tray;
 mod ai_summarizer;
 mod ai_translator;
+mod ai_pricing;
 mod task_queue;
 mod queue_commands;
 
@@ -197,6 +198,9 @@ pub fn run() {
             queue_commands::queue_get_status,
             queue_commands::queue_cancel_task,
             queue_commands::queue_clear_completed,
+            commands::get_ai_usage_summary,
+            commands::clear_ai_usage_records,
+            commands::get_builtin_model_prices,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

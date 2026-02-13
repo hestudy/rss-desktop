@@ -1,6 +1,69 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+/// AI 使用记录
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AiUsageRecord {
+    pub id: String,
+    pub timestamp: DateTime<Utc>,
+    /// "summary" | "translation"
+    pub operation_type: String,
+    pub model: String,
+    pub prompt_tokens: u32,
+    pub completion_tokens: u32,
+    pub total_tokens: u32,
+    pub article_id: Option<String>,
+}
+
+impl AiUsageRecord {
+    pub fn new(
+        operation_type: &str,
+        model: &str,
+        prompt_tokens: u32,
+        completion_tokens: u32,
+        article_id: Option<&str>,
+    ) -> Self {
+        Self {
+            id: uuid::Uuid::new_v4().to_string(),
+            timestamp: Utc::now(),
+            operation_type: operation_type.to_string(),
+            model: model.to_string(),
+            prompt_tokens,
+            completion_tokens,
+            total_tokens: prompt_tokens + completion_tokens,
+            article_id: article_id.map(|s| s.to_string()),
+        }
+    }
+}
+
+/// AI 使用统计汇总
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AiUsageSummary {
+    pub total_prompt_tokens: u64,
+    pub total_completion_tokens: u64,
+    pub total_tokens: u64,
+    pub total_cost: f64,
+    pub total_calls: u64,
+    pub summary_tokens: u64,
+    pub summary_cost: f64,
+    pub summary_calls: u64,
+    pub translation_tokens: u64,
+    pub translation_cost: f64,
+    pub translation_calls: u64,
+    pub daily_stats: Vec<DailyUsageStats>,
+}
+
+/// 每日使用统计
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DailyUsageStats {
+    pub date: String,
+    pub prompt_tokens: u64,
+    pub completion_tokens: u64,
+    pub total_tokens: u64,
+    pub cost: f64,
+    pub calls: u64,
+}
+
 /// RSS 订阅源
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Feed {

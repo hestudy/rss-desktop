@@ -520,9 +520,10 @@ async fn execute_task(
 
             let ai_settings = crate::settings::load_ai_settings_from_dir(data_dir);
             let settings_clone = ai_settings.clone();
+            let article_id_clone = article_id.clone();
 
-            let summary = tauri::async_runtime::spawn_blocking(move || {
-                ai_summarizer::generate_summary(&content, &settings_clone)
+            let (summary, usage_record) = tauri::async_runtime::spawn_blocking(move || {
+                ai_summarizer::generate_summary(&content, &settings_clone, Some(&article_id_clone))
             })
             .await
             .map_err(|e| format!("AI summary task join error: {}", e))??;
@@ -530,6 +531,10 @@ async fn execute_task(
             storage
                 .update_article_ai_summary(article_id, &summary)
                 .map_err(|e| format!("Failed to save AI summary: {}", e))?;
+
+            if let Err(e) = storage.add_ai_usage_record(&usage_record) {
+                warn!("[Queue] Failed to save summary usage record: {}", e);
+            }
 
             info!(
                 "[Queue] Generated AI summary for article {}, len={}",
@@ -558,9 +563,10 @@ async fn execute_task(
             let ai_settings = crate::settings::load_ai_settings_from_dir(data_dir);
             let lang = target_lang.clone();
             let settings_clone = ai_settings.clone();
+            let article_id_clone = article_id.clone();
 
             let content_handle = tauri::async_runtime::spawn_blocking(move || {
-                ai_translator::translate_content(&content, &lang, &settings_clone)
+                ai_translator::translate_content(&content, &lang, &settings_clone, Some(&article_id_clone))
             });
 
             let title_for_task = article.title.clone();
@@ -571,15 +577,36 @@ async fn execute_task(
             });
 
             let (content_result, title_result) = tokio::join!(content_handle, title_handle);
-            let translation = content_result
+            let (translation, usage_record) = content_result
                 .map_err(|e| format!("Translation task join error: {}", e))??;
-            let translated_title = title_result
-                .map_err(|e| format!("Title translation task join error: {}", e))?
-                .ok();
+
+            let title_result = title_result
+                .map_err(|e| format!("Title translation task join error: {}", e))?;
+            let (translated_title, title_pt, title_ct) = match title_result {
+                Ok((text, pt, ct)) => (Some(text), pt, ct),
+                Err(_) => (None, 0, 0),
+            };
 
             storage
                 .update_article_ai_translation(article_id, &translation, translated_title.as_deref())
                 .map_err(|e| format!("Failed to save translation: {}", e))?;
+
+            if let Err(e) = storage.add_ai_usage_record(&usage_record) {
+                warn!("[Queue] Failed to save translation usage record: {}", e);
+            }
+
+            if title_pt > 0 || title_ct > 0 {
+                let title_usage = crate::models::AiUsageRecord::new(
+                    "translation",
+                    &ai_settings.model,
+                    title_pt,
+                    title_ct,
+                    Some(article_id),
+                );
+                if let Err(e) = storage.add_ai_usage_record(&title_usage) {
+                    warn!("[Queue] Failed to save title translation usage record: {}", e);
+                }
+            }
 
             info!(
                 "[Queue] Translated article {}, len={}, title_translated={}",

@@ -1,3 +1,4 @@
+use crate::models::AiUsageRecord;
 use crate::settings::AiSettings;
 use log::{debug, info};
 use serde_json::Value;
@@ -31,7 +32,7 @@ fn truncate_chars(input: &str, max_chars: usize) -> String {
     input.chars().take(max_chars).collect()
 }
 
-pub fn generate_summary(content: &str, settings: &AiSettings) -> Result<String, String> {
+pub fn generate_summary(content: &str, settings: &AiSettings, article_id: Option<&str>) -> Result<(String, AiUsageRecord), String> {
     if settings.api_key.trim().is_empty() {
         return Err("AI API key is empty".to_string());
     }
@@ -134,13 +135,32 @@ pub fn generate_summary(content: &str, settings: &AiSettings) -> Result<String, 
         .filter(|s| !s.is_empty())
         .ok_or_else(|| "AI response missing choices[0].message.content".to_string())?;
 
-    info!(
-        "[Summary] Done in {:.1}s, output_chars={}",
-        start.elapsed().as_secs_f64(),
-        summary.len()
+    let prompt_tokens = json.get("usage")
+        .and_then(|u| u.get("prompt_tokens"))
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0) as u32;
+    let completion_tokens = json.get("usage")
+        .and_then(|u| u.get("completion_tokens"))
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0) as u32;
+
+    let usage_record = AiUsageRecord::new(
+        "summary",
+        &settings.model,
+        prompt_tokens,
+        completion_tokens,
+        article_id,
     );
 
-    Ok(summary)
+    info!(
+        "[Summary] Done in {:.1}s, output_chars={}, tokens={}+{}",
+        start.elapsed().as_secs_f64(),
+        summary.len(),
+        prompt_tokens,
+        completion_tokens
+    );
+
+    Ok((summary, usage_record))
 }
 
 #[cfg(test)]

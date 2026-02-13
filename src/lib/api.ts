@@ -7,6 +7,8 @@ import type {
   QueueStatusSnapshot,
   QueueTaskType,
   FeedLog,
+  AiUsageSummary,
+  ModelPrice,
 } from '../types'
 
 /**
@@ -176,5 +178,17 @@ export class RssApi {
 
   static async getAllFeedLogs(limit?: number): Promise<FeedLog[]> {
     return await invoke<FeedLog[]>('get_all_feed_logs', { limit })
+  }
+
+  static async getAiUsageSummary(): Promise<AiUsageSummary> {
+    return await invoke<AiUsageSummary>('get_ai_usage_summary')
+  }
+
+  static async clearAiUsageRecords(): Promise<void> {
+    await invoke('clear_ai_usage_records')
+  }
+
+  static async getBuiltinModelPrices(): Promise<ModelPrice[]> {
+    return await invoke<ModelPrice[]>('get_builtin_model_prices')
   }
 }

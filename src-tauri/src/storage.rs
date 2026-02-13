@@ -1,5 +1,5 @@
 use crate::error::Result;
-use crate::models::{Article, Feed, FeedLog};
+use crate::models::{Article, AiUsageRecord, AiUsageSummary, DailyUsageStats, Feed, FeedLog};
 use std::path::{Component, Path};
 
 // 存储层实现 - 使用 JSON 文件存储 + 文件锁
@@ -11,6 +11,7 @@ use std::sync::Mutex;
 const FEEDS_FILE: &str = "feeds.json";
 const ARTICLES_FILE: &str = "articles.json";
 const FEED_LOGS_FILE: &str = "feed_logs.json";
+const AI_USAGE_FILE: &str = "ai_usage.json";
 
 /// 最大文章限制
 pub const MAX_ARTICLES_LIMIT: usize = 1000;
@@ -76,6 +77,11 @@ impl Storage {
         }
         if !feed_logs_path.exists() {
             fs::write(&feed_logs_path, "[]")?;
+        }
+
+        let ai_usage_path = data_dir.join(AI_USAGE_FILE);
+        if !ai_usage_path.exists() {
+            fs::write(&ai_usage_path, "[]")?;
         }
 
         Ok(Self {
@@ -502,6 +508,165 @@ impl Storage {
             logs.truncate(limit);
         }
         Ok(logs)
+    }
+
+    // ============= AI Usage 存储方法 =============
+
+    fn get_ai_usage_path(&self) -> std::path::PathBuf {
+        self.data_dir.join(AI_USAGE_FILE)
+    }
+
+    fn load_ai_usage_records(&self) -> Result<Vec<AiUsageRecord>> {
+        let path = self.get_ai_usage_path();
+        if !path.exists() {
+            return Ok(Vec::new());
+        }
+        let file = File::open(&path)?;
+        file.lock_shared()?;
+        let reader = BufReader::new(file);
+        let records: Vec<AiUsageRecord> = serde_json::from_reader(reader)?;
+        Ok(records)
+    }
+
+    fn save_ai_usage_records(&self, records: &[AiUsageRecord]) -> Result<()> {
+        let path = self.get_ai_usage_path();
+        let temp_path = path.with_extension("tmp");
+
+        {
+            let file = OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .open(&temp_path)?;
+            file.lock_exclusive()?;
+
+            let json = serde_json::to_string_pretty(records)?;
+            {
+                let mut writer = BufWriter::new(&file);
+                writer.write_all(json.as_bytes())?;
+                writer.flush()?;
+            }
+        }
+
+        fs::rename(&temp_path, &path)?;
+        Ok(())
+    }
+
+    /// 最大 AI 使用记录数
+    const MAX_AI_USAGE_RECORDS: usize = 10000;
+
+    /// 添加 AI 使用记录
+    pub fn add_ai_usage_record(&self, record: &AiUsageRecord) -> Result<()> {
+        let _lock = self.acquire_write_lock()?;
+        let mut records = self.load_ai_usage_records()?;
+        records.push(record.clone());
+
+        // 超出限制时删除最旧的记录
+        if records.len() > Self::MAX_AI_USAGE_RECORDS {
+            let excess = records.len() - Self::MAX_AI_USAGE_RECORDS;
+            records.drain(..excess);
+        }
+
+        self.save_ai_usage_records(&records)?;
+        Ok(())
+    }
+
+    /// 获取 AI 使用记录
+    pub fn get_ai_usage_records(&self) -> Result<Vec<AiUsageRecord>> {
+        self.load_ai_usage_records()
+    }
+
+    /// 获取 AI 使用统计汇总
+    pub fn get_ai_usage_summary(
+        &self,
+        custom_input_price: Option<f64>,
+        custom_output_price: Option<f64>,
+    ) -> Result<AiUsageSummary> {
+        let records = self.load_ai_usage_records()?;
+
+        let mut total_prompt: u64 = 0;
+        let mut total_completion: u64 = 0;
+        let mut total_cost: f64 = 0.0;
+        let mut summary_tokens: u64 = 0;
+        let mut summary_cost: f64 = 0.0;
+        let mut summary_calls: u64 = 0;
+        let mut translation_tokens: u64 = 0;
+        let mut translation_cost: f64 = 0.0;
+        let mut translation_calls: u64 = 0;
+
+        let mut daily_map: std::collections::BTreeMap<String, (u64, u64, u64, f64, u64)> =
+            std::collections::BTreeMap::new();
+
+        for record in &records {
+            let cost = crate::ai_pricing::calculate_cost(
+                &record.model,
+                record.prompt_tokens,
+                record.completion_tokens,
+                custom_input_price,
+                custom_output_price,
+            );
+
+            total_prompt += record.prompt_tokens as u64;
+            total_completion += record.completion_tokens as u64;
+            total_cost += cost;
+
+            match record.operation_type.as_str() {
+                "summary" => {
+                    summary_tokens += record.total_tokens as u64;
+                    summary_cost += cost;
+                    summary_calls += 1;
+                }
+                "translation" => {
+                    translation_tokens += record.total_tokens as u64;
+                    translation_cost += cost;
+                    translation_calls += 1;
+                }
+                _ => {}
+            }
+
+            let date = record.timestamp.format("%Y-%m-%d").to_string();
+            let entry = daily_map.entry(date).or_insert((0, 0, 0, 0.0, 0));
+            entry.0 += record.prompt_tokens as u64;
+            entry.1 += record.completion_tokens as u64;
+            entry.2 += record.total_tokens as u64;
+            entry.3 += cost;
+            entry.4 += 1;
+        }
+
+        let daily_stats: Vec<DailyUsageStats> = daily_map
+            .into_iter()
+            .map(|(date, (pt, ct, tt, cost, calls))| DailyUsageStats {
+                date,
+                prompt_tokens: pt,
+                completion_tokens: ct,
+                total_tokens: tt,
+                cost,
+                calls,
+            })
+            .collect();
+
+        Ok(AiUsageSummary {
+            total_prompt_tokens: total_prompt,
+            total_completion_tokens: total_completion,
+            total_tokens: total_prompt + total_completion,
+            total_cost,
+            total_calls: summary_calls + translation_calls,
+            summary_tokens,
+            summary_cost,
+            summary_calls,
+            translation_tokens,
+            translation_cost,
+            translation_calls,
+            daily_stats,
+        })
+    }
+
+    /// 清空 AI 使用记录
+    pub fn clear_ai_usage_records(&self) -> Result<()> {
+        let _lock = self.acquire_write_lock()?;
+        let empty: Vec<AiUsageRecord> = Vec::new();
+        self.save_ai_usage_records(&empty)?;
+        Ok(())
     }
 }
 

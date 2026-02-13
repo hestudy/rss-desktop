@@ -619,9 +619,10 @@ pub async fn generate_article_summary(
     info!("[AISummary] Content source={}, len={}", content_source, content.len());
 
     let settings_for_task = settings.clone();
+    let article_id_for_task = id.clone();
     let start = std::time::Instant::now();
-    let summary = tauri::async_runtime::spawn_blocking(move || {
-        ai_summarizer::generate_summary(&content, &settings_for_task)
+    let (summary, usage_record) = tauri::async_runtime::spawn_blocking(move || {
+        ai_summarizer::generate_summary(&content, &settings_for_task, Some(&article_id_for_task))
     })
     .await
     .map_err(|e| format!("AI summary task join error: {}", e))??;
@@ -632,6 +633,11 @@ pub async fn generate_article_summary(
         start.elapsed().as_secs_f64(),
         summary.len()
     );
+
+    // 保存 usage 记录
+    if let Err(e) = storage.add_ai_usage_record(&usage_record) {
+        log::warn!("[AISummary] Failed to save usage record: {}", e);
+    }
 
     storage
         .update_article_ai_summary(&id, &summary)
@@ -679,9 +685,10 @@ pub async fn translate_article(
 
     let lang_clone = lang.clone();
     let settings_for_task = settings.clone();
+    let article_id_for_task = id.clone();
     let start = std::time::Instant::now();
     let content_handle = tauri::async_runtime::spawn_blocking(move || {
-        ai_translator::translate_content(&content, &lang_clone, &settings_for_task)
+        ai_translator::translate_content(&content, &lang_clone, &settings_for_task, Some(&article_id_for_task))
     });
 
     let title_for_task = article.title.clone();
@@ -692,11 +699,33 @@ pub async fn translate_article(
     });
 
     let (content_result, title_result) = tokio::join!(content_handle, title_handle);
-    let translation = content_result
+    let (translation, usage_record) = content_result
         .map_err(|e| format!("Translation task join error: {}", e))??;
-    let translated_title = title_result
-        .map_err(|e| format!("Title translation task join error: {}", e))?
-        .ok();
+    let title_result = title_result
+        .map_err(|e| format!("Title translation task join error: {}", e))?;
+    let (translated_title, title_pt, title_ct) = match title_result {
+        Ok((text, pt, ct)) => (Some(text), pt, ct),
+        Err(_) => (None, 0, 0),
+    };
+
+    // 保存 content 翻译的 usage 记录
+    if let Err(e) = storage.add_ai_usage_record(&usage_record) {
+        log::warn!("[AITranslate] Failed to save usage record: {}", e);
+    }
+
+    // 保存 title 翻译的 usage 记录（如果有 token 消耗）
+    if title_pt > 0 || title_ct > 0 {
+        let title_usage = crate::models::AiUsageRecord::new(
+            "translation",
+            &settings.model,
+            title_pt,
+            title_ct,
+            Some(&id),
+        );
+        if let Err(e) = storage.add_ai_usage_record(&title_usage) {
+            log::warn!("[AITranslate] Failed to save title usage record: {}", e);
+        }
+    }
 
     info!(
         "[AITranslate] Done for \"{}\" in {:.1}s, output_len={}, title_translated={}",
@@ -730,6 +759,38 @@ pub async fn get_all_feed_logs(limit: Option<usize>, storage: State<'_, Arc<Stor
     let limit = limit.map(|l| l.min(500));
     storage.get_all_feed_logs(limit)
         .map_err(|e| format!("Failed to get all feed logs: {}", e))
+}
+
+/// 获取 AI 使用统计汇总
+#[tauri::command]
+pub async fn get_ai_usage_summary(
+    storage: State<'_, Arc<Storage>>,
+    app_state: State<'_, AppState>,
+) -> CommandResult<crate::models::AiUsageSummary> {
+    let settings = match get_store_value("ai_settings".to_string(), app_state).await {
+        Ok(Some(value)) => serde_json::from_value::<AiSettings>(value).unwrap_or_default(),
+        _ => AiSettings::default(),
+    };
+
+    storage
+        .get_ai_usage_summary(settings.custom_input_price, settings.custom_output_price)
+        .map_err(|e| format!("Failed to get AI usage summary: {}", e))
+}
+
+/// 清空 AI 使用记录
+#[tauri::command]
+pub async fn clear_ai_usage_records(
+    storage: State<'_, Arc<Storage>>,
+) -> CommandResult<()> {
+    storage
+        .clear_ai_usage_records()
+        .map_err(|e| format!("Failed to clear AI usage records: {}", e))
+}
+
+/// 获取内置模型价格列表
+#[tauri::command]
+pub async fn get_builtin_model_prices() -> CommandResult<Vec<crate::ai_pricing::ModelPrice>> {
+    Ok(crate::ai_pricing::get_all_builtin_prices())
 }
 
 pub fn process_new_articles_background(

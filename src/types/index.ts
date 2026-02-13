@@ -180,3 +180,33 @@ export interface RefreshProgress {
   total: number
   currentFeedTitle: string
 }
+
+export interface AiUsageSummary {
+  total_prompt_tokens: number
+  total_completion_tokens: number
+  total_tokens: number
+  total_cost: number
+  total_calls: number
+  summary_tokens: number
+  summary_cost: number
+  summary_calls: number
+  translation_tokens: number
+  translation_cost: number
+  translation_calls: number
+  daily_stats: DailyUsageStats[]
+}
+
+export interface DailyUsageStats {
+  date: string
+  prompt_tokens: number
+  completion_tokens: number
+  total_tokens: number
+  cost: number
+  calls: number
+}
+
+export interface ModelPrice {
+  model: string
+  input_price: number
+  output_price: number
+}
