@@ -617,6 +617,23 @@ pub fn process_new_articles_background(
             };
 
             let needs_full_content = use_full_content && article.full_content.is_none();
+
+            let has_text_content = article.full_content.as_deref()
+                .or(article.content.as_deref())
+                .or(article.description.as_deref())
+                .map(|c| {
+                    let stripped: String = c.chars().fold((String::new(), false), |(mut out, in_tag), ch| {
+                        match ch {
+                            '<' => (out, true),
+                            '>' => (out, false),
+                            _ if !in_tag => { out.push(ch); (out, false) }
+                            _ => (out, true)
+                        }
+                    }).0;
+                    !stripped.trim().is_empty()
+                })
+                .unwrap_or(false);
+
             let needs_ai_summary = use_ai_summary && article.ai_summary.is_none();
             let needs_ai_translation = use_ai_translation && article.ai_translation.is_none();
 
@@ -642,7 +659,7 @@ pub fn process_new_articles_background(
                 if let Err(e) = queue.submit(task).await {
                     warn!("[bg] Failed to queue full content task for {}: {}", article_id, e);
                 }
-            } else {
+            } else if has_text_content {
                 if needs_ai_summary {
                     let task = QueueTask::new(
                         TaskType::AiSummary {

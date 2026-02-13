@@ -74,7 +74,7 @@ export function ArticleViewer({
 
   // 挂载时从数据库获取最新数据（后台预处理可能已完成）
   useEffect(() => {
-    if (article.full_content && article.ai_summary) return
+    if (article.full_content && article.ai_summary && article.ai_translation) return
     const targetId = article.id
     RssApi.getArticle(targetId).then((latest) => {
       if (!latest || currentArticleIdRef.current !== targetId) return
@@ -88,6 +88,11 @@ export function ArticleViewer({
       if (latest.ai_summary && !article.ai_summary && !aiSummary) {
         setAiSummary(latest.ai_summary)
         hasAttemptedAutoSummary.current = true
+        updateArticleInList(latest)
+      }
+      if (latest.ai_translation && !article.ai_translation && !aiTranslation) {
+        setAiTranslation(latest.ai_translation)
+        setShowTranslation(true)
         updateArticleInList(latest)
       }
     }).catch(() => {})
