@@ -4,12 +4,10 @@ use crate::content_extractor::fetch_and_extract_content;
 use crate::ai_summarizer;
 use crate::ai_translator;
 use crate::settings::AiSettings;
-use crate::storage::{Storage, MAX_ARTICLES_LIMIT};
+use crate::storage_sqlite::{SqliteStorage, MAX_ARTICLES_LIMIT};
 use crate::task_queue::{TaskQueue, TaskType, TaskPriority, QueueTask};
 use tauri::{State, Emitter};
-use std::path::PathBuf;
 use std::sync::Arc;
-use fs2::FileExt;
 use log::{warn, info};
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -34,12 +32,6 @@ impl FeedRefreshProgressEvent {
     }
 }
 
-/// 应用状态，包含存储实例
-#[derive(Clone)]
-pub struct AppState {
-    pub data_dir: PathBuf,
-}
-
 /// 错误类型用于 Tauri 命令
 pub type CommandResult<T> = std::result::Result<T, String>;
 
@@ -48,8 +40,7 @@ pub type CommandResult<T> = std::result::Result<T, String>;
 /// 返回 (updated_feed, new_count, unread_count)
 pub async fn process_feed_refresh(
     feed: &Feed,
-    storage: &Arc<Storage>,
-    data_dir: &PathBuf,
+    storage: &Arc<SqliteStorage>,
     queue: Option<&Arc<TaskQueue>>,
 ) -> Result<(Feed, usize, usize), String> {
     let start_time = std::time::Instant::now();
@@ -123,7 +114,6 @@ pub async fn process_feed_refresh(
         let queue_clone = queue.cloned();
         process_new_articles_background(
             storage.clone(),
-            data_dir.clone(),
             feed,
             new_article_ids,
             queue_clone,
@@ -135,7 +125,7 @@ pub async fn process_feed_refresh(
 
 /// 添加 RSS 订阅
 #[tauri::command]
-pub async fn add_feed(url: String, use_full_content: Option<bool>, use_ai_summary: Option<bool>, use_ai_translation: Option<bool>, storage: State<'_, Arc<Storage>>, app_state: State<'_, AppState>, queue: State<'_, Arc<TaskQueue>>) -> CommandResult<Feed> {
+pub async fn add_feed(url: String, use_full_content: Option<bool>, use_ai_summary: Option<bool>, use_ai_translation: Option<bool>, storage: State<'_, Arc<SqliteStorage>>, queue: State<'_, Arc<TaskQueue>>) -> CommandResult<Feed> {
     let url_for_fetch = url.clone();
     let (mut feed, articles) = tauri::async_runtime::spawn_blocking(move || {
         fetch_feed(&url_for_fetch)
@@ -163,7 +153,6 @@ pub async fn add_feed(url: String, use_full_content: Option<bool>, use_ai_summar
     if !new_article_ids.is_empty() {
         process_new_articles_background(
             storage.inner().clone(),
-            app_state.data_dir.clone(),
             &feed,
             new_article_ids,
             Some(queue.inner().clone()),
@@ -174,7 +163,7 @@ pub async fn add_feed(url: String, use_full_content: Option<bool>, use_ai_summar
 }
 
 #[tauri::command]
-pub async fn get_feeds(storage: State<'_, Arc<Storage>>) -> CommandResult<Vec<FeedWithUnreadCount>> {
+pub async fn get_feeds(storage: State<'_, Arc<SqliteStorage>>) -> CommandResult<Vec<FeedWithUnreadCount>> {
     let feeds = storage.get_all_feeds()
         .map_err(|e| format!("Failed to get feeds: {}", e))?;
 
@@ -189,7 +178,7 @@ pub async fn get_feeds(storage: State<'_, Arc<Storage>>) -> CommandResult<Vec<Fe
 
 /// 删除订阅
 #[tauri::command]
-pub async fn remove_feed(id: String, storage: State<'_, Arc<Storage>>) -> CommandResult<()> {
+pub async fn remove_feed(id: String, storage: State<'_, Arc<SqliteStorage>>) -> CommandResult<()> {
     storage.delete_feed(&id)
         .map_err(|e| format!("Failed to delete feed: {}", e))?;
 
@@ -197,7 +186,7 @@ pub async fn remove_feed(id: String, storage: State<'_, Arc<Storage>>) -> Comman
 }
 
 #[tauri::command]
-pub async fn refresh_feed(id: String, storage: State<'_, Arc<Storage>>, app_state: State<'_, AppState>, queue: State<'_, Arc<TaskQueue>>) -> CommandResult<FeedWithUnreadCount> {
+pub async fn refresh_feed(id: String, storage: State<'_, Arc<SqliteStorage>>, queue: State<'_, Arc<TaskQueue>>) -> CommandResult<FeedWithUnreadCount> {
     let existing_feed = storage.get_feed(&id)
         .map_err(|e| format!("Failed to get feed: {}", e))?
         .ok_or_else(|| "Feed not found".to_string())?;
@@ -205,7 +194,6 @@ pub async fn refresh_feed(id: String, storage: State<'_, Arc<Storage>>, app_stat
     let (updated_feed, _new_count, unread_count) = process_feed_refresh(
         &existing_feed,
         storage.inner(),
-        &app_state.data_dir,
         Some(queue.inner()),
     )
     .await?;
@@ -218,8 +206,7 @@ pub async fn refresh_feed(id: String, storage: State<'_, Arc<Storage>>, app_stat
 
 #[tauri::command]
 pub async fn refresh_all_feeds(
-    storage: State<'_, Arc<Storage>>,
-    app_state: State<'_, AppState>,
+    storage: State<'_, Arc<SqliteStorage>>,
     queue: State<'_, Arc<TaskQueue>>,
     app_handle: tauri::AppHandle,
 ) -> CommandResult<()> {
@@ -228,7 +215,6 @@ pub async fn refresh_all_feeds(
 
     let total = feeds.len();
     let storage = storage.inner().clone();
-    let data_dir = app_state.data_dir.clone();
     let queue = queue.inner().clone();
     let app_handle_for_done = app_handle.clone();
 
@@ -240,7 +226,6 @@ pub async fn refresh_all_feeds(
         for feed in feeds {
             let sem = semaphore.clone();
             let storage = storage.clone();
-            let data_dir = data_dir.clone();
             let queue = queue.clone();
             let app_handle = app_handle.clone();
             let completed_count = completed_count.clone();
@@ -256,7 +241,7 @@ pub async fn refresh_all_feeds(
                 ));
 
                 let start_time = std::time::Instant::now();
-                match process_feed_refresh(&feed, &storage, &data_dir, Some(&queue)).await {
+                match process_feed_refresh(&feed, &storage, Some(&queue)).await {
                     Ok((updated_feed, new_count, unread_count)) => {
                         let done = completed_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
                         let _ = app_handle.emit("feed-refreshed", FeedRefreshedEvent {
@@ -313,7 +298,7 @@ pub async fn get_articles(
     feed_id: Option<String>,
     limit: Option<usize>,
     unread_only: Option<bool>,
-    storage: State<'_, Arc<Storage>>,
+    storage: State<'_, Arc<SqliteStorage>>,
 ) -> CommandResult<Vec<Article>> {
     // 验证并限制 limit 参数，防止 DOS
     let limit = limit.unwrap_or(100).min(MAX_ARTICLES_LIMIT);
@@ -331,7 +316,7 @@ pub async fn get_articles(
 
 /// 标记文章为已读/未读
 #[tauri::command]
-pub async fn mark_article_read(id: String, read: bool, storage: State<'_, Arc<Storage>>) -> CommandResult<()> {
+pub async fn mark_article_read(id: String, read: bool, storage: State<'_, Arc<SqliteStorage>>) -> CommandResult<()> {
     storage.mark_article_read(&id, read)
         .map_err(|e| format!("Failed to mark article: {}", e))?;
 
@@ -340,7 +325,7 @@ pub async fn mark_article_read(id: String, read: bool, storage: State<'_, Arc<St
 
 /// 标记订阅下所有文章为已读
 #[tauri::command]
-pub async fn mark_all_read(feed_id: String, storage: State<'_, Arc<Storage>>) -> CommandResult<()> {
+pub async fn mark_all_read(feed_id: String, storage: State<'_, Arc<SqliteStorage>>) -> CommandResult<()> {
     storage.mark_all_read(&feed_id)
         .map_err(|e| format!("Failed to mark all read: {}", e))?;
 
@@ -349,7 +334,7 @@ pub async fn mark_all_read(feed_id: String, storage: State<'_, Arc<Storage>>) ->
 
 /// 获取未读文章数量
 #[tauri::command]
-pub async fn get_unread_count(feed_id: Option<String>, storage: State<'_, Arc<Storage>>) -> CommandResult<usize> {
+pub async fn get_unread_count(feed_id: Option<String>, storage: State<'_, Arc<SqliteStorage>>) -> CommandResult<usize> {
     let count = if let Some(fid) = feed_id {
         storage.get_unread_count(&fid).unwrap_or(0)
     } else {
@@ -373,118 +358,44 @@ pub async fn open_link(url: String) -> CommandResult<()> {
 }
 
 /// 存储键值对
-///
-/// 使用文件锁确保并发安全
 #[tauri::command]
-pub async fn set_store_value(key: String, value: serde_json::Value, state: State<'_, AppState>) -> CommandResult<()> {
-    use std::collections::HashMap;
-    use std::fs::{self, File, OpenOptions};
-    use std::io::{BufReader, BufWriter, Write};
-
-    let store_path = state.data_dir.join("store.json");
-    let temp_path = store_path.with_extension("tmp");
-
-    // 读取现有存储（使用文件锁）
-    let mut store: HashMap<String, serde_json::Value> = if store_path.exists() {
-        let file = File::open(&store_path)
-            .map_err(|e| format!("Failed to open store file: {}", e))?;
-        file.lock_shared()
-            .map_err(|e| format!("Failed to lock store file for reading: {}", e))?;
-
-        let reader = BufReader::new(file);
-        let store_result: Result<HashMap<String, serde_json::Value>, _> = serde_json::from_reader(reader);
-        // 锁在文件 drop 时自动释放
-        store_result.unwrap_or_default()
-    } else {
-        HashMap::new()
-    };
-
-    // 设置值
-    store.insert(key, value);
-
-    // 写入临时文件（使用独占锁）
-    {
-        let file = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(&temp_path)
-            .map_err(|e| format!("Failed to create temp file: {}", e))?;
-        file.lock_exclusive()
-            .map_err(|e| format!("Failed to lock temp file for writing: {}", e))?;
-
-        let json = serde_json::to_string_pretty(&store)
-            .map_err(|e| format!("Failed to serialize store: {}", e))?;
-
-        {
-            let mut writer = BufWriter::new(&file);
-            writer.write_all(json.as_bytes())
-                .map_err(|e| format!("Failed to write store: {}", e))?;
-            writer.flush()
-                .map_err(|e| format!("Failed to flush store: {}", e))?;
-        }
-        // 锁在文件 drop 时自动释放
-    }
-
-    // 原子性重命名
-    fs::rename(&temp_path, &store_path)
-        .map_err(|e| format!("Failed to save store: {}", e))?;
-
+pub async fn set_store_value(key: String, value: serde_json::Value, storage: State<'_, Arc<SqliteStorage>>) -> CommandResult<()> {
+    storage.set_kv(&key, &value)
+        .map_err(|e| format!("Failed to set store value: {}", e))?;
     Ok(())
 }
 
 /// 获取键值对
-///
-/// 使用文件锁确保读取一致性
 #[tauri::command]
-pub async fn get_store_value(key: String, state: State<'_, AppState>) -> CommandResult<Option<serde_json::Value>> {
-    use std::collections::HashMap;
-    use std::fs::File;
-    use std::io::BufReader;
-
-    let store_path = state.data_dir.join("store.json");
-
-    if !store_path.exists() {
-        return Ok(None);
-    }
-
-    let file = File::open(&store_path)
-        .map_err(|e| format!("Failed to open store file: {}", e))?;
-    file.lock_shared()
-        .map_err(|e| format!("Failed to lock store file for reading: {}", e))?;
-
-    let reader = BufReader::new(file);
-    let store: HashMap<String, serde_json::Value> = serde_json::from_reader(reader)
-        .map_err(|e| format!("Failed to parse store: {}", e))?;
-    // 锁在文件 drop 时自动释放
-
-    Ok(store.get(&key).cloned())
+pub async fn get_store_value(key: String, storage: State<'_, Arc<SqliteStorage>>) -> CommandResult<Option<serde_json::Value>> {
+    storage.get_kv(&key)
+        .map_err(|e| format!("Failed to get store value: {}", e))
 }
 
 /// 获取单个文章
 #[tauri::command]
-pub async fn get_article(id: String, storage: State<'_, Arc<Storage>>) -> CommandResult<Option<Article>> {
+pub async fn get_article(id: String, storage: State<'_, Arc<SqliteStorage>>) -> CommandResult<Option<Article>> {
     storage.get_article(&id)
         .map_err(|e| format!("Failed to get article: {}", e))
 }
 
 /// 更新阅读进度
 #[tauri::command]
-pub async fn update_reading_progress(id: String, progress: f32, storage: State<'_, Arc<Storage>>) -> CommandResult<()> {
+pub async fn update_reading_progress(id: String, progress: f32, storage: State<'_, Arc<SqliteStorage>>) -> CommandResult<()> {
     storage.update_reading_progress(&id, progress)
         .map_err(|e| format!("Failed to update reading progress: {}", e))
 }
 
 /// 收藏/取消收藏文章
 #[tauri::command]
-pub async fn set_article_favorite(id: String, favorite: bool, storage: State<'_, Arc<Storage>>) -> CommandResult<()> {
+pub async fn set_article_favorite(id: String, favorite: bool, storage: State<'_, Arc<SqliteStorage>>) -> CommandResult<()> {
     storage.set_article_favorite(&id, favorite)
         .map_err(|e| format!("Failed to set article favorite: {}", e))
 }
 
 /// 获取收藏的文章
 #[tauri::command]
-pub async fn get_favorite_articles(limit: Option<usize>, storage: State<'_, Arc<Storage>>) -> CommandResult<Vec<Article>> {
+pub async fn get_favorite_articles(limit: Option<usize>, storage: State<'_, Arc<SqliteStorage>>) -> CommandResult<Vec<Article>> {
     storage.get_favorite_articles(limit)
         .map_err(|e| format!("Failed to get favorite articles: {}", e))
 }
@@ -498,7 +409,7 @@ pub async fn update_feed_info(
     use_full_content: Option<bool>,
     use_ai_summary: Option<bool>,
     use_ai_translation: Option<bool>,
-    storage: State<'_, Arc<Storage>>,
+    storage: State<'_, Arc<SqliteStorage>>,
 ) -> CommandResult<FeedWithUnreadCount> {
     let mut feed = storage.get_feed(&id)
         .map_err(|e| format!("Failed to get feed: {}", e))?
@@ -552,7 +463,7 @@ pub async fn update_feed_info(
 }
 
 #[tauri::command]
-pub async fn fetch_full_content(id: String, storage: State<'_, Arc<Storage>>) -> CommandResult<Article> {
+pub async fn fetch_full_content(id: String, storage: State<'_, Arc<SqliteStorage>>) -> CommandResult<Article> {
     let article = storage.get_article(&id)
         .map_err(|e| format!("Failed to get article: {}", e))?
         .ok_or_else(|| "Article not found".to_string())?;
@@ -588,8 +499,7 @@ pub async fn fetch_full_content(id: String, storage: State<'_, Arc<Storage>>) ->
 #[tauri::command]
 pub async fn generate_article_summary(
     id: String,
-    storage: State<'_, Arc<Storage>>,
-    app_state: State<'_, AppState>,
+    storage: State<'_, Arc<SqliteStorage>>,
 ) -> CommandResult<Article> {
     let article = storage
         .get_article(&id)
@@ -598,11 +508,11 @@ pub async fn generate_article_summary(
 
     info!("[AISummary] Generating for article \"{}\"", article.title);
 
-    let settings = match get_store_value("ai_settings".to_string(), app_state).await {
-        Ok(Some(value)) => serde_json::from_value::<AiSettings>(value)
+    let settings: AiSettings = match storage.get_kv("ai_settings") {
+        Ok(Some(value)) => serde_json::from_value(value)
             .map_err(|e| format!("Failed to parse AI settings: {}", e))?,
         Ok(None) => AiSettings::default(),
-        Err(e) => return Err(e),
+        Err(e) => return Err(format!("Failed to get AI settings: {}", e)),
     };
 
     info!("[AISummary] Using model={}, endpoint={}", settings.model, settings.api_endpoint);
@@ -653,19 +563,18 @@ pub async fn generate_article_summary(
 pub async fn translate_article(
     id: String,
     target_lang: Option<String>,
-    storage: State<'_, Arc<Storage>>,
-    app_state: State<'_, AppState>,
+    storage: State<'_, Arc<SqliteStorage>>,
 ) -> CommandResult<Article> {
     let article = storage
         .get_article(&id)
         .map_err(|e| format!("Failed to get article: {}", e))?
         .ok_or_else(|| "Article not found".to_string())?;
 
-    let settings = match get_store_value("ai_settings".to_string(), app_state).await {
-        Ok(Some(value)) => serde_json::from_value::<AiSettings>(value)
+    let settings: AiSettings = match storage.get_kv("ai_settings") {
+        Ok(Some(value)) => serde_json::from_value(value)
             .map_err(|e| format!("Failed to parse AI settings: {}", e))?,
         Ok(None) => AiSettings::default(),
-        Err(e) => return Err(e),
+        Err(e) => return Err(format!("Failed to get AI settings: {}", e)),
     };
 
     let content = article
@@ -747,7 +656,7 @@ pub async fn translate_article(
 
 /// 获取订阅刷新日志
 #[tauri::command]
-pub async fn get_feed_logs(feed_id: String, limit: Option<usize>, storage: State<'_, Arc<Storage>>) -> CommandResult<Vec<FeedLog>> {
+pub async fn get_feed_logs(feed_id: String, limit: Option<usize>, storage: State<'_, Arc<SqliteStorage>>) -> CommandResult<Vec<FeedLog>> {
     let limit = limit.map(|l| l.min(500));
     storage.get_feed_logs(&feed_id, limit)
         .map_err(|e| format!("Failed to get feed logs: {}", e))
@@ -755,7 +664,7 @@ pub async fn get_feed_logs(feed_id: String, limit: Option<usize>, storage: State
 
 /// 获取所有订阅刷新日志
 #[tauri::command]
-pub async fn get_all_feed_logs(limit: Option<usize>, storage: State<'_, Arc<Storage>>) -> CommandResult<Vec<FeedLog>> {
+pub async fn get_all_feed_logs(limit: Option<usize>, storage: State<'_, Arc<SqliteStorage>>) -> CommandResult<Vec<FeedLog>> {
     let limit = limit.map(|l| l.min(500));
     storage.get_all_feed_logs(limit)
         .map_err(|e| format!("Failed to get all feed logs: {}", e))
@@ -764,11 +673,10 @@ pub async fn get_all_feed_logs(limit: Option<usize>, storage: State<'_, Arc<Stor
 /// 获取 AI 使用统计汇总
 #[tauri::command]
 pub async fn get_ai_usage_summary(
-    storage: State<'_, Arc<Storage>>,
-    app_state: State<'_, AppState>,
+    storage: State<'_, Arc<SqliteStorage>>,
 ) -> CommandResult<crate::models::AiUsageSummary> {
-    let settings = match get_store_value("ai_settings".to_string(), app_state).await {
-        Ok(Some(value)) => serde_json::from_value::<AiSettings>(value).unwrap_or_default(),
+    let settings: AiSettings = match storage.get_kv("ai_settings") {
+        Ok(Some(value)) => serde_json::from_value(value).unwrap_or_default(),
         _ => AiSettings::default(),
     };
 
@@ -780,7 +688,7 @@ pub async fn get_ai_usage_summary(
 /// 清空 AI 使用记录
 #[tauri::command]
 pub async fn clear_ai_usage_records(
-    storage: State<'_, Arc<Storage>>,
+    storage: State<'_, Arc<SqliteStorage>>,
 ) -> CommandResult<()> {
     storage
         .clear_ai_usage_records()
@@ -794,8 +702,7 @@ pub async fn get_builtin_model_prices() -> CommandResult<Vec<crate::ai_pricing::
 }
 
 pub fn process_new_articles_background(
-    storage: Arc<Storage>,
-    data_dir: PathBuf,
+    storage: Arc<SqliteStorage>,
     feed: &Feed,
     new_article_ids: Vec<String>,
     task_queue: Option<Arc<TaskQueue>>,
@@ -822,7 +729,7 @@ pub fn process_new_articles_background(
 
     tauri::async_runtime::spawn(async move {
         let target_lang = if use_ai_translation {
-            let ai_settings = crate::settings::load_ai_settings_from_dir(&data_dir);
+            let ai_settings = crate::settings::load_ai_settings_from_storage(&storage);
             ai_settings.language.clone()
         } else {
             String::new()

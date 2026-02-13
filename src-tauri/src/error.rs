@@ -31,6 +31,9 @@ pub enum RssError {
 
     #[error("AI summary failed: {0}")]
     AiSummaryError(String),
+
+    #[error("Database error: {0}")]
+    DatabaseError(#[from] rusqlite::Error),
 }
 
 pub type Result<T> = std::result::Result<T, RssError>;

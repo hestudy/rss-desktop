@@ -1,7 +1,9 @@
 // 模块声明
 mod models;
 mod error;
-mod storage;
+mod database;
+mod storage_sqlite;
+mod migration;
 mod fetcher;
 mod commands;
 mod content_extractor;
@@ -20,7 +22,6 @@ mod queue_commands;
 // 导出常用类型
 pub use models::{Feed, Article, AddFeedRequest, UpdateFeedRequest, GetArticlesRequest, ApiResponse, FeedWithUnreadCount, FeedLog, LogArticleSummary};
 pub use error::{RssError, Result};
-pub use commands::AppState;
 pub use settings::{AiSettings, AppSettings, SchedulerState, PollInterval, NotificationType};
 pub use background_scheduler::{BackgroundScheduler, NewArticlesEvent, ArticleSummary};
 pub use notifications::NotificationManager;
@@ -60,21 +61,29 @@ pub fn run() {
             // 创建数据目录
             std::fs::create_dir_all(&data_dir)?;
 
-            // 创建共享的 Storage 实例（所有命令和调度器共用同一个实例）
-            let shared_storage = Arc::new(
-                storage::Storage::new(&data_dir)
-                    .expect("Failed to initialize storage")
+            // 初始化 SQLite 数据库
+            let db = Arc::new(
+                database::Database::new(&data_dir)
+                    .expect("Failed to initialize database")
             );
+
+            // 创建共享的 SqliteStorage 实例
+            let shared_storage = Arc::new(
+                storage_sqlite::SqliteStorage::new(db)
+            );
+
+            // 执行 JSON → SQLite 数据迁移（如果需要）
+            if migration::needs_migration(&data_dir) {
+                info!("Detected legacy JSON files, starting migration...");
+                if let Err(e) = migration::migrate_json_to_sqlite(&data_dir, &shared_storage) {
+                    error!("Migration failed: {}", e);
+                }
+            }
 
             // 创建通知管理器
             let notification_manager = NotificationManager::new(app.handle().clone());
 
-            // 设置应用状态
-            app.manage(commands::AppState {
-                data_dir: data_dir.clone(),
-            });
-
-            // 注册共享 Storage 到 Tauri 状态（所有命令通过 State<Arc<Storage>> 访问）
+            // 注册共享 Storage 到 Tauri 状态（所有命令通过 State<Arc<SqliteStorage>> 访问）
             app.manage(shared_storage.clone());
 
             // 将调度器和其他组件存储在应用状态中
@@ -86,7 +95,6 @@ pub fn run() {
             let task_queue = Arc::new(TaskQueue::new(
                 max_concurrency,
                 shared_storage.clone(),
-                data_dir.clone(),
                 app.handle().clone(),
             ));
             app.manage(task_queue.clone());
@@ -104,13 +112,13 @@ pub fn run() {
 
             // 使用 async_runtime 来启动后台调度器
             let scheduler_clone = scheduler.clone();
-            let data_dir_clone = data_dir.clone();
             let storage_for_scheduler = shared_storage.clone();
+            let storage_for_events = shared_storage.clone();
             let unread_count_clone = unread_count.clone();
             let task_queue_for_scheduler = task_queue.clone();
 
             tauri::async_runtime::spawn(async move {
-                if let Err(e) = scheduler_clone.start(storage_for_scheduler, data_dir_clone, Some(task_queue_for_scheduler)).await {
+                if let Err(e) = scheduler_clone.start(storage_for_scheduler, Some(task_queue_for_scheduler)).await {
                     error!("Failed to start scheduler: {}", e);
                     return;
                 }
@@ -122,7 +130,7 @@ pub fn run() {
                 // 监听新文章事件并发送通知
                 while let Ok(event) = receiver.recv().await {
                     // 获取设置
-                    let settings = match get_settings_internal().await {
+                    let settings = match get_settings_internal(&storage_for_events) {
                         Ok(Some(s)) => s,
                         Ok(None) => AppSettings::default(),
                         Err(e) => {
@@ -206,36 +214,21 @@ pub fn run() {
         .expect("error while running tauri application");
 }
 
-/// 内部函数：获取设置
-async fn get_settings_internal() -> std::result::Result<Option<AppSettings>, String> {
-    use std::collections::HashMap;
-    use std::fs::File;
-    use std::io::BufReader;
-
-    let data_dir = get_data_dir();
-    let store_path = data_dir.join("store.json");
-
-    if !store_path.exists() {
-        return Ok(None);
-    }
-
-    let file = File::open(&store_path)
-        .map_err(|e| format!("Failed to open store: {}", e))?;
-    let reader = BufReader::new(file);
-    let store: HashMap<String, serde_json::Value> = serde_json::from_reader(reader)
-        .map_err(|e| format!("Failed to parse store: {}", e))?;
-
-    if let Some(value) = store.get("app_settings") {
-        let settings: AppSettings = serde_json::from_value(value.clone())
-            .map_err(|e| format!("Failed to parse settings: {}", e))?;
-        Ok(Some(settings))
-    } else {
-        Ok(None)
+/// 内部函数：从已有 storage 获取设置
+fn get_settings_internal(storage: &storage_sqlite::SqliteStorage) -> std::result::Result<Option<AppSettings>, String> {
+    match storage.get_kv("app_settings") {
+        Ok(Some(value)) => {
+            let settings: AppSettings = serde_json::from_value(value)
+                .map_err(|e| format!("Failed to parse settings: {}", e))?;
+            Ok(Some(settings))
+        }
+        Ok(None) => Ok(None),
+        Err(e) => Err(format!("Failed to get settings: {}", e)),
     }
 }
 
 /// 刷新未读计数
-fn refresh_unread_count(app: &tauri::AppHandle, storage: &storage::Storage) -> std::result::Result<(), String> {
+fn refresh_unread_count(app: &tauri::AppHandle, storage: &storage_sqlite::SqliteStorage) -> std::result::Result<(), String> {
     let feeds = storage.get_all_feeds()
         .map_err(|e| format!("Failed to get feeds: {}", e))?;
 

@@ -29,11 +29,14 @@ chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.11", features = ["v4", "serde"] }
 dirs = "5.0"
 url = "0.5"
-fs2 = "0.4"
 tokio = { version = "1", features = ["time", "sync", "macros", "rt-multi-thread"] }
 tauri-plugin-notification = "2"
 log = "0.4"
 env_logger = "0.11"
 dom_smoothie = "0.14"
 regex = "1"
+rusqlite = { version = "0.31", features = ["bundled"] }
+
+[dev-dependencies]
+tempfile = "3"
 

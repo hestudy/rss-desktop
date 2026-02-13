@@ -1,7 +1,8 @@
 use crate::settings::{AiSettings, AppSettings, SchedulerState};
-use crate::commands::AppState;
+use crate::storage_sqlite::SqliteStorage;
 use crate::commands::CommandResult;
 use tauri::State;
+use std::sync::Arc;
 
 // ============= 测试模块 (TDD: 先写测试) =============
 #[cfg(test)]
@@ -97,19 +98,12 @@ mod tests {
 
 /// 获取应用设置
 #[tauri::command]
-pub async fn get_settings(state: State<'_, AppState>) -> CommandResult<AppSettings> {
-    use crate::commands::get_store_value;
-
-    // 从存储获取设置，如果没有则返回默认值
-    let key = "app_settings".to_string();
-
-    match get_store_value(key, state).await {
-        Ok(Some(value)) => {
-            serde_json::from_value(value)
-                .map_err(|e| format!("Failed to parse settings: {}", e))
-        }
+pub async fn get_settings(storage: State<'_, Arc<SqliteStorage>>) -> CommandResult<AppSettings> {
+    match storage.get_kv("app_settings") {
+        Ok(Some(value)) => serde_json::from_value(value)
+            .map_err(|e| format!("Failed to parse settings: {}", e)),
         Ok(None) => Ok(AppSettings::default()),
-        Err(e) => Err(e),
+        Err(e) => Err(format!("Failed to get settings: {}", e)),
     }
 }
 
@@ -117,77 +111,56 @@ pub async fn get_settings(state: State<'_, AppState>) -> CommandResult<AppSettin
 #[tauri::command]
 pub async fn update_settings(
     settings: AppSettings,
-    state: State<'_, AppState>,
+    storage: State<'_, Arc<SqliteStorage>>,
 ) -> CommandResult<AppSettings> {
-    use crate::commands::set_store_value;
-
-    let key = "app_settings".to_string();
     let value = serde_json::to_value(&settings)
         .map_err(|e| format!("Failed to serialize settings: {}", e))?;
-
-    set_store_value(key, value, state).await?;
+    storage.set_kv("app_settings", &value)
+        .map_err(|e| format!("Failed to save settings: {}", e))?;
     Ok(settings)
 }
 
 #[tauri::command]
-pub async fn get_ai_settings(state: State<'_, AppState>) -> CommandResult<AiSettings> {
-    use crate::commands::get_store_value;
-
-    let key = "ai_settings".to_string();
-
-    match get_store_value(key, state).await {
-        Ok(Some(value)) => {
-            serde_json::from_value(value)
-                .map_err(|e| format!("Failed to parse AI settings: {}", e))
-        }
+pub async fn get_ai_settings(storage: State<'_, Arc<SqliteStorage>>) -> CommandResult<AiSettings> {
+    match storage.get_kv("ai_settings") {
+        Ok(Some(value)) => serde_json::from_value(value)
+            .map_err(|e| format!("Failed to parse AI settings: {}", e)),
         Ok(None) => Ok(AiSettings::default()),
-        Err(e) => Err(e),
+        Err(e) => Err(format!("Failed to get AI settings: {}", e)),
     }
 }
 
 #[tauri::command]
 pub async fn update_ai_settings(
     settings: AiSettings,
-    state: State<'_, AppState>,
+    storage: State<'_, Arc<SqliteStorage>>,
 ) -> CommandResult<AiSettings> {
-    use crate::commands::set_store_value;
-
-    let key = "ai_settings".to_string();
     let value = serde_json::to_value(&settings)
         .map_err(|e| format!("Failed to serialize AI settings: {}", e))?;
-
-    set_store_value(key, value, state).await?;
+    storage.set_kv("ai_settings", &value)
+        .map_err(|e| format!("Failed to save AI settings: {}", e))?;
     Ok(settings)
 }
 
 /// 获取调度器状态
 #[tauri::command]
-pub async fn get_scheduler_state(state: State<'_, AppState>) -> CommandResult<SchedulerState> {
-    use crate::commands::get_store_value;
-
-    let key = "scheduler_state".to_string();
-
-    match get_store_value(key, state).await {
-        Ok(Some(value)) => {
-            serde_json::from_value(value)
-                .map_err(|e| format!("Failed to parse scheduler state: {}", e))
-        }
+pub async fn get_scheduler_state(storage: State<'_, Arc<SqliteStorage>>) -> CommandResult<SchedulerState> {
+    match storage.get_kv("scheduler_state") {
+        Ok(Some(value)) => serde_json::from_value(value)
+            .map_err(|e| format!("Failed to parse scheduler state: {}", e)),
         Ok(None) => Ok(SchedulerState::default()),
-        Err(e) => Err(e),
+        Err(e) => Err(format!("Failed to get scheduler state: {}", e)),
     }
 }
 
-/// 设置调度器状态（内部使用）
+/// 设置调度器状态
 #[tauri::command]
 pub async fn set_scheduler_state(
     state_value: SchedulerState,
-    state: State<'_, AppState>,
+    storage: State<'_, Arc<SqliteStorage>>,
 ) -> CommandResult<()> {
-    use crate::commands::set_store_value;
-
-    let key = "scheduler_state".to_string();
     let value = serde_json::to_value(&state_value)
         .map_err(|e| format!("Failed to serialize scheduler state: {}", e))?;
-
-    set_store_value(key, value, state).await
+    storage.set_kv("scheduler_state", &value)
+        .map_err(|e| format!("Failed to save scheduler state: {}", e))
 }

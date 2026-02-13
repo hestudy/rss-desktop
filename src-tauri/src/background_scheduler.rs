@@ -1,10 +1,9 @@
 use crate::settings::{AppSettings, SchedulerState};
-use crate::storage::Storage;
+use crate::storage_sqlite::SqliteStorage;
 use crate::models::FeedLog;
 use crate::scheduler::{calculate_next_run_time, calculate_retry_backoff};
 use crate::task_queue::TaskQueue;
 use chrono::Utc;
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{Mutex, RwLock, broadcast};
@@ -57,7 +56,7 @@ impl BackgroundScheduler {
     }
 
     /// 启动调度器
-    pub async fn start(&self, storage: Arc<Storage>, data_dir: PathBuf, task_queue: Option<Arc<TaskQueue>>) -> std::result::Result<(), String> {
+    pub async fn start(&self, storage: Arc<SqliteStorage>, task_queue: Option<Arc<TaskQueue>>) -> std::result::Result<(), String> {
         // 检查是否已在运行
         {
             let status = self.status.read().await;
@@ -93,7 +92,7 @@ impl BackgroundScheduler {
                 interval.tick().await;
 
                 // 获取设置
-                let settings = match Self::get_settings(&data_dir).await {
+                let settings = match Self::get_settings(&storage).await {
                     Ok(Some(s)) => s,
                     Ok(None) => AppSettings::default(),
                     Err(e) => {
@@ -128,7 +127,6 @@ impl BackgroundScheduler {
                 match Self::refresh_all_feeds(
                     &storage,
                     event_tx.clone(),
-                    &data_dir,
                     &task_queue_clone,
                 ).await {
                     Ok(_) => {
@@ -188,35 +186,20 @@ impl BackgroundScheduler {
     }
 
     /// 从存储获取设置
-    async fn get_settings(data_dir: &PathBuf) -> std::result::Result<Option<AppSettings>, String> {
-        use std::collections::HashMap;
-        use std::fs::File;
-        use std::io::BufReader;
-
-        let store_path = data_dir.join("store.json");
-        if !store_path.exists() {
-            return Ok(None);
-        }
-
-        let file = File::open(&store_path)
-            .map_err(|e| format!("Failed to open store: {}", e))?;
-        let reader = BufReader::new(file);
-        let store: HashMap<String, serde_json::Value> = serde_json::from_reader(reader)
-            .map_err(|e| format!("Failed to parse store: {}", e))?;
-
-        if let Some(value) = store.get("app_settings") {
-            let settings: AppSettings = serde_json::from_value(value.clone())
-                .map_err(|e| format!("Failed to parse settings: {}", e))?;
-            Ok(Some(settings))
-        } else {
-            Ok(None)
+    async fn get_settings(storage: &SqliteStorage) -> std::result::Result<Option<AppSettings>, String> {
+        match storage.get_kv("app_settings").map_err(|e| format!("Failed to get settings: {}", e))? {
+            Some(value) => {
+                let settings: AppSettings = serde_json::from_value(value)
+                    .map_err(|e| format!("Failed to parse settings: {}", e))?;
+                Ok(Some(settings))
+            }
+            None => Ok(None),
         }
     }
 
     async fn refresh_all_feeds(
-        storage: &Arc<Storage>,
+        storage: &Arc<SqliteStorage>,
         event_tx: broadcast::Sender<NewArticlesEvent>,
-        data_dir: &PathBuf,
         task_queue: &Option<Arc<TaskQueue>>,
     ) -> std::result::Result<(), String> {
         let feeds = storage.get_all_feeds()
@@ -228,7 +211,6 @@ impl BackgroundScheduler {
         for feed in feeds {
             let sem = semaphore.clone();
             let storage = storage.clone();
-            let data_dir = data_dir.clone();
             let task_queue = task_queue.clone();
             let event_tx = event_tx.clone();
 
@@ -245,7 +227,6 @@ impl BackgroundScheduler {
                 match crate::commands::process_feed_refresh(
                     &feed,
                     &storage,
-                    &data_dir,
                     task_queue.as_ref(),
                 ).await {
                     Ok((_updated_feed, new_count, _unread_count)) => {
@@ -309,13 +290,15 @@ impl Default for BackgroundScheduler {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
 
-    // 创建测试用的临时目录和共享 Storage
-    fn create_test_storage() -> (PathBuf, Arc<Storage>) {
+    // 创建测试用的临时目录和共享 SqliteStorage
+    fn create_test_storage() -> (PathBuf, Arc<SqliteStorage>) {
         let mut temp_dir = std::env::temp_dir();
         temp_dir.push(format!("rss-test-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&temp_dir).unwrap();
-        let storage = Arc::new(Storage::new(&temp_dir).unwrap());
+        let db = Arc::new(crate::database::Database::new(&temp_dir).unwrap());
+        let storage = Arc::new(SqliteStorage::new(db));
         (temp_dir, storage)
     }
 
@@ -354,7 +337,7 @@ mod tests {
         let scheduler = BackgroundScheduler::new();
 
         // 启动调度器
-        let result = scheduler.start(storage, data_dir.clone(), None).await;
+        let result = scheduler.start(storage, None).await;
         assert!(result.is_ok());
 
         // 验证状态
@@ -373,10 +356,10 @@ mod tests {
         let (data_dir, storage) = create_test_storage();
         let scheduler = BackgroundScheduler::new();
 
-        let result1 = scheduler.start(storage.clone(), data_dir.clone(), None).await;
+        let result1 = scheduler.start(storage.clone(), None).await;
         assert!(result1.is_ok());
 
-        let result2 = scheduler.start(storage, data_dir.clone(), None).await;
+        let result2 = scheduler.start(storage, None).await;
         assert!(result2.is_ok());
 
         scheduler.stop().await;
@@ -390,7 +373,7 @@ mod tests {
         let (data_dir, storage) = create_test_storage();
         let scheduler = BackgroundScheduler::new();
 
-        scheduler.start(storage, data_dir.clone(), None).await.unwrap();
+        scheduler.start(storage, None).await.unwrap();
         scheduler.stop().await;
 
         // 等待任务结束

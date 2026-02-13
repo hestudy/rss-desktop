@@ -11,7 +11,7 @@ use uuid::Uuid;
 use crate::ai_summarizer;
 use crate::ai_translator;
 use crate::content_extractor::fetch_and_extract_content;
-use crate::storage::Storage;
+use crate::storage_sqlite::SqliteStorage;
 
 // ============= 类型定义 =============
 
@@ -171,8 +171,7 @@ impl TaskQueue {
     /// 创建并启动任务队列
     pub fn new(
         max_concurrency: usize,
-        storage: Arc<Storage>,
-        data_dir: std::path::PathBuf,
+        storage: Arc<SqliteStorage>,
         app_handle: AppHandle,
     ) -> Self {
         let (sender, receiver) = mpsc::channel::<QueueTask>(MAX_QUEUE_SIZE);
@@ -190,7 +189,6 @@ impl TaskQueue {
             cancelled_clone,
             max_concurrency,
             storage,
-            data_dir,
             app_handle,
         ));
 
@@ -308,8 +306,7 @@ impl TaskQueue {
         task_states: Arc<RwLock<HashMap<String, QueueTask>>>,
         cancelled: Arc<RwLock<std::collections::HashSet<String>>>,
         max_concurrency: usize,
-        storage: Arc<Storage>,
-        data_dir: std::path::PathBuf,
+        storage: Arc<SqliteStorage>,
         app_handle: AppHandle,
     ) {
         let semaphore = Arc::new(Semaphore::new(max_concurrency));
@@ -370,7 +367,6 @@ impl TaskQueue {
                 emit_progress(&app_handle, &task, "running", None);
 
                 let storage_clone = storage.clone();
-                let data_dir_clone = data_dir.clone();
                 let states_clone = task_states.clone();
                 let cancelled_clone = cancelled.clone();
                 let app_handle_clone = app_handle.clone();
@@ -389,7 +385,6 @@ impl TaskQueue {
                     let result = execute_task(
                         &task,
                         &storage_clone,
-                        &data_dir_clone,
                     )
                     .await;
 
@@ -480,8 +475,7 @@ impl TaskQueue {
 /// 执行具体任务
 async fn execute_task(
     task: &QueueTask,
-    storage: &Arc<Storage>,
-    data_dir: &std::path::Path,
+    storage: &Arc<SqliteStorage>,
 ) -> Result<(), String> {
     match &task.task_type {
         TaskType::FetchFullContent { article_id, url } => {
@@ -518,7 +512,7 @@ async fn execute_task(
                 .ok_or_else(|| "Article content is empty".to_string())?
                 .to_string();
 
-            let ai_settings = crate::settings::load_ai_settings_from_dir(data_dir);
+            let ai_settings = crate::settings::load_ai_settings_from_storage(storage);
             let settings_clone = ai_settings.clone();
             let article_id_clone = article_id.clone();
 
@@ -560,7 +554,7 @@ async fn execute_task(
                 .ok_or_else(|| "Article content is empty".to_string())?
                 .to_string();
 
-            let ai_settings = crate::settings::load_ai_settings_from_dir(data_dir);
+            let ai_settings = crate::settings::load_ai_settings_from_storage(storage);
             let lang = target_lang.clone();
             let settings_clone = ai_settings.clone();
             let article_id_clone = article_id.clone();

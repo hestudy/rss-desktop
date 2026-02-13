@@ -469,34 +469,22 @@ mod tests {
     }
 }
 
-/// 从数据目录加载 AI 设置
-pub fn load_ai_settings_from_dir(data_dir: &std::path::Path) -> AiSettings {
-    use std::collections::HashMap;
-    use std::fs::File;
-    use std::io::BufReader;
-
-    let store_path = data_dir.join("store.json");
-    if !store_path.exists() {
-        return AiSettings::default();
+/// 从 SqliteStorage KV 加载 AI 设置
+pub fn load_ai_settings_from_storage(storage: &crate::storage_sqlite::SqliteStorage) -> AiSettings {
+    match storage.get_kv("ai_settings") {
+        Ok(Some(value)) => {
+            serde_json::from_value(value).unwrap_or_default()
+        }
+        _ => AiSettings::default(),
     }
+}
 
-    let file = match File::open(&store_path) {
-        Ok(f) => f,
-        Err(_) => return AiSettings::default(),
-    };
-
-    if fs2::FileExt::lock_shared(&file).is_err() {
-        return AiSettings::default();
-    }
-
-    let reader = BufReader::new(file);
-    let store: HashMap<String, serde_json::Value> = match serde_json::from_reader(reader) {
-        Ok(s) => s,
-        Err(_) => return AiSettings::default(),
-    };
-
-    match store.get("ai_settings") {
-        Some(value) => serde_json::from_value(value.clone()).unwrap_or_default(),
-        None => AiSettings::default(),
+/// 从 SqliteStorage KV 加载应用设置
+pub fn load_app_settings_from_storage(storage: &crate::storage_sqlite::SqliteStorage) -> AppSettings {
+    match storage.get_kv("app_settings") {
+        Ok(Some(value)) => {
+            serde_json::from_value(value).unwrap_or_default()
+        }
+        _ => AppSettings::default(),
     }
 }
