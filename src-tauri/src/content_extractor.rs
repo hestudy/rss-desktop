@@ -1,9 +1,28 @@
 use crate::error::{Result, RssError};
 use crate::fetcher::validate_url;
 use dom_smoothie::{Config, Readability};
+use regex::Regex;
+use std::sync::LazyLock;
 use std::time::Duration;
 
 const MAX_CONTENT_SIZE: usize = 1_048_576; // 1MB
+
+static RE_STRIP_TAGS: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(concat!(
+        r"(?is)",
+        r"<script\b[^>]*>.*?</script\s*>|",
+        r"<style\b[^>]*>.*?</style\s*>|",
+        r"<noscript\b[^>]*>.*?</noscript\s*>|",
+        r"<iframe\b[^>]*>.*?</iframe\s*>|",
+        r"<svg\b[^>]*>.*?</svg\s*>|",
+        r"<nav\b[^>]*>.*?</nav\s*>|",
+        r"<footer\b[^>]*>.*?</footer\s*>|",
+        r"<header\b[^>]*>.*?</header\s*>|",
+        r"<aside\b[^>]*>.*?</aside\s*>|",
+        r"<!--.*?-->",
+    ))
+    .unwrap()
+});
 
 pub fn fetch_and_extract_content(url: &str) -> Result<String> {
     // SSRF 防护
@@ -56,12 +75,14 @@ pub fn extract_content_from_html(html: &str, url: Option<&str>) -> Result<String
         ));
     }
 
+    let cleaned = preprocess_html(html);
+
     let cfg = Config {
-        max_elements_to_parse: 5000,
+        max_elements_to_parse: 10000,
         ..Default::default()
     };
 
-    let mut readability = Readability::new(html, url, Some(cfg))
+    let mut readability = Readability::new(cleaned.as_str(), url, Some(cfg))
         .map_err(|e| RssError::ContentExtractionError(format!("HTML 解析失败: {}", e)))?;
 
     let article = readability
@@ -77,6 +98,11 @@ pub fn extract_content_from_html(html: &str, url: Option<&str>) -> Result<String
     }
 
     Ok(content)
+}
+
+/// 预处理 HTML，移除非内容标签以减少 DOM 元素数量
+fn preprocess_html(html: &str) -> String {
+    RE_STRIP_TAGS.replace_all(html, "").into_owned()
 }
 
 fn is_likely_spa(html: &str) -> bool {
@@ -303,5 +329,42 @@ mod tests {
             padding
         );
         assert!(is_likely_spa(&html));
+    }
+
+    #[test]
+    fn test_preprocess_strips_script_and_style() {
+        let html = r#"<html><body><script>var x=1;</script><style>.a{}</style><p>content</p></body></html>"#;
+        let cleaned = preprocess_html(html);
+        assert!(!cleaned.contains("<script"));
+        assert!(!cleaned.contains("<style"));
+        assert!(cleaned.contains("<p>content</p>"));
+    }
+
+    #[test]
+    fn test_preprocess_strips_nav_footer_header_aside() {
+        let html = r#"<html><body><nav>nav</nav><header>hdr</header><article><p>main</p></article><aside>side</aside><footer>ft</footer></body></html>"#;
+        let cleaned = preprocess_html(html);
+        assert!(!cleaned.contains("<nav"));
+        assert!(!cleaned.contains("<header"));
+        assert!(!cleaned.contains("<aside"));
+        assert!(!cleaned.contains("<footer"));
+        assert!(cleaned.contains("<article>"));
+    }
+
+    #[test]
+    fn test_preprocess_strips_html_comments() {
+        let html = r#"<html><body><!-- comment --><p>text</p></body></html>"#;
+        let cleaned = preprocess_html(html);
+        assert!(!cleaned.contains("<!--"));
+        assert!(cleaned.contains("<p>text</p>"));
+    }
+
+    #[test]
+    fn test_preprocess_strips_svg_and_iframe() {
+        let html = r#"<html><body><svg><circle/></svg><iframe src="x"></iframe><p>ok</p></body></html>"#;
+        let cleaned = preprocess_html(html);
+        assert!(!cleaned.contains("<svg"));
+        assert!(!cleaned.contains("<iframe"));
+        assert!(cleaned.contains("<p>ok</p>"));
     }
 }

@@ -35,4 +35,5 @@ tauri-plugin-notification = "2"
 log = "0.4"
 env_logger = "0.11"
 dom_smoothie = "0.14"
+regex = "1"
 

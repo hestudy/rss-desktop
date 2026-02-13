@@ -3424,6 +3424,7 @@ dependencies = [
  "feed-rs",
  "fs2",
  "log",
+ "regex",
  "serde",
  "serde_json",
  "tauri",
