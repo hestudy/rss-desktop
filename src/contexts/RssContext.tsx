@@ -11,6 +11,7 @@ interface RssContextType {
   error: string | null
   showFavoritesOnly: boolean
   refreshProgress: RefreshProgress
+  refreshingFeedIds: Set<string>
   loadFeeds: () => Promise<void>
   loadArticles: (feedId?: string) => Promise<void>
   addFeed: (url: string, useFullContent?: boolean, useAiSummary?: boolean, useAiTranslation?: boolean) => Promise<Feed>
@@ -56,6 +57,7 @@ export function RssProvider({ children }: RssProviderProps) {
     total: 0,
     currentFeedTitle: '',
   })
+  const [refreshingFeedIds, setRefreshingFeedIds] = useState<Set<string>>(new Set())
 
   const selectedFeedIdRef = useRef(selectedFeedId)
   selectedFeedIdRef.current = selectedFeedId
@@ -120,8 +122,9 @@ export function RssProvider({ children }: RssProviderProps) {
     }).then(fn => unlisteners.push(fn))
 
     listen<FeedRefreshProgressEvent>('feed-refresh-progress', (event) => {
-      const { feed_title, status, current, total } = event.payload
+      const { feed_id, feed_title, status, current, total } = event.payload
       if (status === 'started') {
+        setRefreshingFeedIds(prev => new Set(prev).add(feed_id))
         setRefreshProgress(prev => ({
           isRefreshing: true,
           current: prev.current,
@@ -129,6 +132,11 @@ export function RssProvider({ children }: RssProviderProps) {
           currentFeedTitle: feed_title,
         }))
       } else if (status === 'completed' || status === 'failed') {
+        setRefreshingFeedIds(prev => {
+          const next = new Set(prev)
+          next.delete(feed_id)
+          return next
+        })
         setRefreshProgress({
           isRefreshing: true,
           current,
@@ -208,6 +216,7 @@ export function RssProvider({ children }: RssProviderProps) {
   const refreshFeed = useCallback(async (id: string) => {
     setIsLoading(true)
     setError(null)
+    setRefreshingFeedIds(prev => new Set(prev).add(id))
     try {
       const result = await RssApi.refreshFeed(id)
       // 更新订阅列表中的该项
@@ -222,6 +231,11 @@ export function RssProvider({ children }: RssProviderProps) {
       setError(err instanceof Error ? err.message : 'Failed to refresh feed')
       throw err
     } finally {
+      setRefreshingFeedIds(prev => {
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
       setIsLoading(false)
     }
   }, [loadArticles, selectedFeedId])
@@ -340,6 +354,7 @@ export function RssProvider({ children }: RssProviderProps) {
     error,
     showFavoritesOnly,
     refreshProgress,
+    refreshingFeedIds,
     loadFeeds,
     loadArticles,
     addFeed,
