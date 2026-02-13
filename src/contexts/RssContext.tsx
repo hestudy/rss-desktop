@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useCallback, useEffect, useRef, Re
 import { listen } from '@tauri-apps/api/event'
 import type { Feed, Article, FeedWithUnreadCount, FeedRefreshedEvent, FeedRefreshProgressEvent, RefreshProgress } from '../types'
 import { RssApi } from '../lib/api'
+import { mergeArticles } from '../lib/mergeArticles'
 
 interface RssContextType {
   feeds: FeedWithUnreadCount[]
@@ -91,16 +92,29 @@ export function RssProvider({ children }: RssProviderProps) {
     }
   }, [])
 
+  // 增量刷新：合并新文章到现有列表，不触发 loading 状态
+  const refreshArticlesMerge = useCallback(async (feedId?: string) => {
+    try {
+      const data = await RssApi.getArticles({
+        feed_id: feedId,
+        limit: 100,
+      })
+      setArticles(prev => mergeArticles(prev, data))
+    } catch {
+      // 增量刷新失败静默处理，不影响用户体验
+    }
+  }, [])
+
   // 监听后端 feed-refreshed 和 feed-refresh-progress 事件
   useEffect(() => {
     const unlisteners: (() => void)[] = []
     let reloadTimer: ReturnType<typeof setTimeout> | null = null
 
-    const debouncedReloadArticles = () => {
+    const debouncedMergeArticles = () => {
       if (reloadTimer) clearTimeout(reloadTimer)
       reloadTimer = setTimeout(() => {
         const currentFeedId = selectedFeedIdRef.current
-        loadArticles(currentFeedId || undefined)
+        refreshArticlesMerge(currentFeedId || undefined)
       }, 500)
     }
 
@@ -116,7 +130,7 @@ export function RssProvider({ children }: RssProviderProps) {
       if (new_article_count > 0) {
         const currentFeedId = selectedFeedIdRef.current
         if (currentFeedId === feed.feed.id || currentFeedId === null) {
-          debouncedReloadArticles()
+          debouncedMergeArticles()
         }
       }
     }).then(fn => unlisteners.push(fn))
@@ -158,7 +172,7 @@ export function RssProvider({ children }: RssProviderProps) {
       if (reloadTimer) clearTimeout(reloadTimer)
       unlisteners.forEach(fn => fn())
     }
-  }, [loadArticles])
+  }, [refreshArticlesMerge])
 
   const addFeed = useCallback(async (url: string, useFullContent?: boolean, useAiSummary?: boolean, useAiTranslation?: boolean) => {
     setIsLoading(true)
@@ -223,9 +237,9 @@ export function RssProvider({ children }: RssProviderProps) {
       setFeeds(prev => prev.map(f =>
         f.feed.id === id ? result : f
       ))
-      // 如果是当前选中的订阅，重新加载文章
+      // 如果是当前选中的订阅，增量合并文章
       if (selectedFeedId === id) {
-        await loadArticles(id)
+        await refreshArticlesMerge(id)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to refresh feed')
@@ -238,7 +252,7 @@ export function RssProvider({ children }: RssProviderProps) {
       })
       setIsLoading(false)
     }
-  }, [loadArticles, selectedFeedId])
+  }, [refreshArticlesMerge, selectedFeedId])
 
   const refreshAllFeeds = useCallback(async () => {
     setError(null)

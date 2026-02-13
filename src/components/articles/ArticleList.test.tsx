@@ -26,6 +26,7 @@ vi.mock('../../contexts/RssContext', () => ({
     showFavoritesOnly: mockShowFavoritesOnly,
     refreshFeed: mockRefreshFeed,
     refreshAllFeeds: mockRefreshAllFeeds,
+    refreshProgress: { isRefreshing: false, current: 0, total: 0, currentFeedTitle: '' },
   }),
 }))
 

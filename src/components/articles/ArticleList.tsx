@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useCallback, useState } from 'react'
 import type { Article } from '../../types'
 import { ScrollArea } from '../ui/ScrollArea'
 import { useRss } from '../../contexts/RssContext'
@@ -24,23 +24,32 @@ export function ArticleList() {
 
   const { selectedArticleId, selectArticle } = useReader()
   const [isSingleRefreshing, setIsSingleRefreshing] = useState(false)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const prevFeedIdRef = useRef(selectedFeedId)
 
   useEffect(() => {
     if (!showFavoritesOnly) {
       loadArticles(selectedFeedId || undefined)
     }
+    // 切换 feed 时重置滚动位置
+    if (prevFeedIdRef.current !== selectedFeedId) {
+      prevFeedIdRef.current = selectedFeedId
+      if (scrollRef.current) {
+        scrollRef.current.scrollTop = 0
+      }
+    }
   }, [selectedFeedId, showFavoritesOnly, loadArticles])
 
-  const handleArticleClick = async (article: Article) => {
+  const handleArticleClick = useCallback(async (article: Article) => {
     selectArticle(article.id)
     if (!article.read) {
       await markArticleRead(article.id, true)
     }
-  }
+  }, [selectArticle, markArticleRead])
 
-  const handleOpenLink = async (url: string) => {
+  const handleOpenLink = useCallback(async (url: string) => {
     await openLink(url)
-  }
+  }, [openLink])
 
   const handleMarkAllRead = async () => {
     if (selectedFeedId) {
@@ -89,7 +98,7 @@ export function ArticleList() {
       />
 
       {/* 文章列表 */}
-      <ScrollArea className="flex-1">
+      <ScrollArea ref={scrollRef} className="flex-1">
         <div>
           {isLoading ? (
             <div className="text-center py-8 text-muted-foreground">加载中...</div>

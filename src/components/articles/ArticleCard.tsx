@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { ExternalLink, Star, Clock } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
@@ -30,7 +31,7 @@ export interface ArticleCardProps {
   className?: string
 }
 
-export function ArticleCard({
+export const ArticleCard = memo(function ArticleCard({
   title,
   description,
   feedName,
@@ -177,4 +178,20 @@ export function ArticleCard({
       </div>
     </article>
   )
-}
+}, (prev, next) => {
+  // 只比较数据 props，故意跳过 onClick/onOpenExternal 回调比较。
+  // 父组件 ArticleList 在 map 中用内联箭头函数传递回调，每次渲染都会创建新引用，
+  // 但只要 article 数据不变，回调语义也不变，因此跳过比较是安全的。
+  return (
+    prev.id === next.id &&
+    prev.title === next.title &&
+    prev.description === next.description &&
+    prev.feedName === next.feedName &&
+    prev.publishedAt === next.publishedAt &&
+    prev.thumbnailUrl === next.thumbnailUrl &&
+    prev.isRead === next.isRead &&
+    prev.isSelected === next.isSelected &&
+    prev.isFavorite === next.isFavorite &&
+    prev.className === next.className
+  )
+})
