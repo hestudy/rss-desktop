@@ -4,7 +4,7 @@ import { RssProvider, useRss } from './RssContext'
 import { RssApi } from '../lib/api'
 import type { ReactNode } from 'react'
 import type { FeedWithUnreadCount, Article } from '../types'
-import { listen } from '@tauri-apps/api/event'
+
 
 // Mock RssApi
 vi.mock('../lib/api', () => ({

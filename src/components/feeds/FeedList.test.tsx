@@ -96,7 +96,7 @@ vi.mock('./AddFeedDialog', () => ({
 }))
 
 vi.mock('./EditFeedDialog', () => ({
-  EditFeedDialog: ({ isOpen, feed }: { isOpen: boolean; feed: unknown }) => isOpen ? <div data-testid="edit-feed-dialog">EditFeedDialog</div> : null,
+  EditFeedDialog: ({ isOpen, feed: _feed }: { isOpen: boolean; feed: unknown }) => isOpen ? <div data-testid="edit-feed-dialog">EditFeedDialog</div> : null,
 }))
 
 vi.mock('./FeedLogDialog', () => ({

@@ -218,7 +218,7 @@ describe('ArticleList', () => {
     ]
     render(<ArticleList />)
     // In favorites mode, feed name should not be shown in article cards
-    const feedNames = screen.queryAllByText('Tech Blog')
+    expect(screen.queryAllByText('Tech Blog')).toHaveLength(0)
     // The header shows "收藏文章", not "Tech Blog"
     expect(screen.getByText('收藏文章')).toBeInTheDocument()
   })
