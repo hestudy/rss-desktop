@@ -171,8 +171,12 @@ export class FeedListPage {
   async clickEditButton(title: string) {
     await this.hoverFeed(title)
     const actions = this.getFeedActions(title)
-    const editButton = actions.locator('button').nth(1)
-    await editButton.click()
+    // Click the dropdown trigger (MoreHorizontal button)
+    const dropdownTrigger = actions.locator('button').first()
+    await dropdownTrigger.click()
+    // Click the "编辑" menu item from the dropdown (rendered in portal)
+    const editMenuItem = this.page.locator('div.fixed.z-\\[9999\\] button').filter({ hasText: '编辑' })
+    await editMenuItem.click()
   }
 
   getFeedActions(title: string): Locator {

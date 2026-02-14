@@ -433,22 +433,25 @@ export class ArticleViewerPage {
       justify: this.textAlignJustify,
     }
     await buttonMap[align].click()
-    // Wait for the button to become active
-    await expect(buttonMap[align]).toHaveClass(/bg-primary/)
+    // Wait for the button to become active (uses bg-accent for active state)
+    await expect(buttonMap[align]).toHaveClass(/bg-accent/)
   }
 
   /**
    * Get current text alignment
    */
   async getTextAlign(): Promise<'left' | 'center' | 'justify'> {
-    // Check which button has the primary background color
-    const leftActive = await this.settingsDialog.locator('button.bg-primary').filter({ hasText: '左对齐' }).isVisible().catch(() => false)
-    if (leftActive) return 'left'
+    // Check which button has the active style (border-primary/60 indicates active)
+    const leftClass = await this.textAlignLeft.getAttribute('class') ?? ''
+    if (leftClass.includes('border-primary')) return 'left'
 
-    const centerActive = await this.settingsDialog.locator('button.bg-primary').filter({ hasText: '居中' }).isVisible().catch(() => false)
-    if (centerActive) return 'center'
+    const centerClass = await this.textAlignCenter.getAttribute('class') ?? ''
+    if (centerClass.includes('border-primary')) return 'center'
 
-    return 'justify'
+    const justifyClass = await this.textAlignJustify.getAttribute('class') ?? ''
+    if (justifyClass.includes('border-primary')) return 'justify'
+
+    return 'left'
   }
 
   /**

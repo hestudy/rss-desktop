@@ -35,12 +35,12 @@ test.describe('Feed Action Buttons Hover Behavior', () => {
     await expect(actions).not.toHaveCSS('opacity', '0')
   })
 
-  test('action buttons contain refresh and delete buttons', async () => {
+  test('action buttons contain dropdown menu trigger', async () => {
     await feedListPage.hoverFeed('Tech Blog')
 
     const actions = feedListPage.getFeedActions('Tech Blog')
     const buttons = actions.locator('button')
-    await expect(buttons).toHaveCount(2)
+    await expect(buttons).toHaveCount(1)
   })
 
   test('action buttons return to transparent when mouse leaves', async ({ page }) => {
