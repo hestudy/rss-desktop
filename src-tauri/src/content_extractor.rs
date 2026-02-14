@@ -7,6 +7,8 @@ use std::sync::{LazyLock, Mutex};
 use std::time::Duration;
 
 const MAX_CONTENT_SIZE: usize = 5 * 1_048_576; // 5MB
+const FALLBACK_MIN_TEXT_LEN: usize = 50;
+const FALLBACK_MIN_PARAGRAPH_LEN: usize = 10;
 
 static RE_STRIP_TAGS: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(concat!(
@@ -23,6 +25,23 @@ static RE_STRIP_TAGS: LazyLock<Regex> = LazyLock::new(|| {
         r"<!--.*?-->",
     ))
     .unwrap()
+});
+
+/// 用于降级提取的正则：匹配 <article>、<main> 或 <p> 标签内容
+static RE_FALLBACK_ARTICLE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?is)<article\b[^>]*>(.*?)</article\s*>").unwrap()
+});
+
+static RE_FALLBACK_MAIN: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?is)<main\b[^>]*>(.*?)</main\s*>").unwrap()
+});
+
+static RE_FALLBACK_P: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?is)<p\b[^>]*>(.*?)</p\s*>").unwrap()
+});
+
+static RE_HTML_TAGS: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"<[^>]+>").unwrap()
 });
 
 static CHROME_BROWSER: LazyLock<Mutex<Option<Browser>>> =
@@ -284,9 +303,24 @@ fn safe_extract(
     }
 }
 
-/// 用 catch_unwind 包裹内容提取，防止第三方库 panic 导致线程崩溃
+/// 用 catch_unwind 包裹内容提取，防止第三方库 panic 导致线程崩溃。
+/// 当主提取失败时，尝试降级提取方案（SPA 检测失败除外）。
 pub fn safe_extract_content_from_html(html: &str, url: Option<&str>) -> Result<String> {
-    safe_extract(html, url, "内容解析过程中发生异常", extract_content_from_html)
+    let primary = safe_extract(html, url, "内容解析过程中发生异常", extract_content_from_html);
+    match primary {
+        Ok(content) => Ok(content),
+        Err(primary_err) => {
+            // SPA 页面不走降级提取，因为 HTML 中没有实际内容
+            if is_likely_spa(html) {
+                return Err(primary_err);
+            }
+            log::warn!("主提取失败，尝试降级提取: {}", primary_err);
+            fallback_extract_content(html).map_err(|fallback_err| {
+                log::warn!("降级提取也失败: {}", fallback_err);
+                primary_err
+            })
+        }
+    }
 }
 
 fn fetch_and_extract_spa(url: &str) -> Result<String> {
@@ -299,12 +333,75 @@ fn extract_rendered_html(html: &str, url: Option<&str>) -> Result<String> {
 }
 
 fn safe_extract_rendered_html(html: &str, url: Option<&str>) -> Result<String> {
-    safe_extract(html, url, "渲染后内容解析过程中发生异常", extract_rendered_html)
+    let primary = safe_extract(html, url, "渲染后内容解析过程中发生异常", extract_rendered_html);
+    match primary {
+        Ok(content) => Ok(content),
+        Err(primary_err) => {
+            log::warn!("渲染后主提取失败，尝试降级提取: {}", primary_err);
+            fallback_extract_content(html).map_err(|fallback_err| {
+                log::warn!("渲染后降级提取也失败: {}", fallback_err);
+                primary_err
+            })
+        }
+    }
 }
 
 /// 预处理 HTML，移除非内容标签以减少 DOM 元素数量
 fn preprocess_html(html: &str) -> String {
     RE_STRIP_TAGS.replace_all(html, "").into_owned()
+}
+
+/// 降级提取：当 dom_smoothie 解析失败时，用简单的正则从 HTML 中提取文本内容。
+/// 注意：对于嵌套同名标签（如 `<article>` 内嵌 `<article>`），只会匹配到第一个闭合标签。
+fn fallback_extract_content(html: &str) -> Result<String> {
+    // 先清理 script/style 等非内容标签，防止提取到恶意内容
+    let html = &preprocess_html(html);
+
+    // 优先从 <article> 标签提取
+    if let Some(caps) = RE_FALLBACK_ARTICLE.captures(html) {
+        let inner = caps.get(1).map_or("", |m| m.as_str());
+        let text = strip_html_tags(inner);
+        if text.chars().count() >= FALLBACK_MIN_TEXT_LEN {
+            return Ok(inner.to_string());
+        }
+    }
+
+    // 其次从 <main> 标签提取
+    if let Some(caps) = RE_FALLBACK_MAIN.captures(html) {
+        let inner = caps.get(1).map_or("", |m| m.as_str());
+        let text = strip_html_tags(inner);
+        if text.chars().count() >= FALLBACK_MIN_TEXT_LEN {
+            return Ok(inner.to_string());
+        }
+    }
+
+    // 最后从所有 <p> 标签拼接
+    let paragraphs: Vec<&str> = RE_FALLBACK_P
+        .captures_iter(html)
+        .filter_map(|caps| caps.get(1).map(|m| m.as_str()))
+        .filter(|s| strip_html_tags(s).chars().count() > FALLBACK_MIN_PARAGRAPH_LEN)
+        .collect();
+
+    if !paragraphs.is_empty() {
+        let combined = paragraphs
+            .iter()
+            .map(|p| format!("<p>{}</p>", p))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let text = strip_html_tags(&combined);
+        if text.chars().count() >= FALLBACK_MIN_TEXT_LEN {
+            return Ok(combined);
+        }
+    }
+
+    Err(RssError::ContentExtractionError(
+        "降级提取也未找到足够的可读内容".to_string(),
+    ))
+}
+
+/// 去除 HTML 标签，返回纯文本
+fn strip_html_tags(html: &str) -> String {
+    RE_HTML_TAGS.replace_all(html, "").trim().to_string()
 }
 
 fn is_likely_spa(html: &str) -> bool {
@@ -669,6 +766,176 @@ mod tests {
             err_msg.contains("内容提取失败") || err_msg.contains("未找到可读内容"),
             "Error should mention extraction failure: {}",
             err_msg
+        );
+    }
+
+    #[test]
+    fn test_fallback_extract_from_article_tag() {
+        let html = r#"
+        <html><body>
+            <article>
+                <h1>Article Title</h1>
+                <p>This is the main content of the article with enough text
+                for the fallback extractor to recognize it as meaningful content.</p>
+                <p>Second paragraph with additional details about the topic
+                that provides more context and information.</p>
+            </article>
+        </body></html>"#;
+        let result = fallback_extract_content(html);
+        assert!(result.is_ok(), "Fallback should extract article content: {:?}", result.err());
+        let content = result.unwrap();
+        assert!(
+            content.contains("main content of the article"),
+            "Should contain article text, got: {}",
+            content
+        );
+    }
+
+    #[test]
+    fn test_fallback_extract_from_main_tag() {
+        let html = r#"
+        <html><body>
+            <nav>Navigation</nav>
+            <main>
+                <h1>Main Content</h1>
+                <p>This is the primary content area with sufficient text
+                for extraction to work properly and return meaningful results.</p>
+                <p>Another paragraph with more details about the subject matter.</p>
+            </main>
+            <footer>Footer</footer>
+        </body></html>"#;
+        let result = fallback_extract_content(html);
+        assert!(result.is_ok(), "Fallback should extract main content: {:?}", result.err());
+        let content = result.unwrap();
+        assert!(
+            content.contains("primary content area"),
+            "Should contain main text, got: {}",
+            content
+        );
+    }
+
+    #[test]
+    fn test_fallback_extract_from_p_tags() {
+        let html = r#"
+        <html><body>
+            <div>
+                <p>First paragraph with enough text content for the fallback
+                extractor to consider it as meaningful article content.</p>
+                <p>Second paragraph providing additional information and context
+                about the topic being discussed in this article.</p>
+                <p>Third paragraph with even more content to ensure the
+                extraction threshold is met properly.</p>
+            </div>
+        </body></html>"#;
+        let result = fallback_extract_content(html);
+        assert!(result.is_ok(), "Fallback should extract p tag content: {:?}", result.err());
+    }
+
+    #[test]
+    fn test_fallback_extract_empty_html() {
+        let html = "<html><body></body></html>";
+        let result = fallback_extract_content(html);
+        assert!(result.is_err(), "Fallback should fail on empty content");
+    }
+
+    #[test]
+    fn test_safe_extract_falls_back_on_panic() {
+        // 使用一个会让 dom_smoothie 正常解析失败但有足够内容的 HTML
+        // safe_extract_content_from_html 应在主提取失败时尝试降级提取
+        let html = r#"
+        <html><body>
+            <article>
+                <h1>Fallback Test Article</h1>
+                <p>This article has enough content for the fallback extractor
+                to successfully extract text even if the primary readability
+                algorithm fails or panics during processing.</p>
+                <p>Additional paragraph with more content to ensure the
+                fallback extraction can find meaningful text.</p>
+            </article>
+        </body></html>"#;
+        // 正常 HTML 应该通过主提取成功
+        let result = safe_extract_content_from_html(html, Some("https://example.com"));
+        assert!(result.is_ok(), "Should succeed via primary or fallback: {:?}", result.err());
+    }
+
+    #[test]
+    fn test_fallback_priority_article_too_short_falls_to_main() {
+        // <article> 内容不足 50 字符，应降级到 <main>
+        let html = r#"
+        <html><body>
+            <article><p>Short</p></article>
+            <main>
+                <h1>Main Content</h1>
+                <p>This is the main content area with sufficient text length
+                for the fallback extractor to recognize it as meaningful content
+                and return it successfully.</p>
+            </main>
+        </body></html>"#;
+        let result = fallback_extract_content(html);
+        assert!(result.is_ok(), "Should fall back to main: {:?}", result.err());
+        let content = result.unwrap();
+        assert!(
+            content.contains("main content area"),
+            "Should contain main text, got: {}",
+            content
+        );
+    }
+
+    #[test]
+    fn test_fallback_priority_falls_to_p_tags() {
+        // <article> 和 <main> 都不够长，应降级到 <p> 标签拼接
+        let html = r#"
+        <html><body>
+            <article><p>Short</p></article>
+            <main><p>Also short</p></main>
+            <div>
+                <p>First paragraph with enough text content for the fallback
+                extractor to consider it as meaningful article content.</p>
+                <p>Second paragraph providing additional information and context
+                about the topic being discussed in this article.</p>
+            </div>
+        </body></html>"#;
+        let result = fallback_extract_content(html);
+        assert!(result.is_ok(), "Should fall back to p tags: {:?}", result.err());
+    }
+
+    #[test]
+    fn test_spa_page_skips_fallback() {
+        // SPA 页面不应触发降级提取
+        let spa_html = r#"
+        <html><head><title>App</title></head>
+        <body><div id="root"></div>
+        <script type="module" src="/assets/app.js"></script>
+        </body></html>"#;
+        let result = safe_extract_content_from_html(spa_html, None);
+        assert!(result.is_err(), "SPA page should fail without fallback");
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("JavaScript"),
+            "Error should mention JavaScript: {}",
+            err_msg
+        );
+    }
+
+    #[test]
+    fn test_fallback_strips_script_tags() {
+        // 确保 fallback 提取前会清理 script 标签
+        let html = r#"
+        <html><body>
+            <article>
+                <script>alert('xss')</script>
+                <p>This is the main content of the article with enough text
+                for the fallback extractor to recognize it as meaningful content.</p>
+                <p>Second paragraph with additional details about the topic.</p>
+            </article>
+        </body></html>"#;
+        let result = fallback_extract_content(html);
+        assert!(result.is_ok(), "Should extract content: {:?}", result.err());
+        let content = result.unwrap();
+        assert!(
+            !content.contains("alert"),
+            "Should not contain script content, got: {}",
+            content
         );
     }
 
