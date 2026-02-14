@@ -25,6 +25,8 @@ export interface AppSettings {
   maxNotificationsPerBatch: number
   /** 是否启用后台刷新 */
   enableBackgroundRefresh: boolean
+  /** 关闭窗口时最小化到托盘 */
+  closeToTray: boolean
 }
 
 /**
@@ -57,6 +59,7 @@ export const AppSettingsSchema = z.object({
   enableNotifications: z.boolean().default(true),
   maxNotificationsPerBatch: z.number().int().min(0).max(100).default(5),
   enableBackgroundRefresh: z.boolean().default(false),
+  closeToTray: z.boolean().default(true),
 })
 
 /**
@@ -120,6 +123,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   enableNotifications: true,
   maxNotificationsPerBatch: 5,
   enableBackgroundRefresh: false,
+  closeToTray: true,
 }
 
 // ============= API 函数 =============

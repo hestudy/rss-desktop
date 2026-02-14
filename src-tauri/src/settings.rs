@@ -81,7 +81,7 @@ impl Default for NotificationType {
 
 /// 应用设置
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, rename_all = "camelCase")]
 pub struct AppSettings {
     /// 轮询间隔
     #[serde(default)]
@@ -102,6 +102,10 @@ pub struct AppSettings {
     /// 是否启用后台刷新
     #[serde(default)]
     pub enable_background_refresh: bool,
+
+    /// 关闭窗口时最小化到托盘（而非退出）
+    #[serde(default = "default_close_to_tray")]
+    pub close_to_tray: bool,
 }
 
 fn default_enable_notifications() -> bool {
@@ -112,6 +116,10 @@ fn default_max_notifications() -> usize {
     5
 }
 
+fn default_close_to_tray() -> bool {
+    true
+}
+
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
@@ -120,6 +128,7 @@ impl Default for AppSettings {
             enable_notifications: default_enable_notifications(),
             max_notifications_per_batch: default_max_notifications(),
             enable_background_refresh: false,
+            close_to_tray: default_close_to_tray(),
         }
     }
 }
@@ -330,6 +339,7 @@ mod tests {
         assert!(settings.enable_notifications);
         assert_eq!(settings.max_notifications_per_batch, 5);
         assert!(!settings.enable_background_refresh);
+        assert!(settings.close_to_tray); // 默认启用关闭到托盘
     }
 
     // 测试: AppSettings 序列化和反序列化
@@ -341,6 +351,7 @@ mod tests {
             enable_notifications: true,
             max_notifications_per_batch: 10,
             enable_background_refresh: true,
+            close_to_tray: false,
         };
 
         let json = serde_json::to_string(&settings).unwrap();
@@ -357,12 +368,13 @@ mod tests {
             parsed.enable_background_refresh,
             settings.enable_background_refresh
         );
+        assert_eq!(parsed.close_to_tray, settings.close_to_tray);
     }
 
     // 测试: AppSettings 缺失字段使用默认值
     #[test]
     fn test_app_settings_partial_deserialize() {
-        let json = r#"{"poll_interval":"1h"}"#;
+        let json = r#"{"pollInterval":"1h"}"#;
         let settings: AppSettings = serde_json::from_str(json).unwrap();
 
         assert_eq!(settings.poll_interval, PollInterval::Hours1);
@@ -371,18 +383,27 @@ mod tests {
         assert!(settings.enable_notifications);
         assert_eq!(settings.max_notifications_per_batch, 5);
         assert!(!settings.enable_background_refresh);
+        assert!(settings.close_to_tray); // 缺失时默认为 true
+    }
+
+    // 测试: close_to_tray 设为 false 时正确反序列化
+    #[test]
+    fn test_app_settings_close_to_tray_false() {
+        let json = r#"{"closeToTray":false}"#;
+        let settings: AppSettings = serde_json::from_str(json).unwrap();
+        assert!(!settings.close_to_tray);
     }
 
     // 测试: max_notifications_per_batch 边界值
     #[test]
     fn test_app_settings_max_notifications_bounds() {
         // 最小值
-        let json = r#"{"max_notifications_per_batch":1}"#;
+        let json = r#"{"maxNotificationsPerBatch":1}"#;
         let settings: AppSettings = serde_json::from_str(json).unwrap();
         assert_eq!(settings.max_notifications_per_batch, 1);
 
         // 较大值
-        let json = r#"{"max_notifications_per_batch":100}"#;
+        let json = r#"{"maxNotificationsPerBatch":100}"#;
         let settings: AppSettings = serde_json::from_str(json).unwrap();
         assert_eq!(settings.max_notifications_per_batch, 100);
     }

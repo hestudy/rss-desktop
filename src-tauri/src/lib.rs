@@ -25,12 +25,11 @@ pub use error::{RssError, Result};
 pub use settings::{AiSettings, AppSettings, SchedulerState, PollInterval, NotificationType};
 pub use background_scheduler::{BackgroundScheduler, NewArticlesEvent, ArticleSummary};
 pub(crate) use notifications::NotificationManager;
-pub use tray::TrayManager;
 pub use task_queue::{TaskQueue, TaskType, TaskPriority, QueueTask};
 
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use tauri::{Manager, Emitter, Listener};
 use log::{error, info};
 
@@ -54,7 +53,7 @@ pub fn run() {
     let scheduler = Arc::new(BackgroundScheduler::new());
     let unread_count = Arc::new(AtomicUsize::new(0));
 
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -160,6 +159,29 @@ pub fn run() {
                 }
             });
 
+            // 创建系统托盘
+            #[cfg(not(test))]
+            tray::create_tray(app.handle())?;
+
+            // 缓存 close_to_tray 设置值，避免在窗口关闭事件中同步读取数据库
+            let initial_settings = settings::load_app_settings_from_storage(&shared_storage);
+            let close_to_tray = Arc::new(AtomicBool::new(initial_settings.close_to_tray));
+            app.manage(close_to_tray.clone());
+
+            // 拦截窗口关闭事件：根据缓存的设置决定隐藏到托盘还是退出
+            if let Some(window) = app.get_webview_window("main") {
+                let window_clone = window.clone();
+                let close_to_tray_flag = close_to_tray.clone();
+                window.on_window_event(move |event| {
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                        if close_to_tray_flag.load(Ordering::SeqCst) {
+                            api.prevent_close();
+                            let _ = window_clone.hide();
+                        }
+                    }
+                });
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -199,8 +221,20 @@ pub fn run() {
             commands::clear_ai_usage_records,
             commands::get_builtin_model_prices,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|app_handle, event| {
+        #[allow(clippy::single_match)]
+        match event {
+            tauri::RunEvent::Reopen { has_visible_windows, .. } => {
+                if !has_visible_windows {
+                    tray::show_main_window(app_handle);
+                }
+            }
+            _ => {}
+        }
+    });
 }
 
 /// 内部函数：从已有 storage 获取设置

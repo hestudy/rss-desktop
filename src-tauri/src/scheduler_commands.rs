@@ -3,6 +3,7 @@ use crate::storage_sqlite::SqliteStorage;
 use crate::commands::CommandResult;
 use tauri::State;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 // ============= 测试模块 (TDD: 先写测试) =============
 #[cfg(test)]
@@ -83,12 +84,12 @@ mod tests {
     #[test]
     fn test_max_notifications_boundary() {
         // 最小边界
-        let json = r#"{"max_notifications_per_batch":0}"#;
+        let json = r#"{"maxNotificationsPerBatch":0}"#;
         let settings: AppSettings = serde_json::from_str(json).unwrap();
         assert_eq!(settings.max_notifications_per_batch, 0);
 
         // 较大值
-        let json = r#"{"max_notifications_per_batch":50}"#;
+        let json = r#"{"maxNotificationsPerBatch":50}"#;
         let settings: AppSettings = serde_json::from_str(json).unwrap();
         assert_eq!(settings.max_notifications_per_batch, 50);
     }
@@ -112,11 +113,16 @@ pub async fn get_settings(storage: State<'_, Arc<SqliteStorage>>) -> CommandResu
 pub async fn update_settings(
     settings: AppSettings,
     storage: State<'_, Arc<SqliteStorage>>,
+    close_to_tray: State<'_, Arc<AtomicBool>>,
 ) -> CommandResult<AppSettings> {
     let value = serde_json::to_value(&settings)
         .map_err(|e| format!("Failed to serialize settings: {}", e))?;
     storage.set_kv("app_settings", &value)
         .map_err(|e| format!("Failed to save settings: {}", e))?;
+
+    // 同步更新 close_to_tray 缓存
+    close_to_tray.store(settings.close_to_tray, Ordering::SeqCst);
+
     Ok(settings)
 }
 

@@ -450,6 +450,14 @@ function NotificationSection() {
         checked={settings.enableBackgroundRefresh}
         onChange={(v) => handleChange({ enableBackgroundRefresh: v })}
       />
+
+      {/* 关闭到托盘 */}
+      <SettingToggle
+        label="关闭到托盘"
+        description="关闭窗口时最小化到系统托盘，而不是退出应用"
+        checked={settings.closeToTray}
+        onChange={(v) => handleChange({ closeToTray: v })}
+      />
     </div>
   )
 }
