@@ -63,9 +63,6 @@ vi.mock('lucide-react', () => ({
   RefreshCw: (props: Record<string, unknown>) => <svg data-testid="refresh-icon" {...props} />,
   ChevronDown: (props: Record<string, unknown>) => <svg data-testid="chevron-icon" {...props} />,
   ChevronRight: (props: Record<string, unknown>) => <svg data-testid="chevron-right-icon" {...props} />,
-  Inbox: (props: Record<string, unknown>) => <svg data-testid="inbox-icon" {...props} />,
-  Mail: (props: Record<string, unknown>) => <svg data-testid="mail-icon" {...props} />,
-  Calendar: (props: Record<string, unknown>) => <svg data-testid="calendar-icon" {...props} />,
   Pencil: (props: Record<string, unknown>) => <svg data-testid="pencil-icon" {...props} />,
   Loader2: (props: Record<string, unknown>) => <svg data-testid="loader-icon" {...props} />,
   MoreHorizontal: (props: Record<string, unknown>) => <svg data-testid="more-icon" {...props} />,
@@ -387,6 +384,14 @@ describe('FeedList', () => {
     it('renders QueueIndicator in the bottom toolbar', () => {
       render(<FeedList />)
       expect(screen.getByTestId('queue-indicator')).toBeInTheDocument()
+    })
+  })
+
+  describe('no decorative nav bar', () => {
+    it('should not render a decorative icon navigation bar', () => {
+      render(<FeedList />)
+      // 装饰性导航栏不应存在（收件箱、通知、日历等无功能的 tab）
+      expect(screen.queryByRole('navigation')).not.toBeInTheDocument()
     })
   })
 })

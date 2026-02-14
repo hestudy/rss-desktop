@@ -11,7 +11,6 @@ import { FeedIcon } from './FeedIcon'
 import { useConfirm } from '../ui/ConfirmDialog'
 import { useUnifiedSettings } from '../settings/UnifiedSettings'
 import { useRss } from '../../contexts/RssContext'
-import { SidebarNav, type NavItem } from '../sidebar/SidebarNav'
 import { SectionHeader } from './SectionHeader'
 import { QueueIndicator } from '../queue/QueueIndicator'
 
@@ -59,18 +58,6 @@ export function FeedList() {
   const globalUnread = getGlobalUnreadCount()
   const totalArticleCount = feeds.reduce((sum, f) => sum + f.unread_count, 0)
 
-  // 图标导航栏数据（仅视觉展示，不实现实际导航功能）
-  const navItems: NavItem[] = [
-    { id: 'inbox', icon: 'inbox', label: '收件箱', count: globalUnread },
-    { id: 'mail', icon: 'mail', label: '通知' },
-    { id: 'star', icon: 'star', label: '收藏' },
-    { id: 'calendar', icon: 'calendar', label: '日历' },
-    { id: 'settings', icon: 'settings', label: '设置' },
-  ]
-
-  // 当前激活的导航项基于应用状态
-  const currentNavId = showFavoritesOnly ? 'star' : 'inbox'
-
   return (
     <>
       <div className="h-full flex flex-col bg-sidebar-bg text-sidebar-fg">
@@ -92,16 +79,6 @@ export function FeedList() {
             </Button>
           </div>
         </div>
-
-        {/* 图标导航栏（仅视觉展示） */}
-        <SidebarNav
-          items={navItems}
-          activeId={currentNavId}
-          onSelect={() => {}}
-          direction="horizontal"
-          aria-label="导航"
-          className="border-b border-sidebar-border justify-center pointer-events-none"
-        />
 
         {/* 分类标题 */}
         <SectionHeader
