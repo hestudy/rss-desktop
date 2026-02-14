@@ -37,6 +37,7 @@ import {
   type AppSettings,
   type AiSettings,
 } from '@/lib/settings'
+import { SettingToggle } from './SettingToggle'
 
 // ============= 设置面板 Context =============
 
@@ -992,36 +993,3 @@ function SettingSlider({ label, value, min, max, step, unit, onChange }: Setting
   )
 }
 
-interface SettingToggleProps {
-  label: string
-  description?: string
-  checked: boolean
-  onChange: (value: boolean) => void
-}
-
-function SettingToggle({ label, description, checked, onChange }: SettingToggleProps) {
-  return (
-    <div className="flex items-center justify-between">
-      <div>
-        <h3 className="text-sm font-medium text-foreground">{label}</h3>
-        {description && (
-          <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
-        )}
-      </div>
-      <button
-        onClick={() => onChange(!checked)}
-        className={cn(
-          'relative w-10 h-6 rounded-full transition-colors flex-shrink-0',
-          checked ? 'bg-primary' : 'bg-muted-foreground/30'
-        )}
-      >
-        <span
-          className={cn(
-            'absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform',
-            checked ? 'translate-x-5' : 'translate-x-1'
-          )}
-        />
-      </button>
-    </div>
-  )
-}
