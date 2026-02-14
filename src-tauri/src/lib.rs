@@ -228,6 +228,7 @@ pub fn run() {
     app.run(|app_handle, event| {
         #[allow(clippy::single_match)]
         match event {
+            #[cfg(target_os = "macos")]
             tauri::RunEvent::Reopen { has_visible_windows, .. } => {
                 if !has_visible_windows {
                     tray::show_main_window(app_handle);
