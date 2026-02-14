@@ -61,10 +61,20 @@ export function useUpdater(): UseUpdaterReturn {
         }))
       }
     } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+
+      if (message.includes('Could not fetch a valid release JSON')) {
+        setState(prev => ({
+          ...prev,
+          status: 'up-to-date',
+        }))
+        return
+      }
+
       setState(prev => ({
         ...prev,
         status: 'error',
-        errorMessage: err instanceof Error ? err.message : String(err),
+        errorMessage: message,
       }))
     }
   }, [])

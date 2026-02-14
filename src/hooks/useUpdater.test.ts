@@ -195,4 +195,34 @@ describe('useUpdater', () => {
     // 状态应保持 up-to-date，不应调用 downloadAndInstall
     expect(result.current.status).toBe('up-to-date')
   })
+
+  it('无法获取 release JSON 时应视为已是最新版本', async () => {
+    mockCheck.mockRejectedValue(
+      new Error('Could not fetch a valid release JSON from the remote')
+    )
+
+    const { result } = renderHook(() => useUpdater())
+
+    await act(async () => {
+      await result.current.checkForUpdates()
+    })
+
+    expect(result.current.status).toBe('up-to-date')
+    expect(result.current.errorMessage).toBeNull()
+  })
+
+  it('非字符串错误且包含 release JSON 关键词时也应视为最新版本', async () => {
+    mockCheck.mockRejectedValue(
+      'Could not fetch a valid release JSON from the remote'
+    )
+
+    const { result } = renderHook(() => useUpdater())
+
+    await act(async () => {
+      await result.current.checkForUpdates()
+    })
+
+    expect(result.current.status).toBe('up-to-date')
+    expect(result.current.errorMessage).toBeNull()
+  })
 })
