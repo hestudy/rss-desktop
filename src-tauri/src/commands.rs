@@ -352,6 +352,9 @@ pub async fn get_unread_count(feed_id: Option<String>, storage: State<'_, Arc<Sq
 /// 在浏览器中打开链接
 #[tauri::command]
 pub async fn open_link(url: String) -> CommandResult<()> {
+    if !url.starts_with("http://") && !url.starts_with("https://") {
+        return Err("Only HTTP/HTTPS URLs are allowed".to_string());
+    }
     tauri_plugin_opener::open_url(&url, None::<&str>)
         .map_err(|e| format!("Failed to open URL: {}", e))?;
     Ok(())

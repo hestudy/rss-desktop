@@ -3,6 +3,7 @@ use crate::error::RssError;
 use crate::models::{Article, Feed};
 use chrono::Utc;
 use feed_rs::parser;
+use std::net::IpAddr;
 use std::time::Duration;
 use uuid::Uuid;
 
@@ -11,6 +12,23 @@ pub const MAX_ARTICLES_PER_FETCH: usize = 500;
 
 /// 类型别名，避免 `>>` 解析歧义
 type FeedResult = (Feed, Vec<Article>);
+
+/// 检查 IP 地址是否为私有/保留地址
+fn is_private_or_reserved(ip: &IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => {
+            v4.is_loopback()           // 127.0.0.0/8
+                || v4.is_private()     // 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
+                || v4.is_unspecified() // 0.0.0.0
+                || v4.is_link_local()  // 169.254.0.0/16
+                || v4.is_broadcast()   // 255.255.255.255
+        }
+        IpAddr::V6(v6) => {
+            v6.is_loopback()           // ::1
+                || v6.is_unspecified() // ::
+        }
+    }
+}
 
 /// 验证 URL 并防止 SSRF 攻击
 pub fn validate_url(url: &str) -> Result<bool> {
@@ -21,17 +39,33 @@ pub fn validate_url(url: &str) -> Result<bool> {
         ));
     }
 
-    // 检查是否包含 localhost 或私有 IP
-    let url_lower = url.to_lowercase();
-    if url_lower.contains("localhost")
-        || url_lower.contains("127.0.0.1")
-        || url_lower.contains("192.168.")
-        || url_lower.contains("10.")
-        || url_lower.contains("172.16.")
-    {
+    // 解析 URL 提取 host
+    let parsed = url::Url::parse(url).map_err(|_| {
+        RssError::InvalidUrl("Invalid URL format".to_string())
+    })?;
+
+    let host = parsed
+        .host_str()
+        .ok_or_else(|| RssError::InvalidUrl("URL has no host".to_string()))?;
+
+    // 检查 hostname
+    let host_lower = host.to_lowercase();
+    if host_lower == "localhost" {
         return Err(RssError::InvalidUrl(
-            "Access to private hosts is not allowed".to_string(),
+            "Access to localhost is not allowed".to_string(),
         ));
+    }
+
+    // 检查 IP 地址（覆盖标准解析，防止十六进制/十进制绕过）
+    let ip_str = host.strip_prefix('[')
+        .and_then(|s| s.strip_suffix(']'))
+        .unwrap_or(host);
+    if let Ok(ip) = ip_str.parse::<IpAddr>() {
+        if is_private_or_reserved(&ip) {
+            return Err(RssError::InvalidUrl(
+                "Access to private/reserved hosts is not allowed".to_string(),
+            ));
+        }
     }
 
     Ok(true)
@@ -190,6 +224,34 @@ mod tests {
     fn test_validate_url_private_ip_192_blocked() {
         let result = validate_url("http://192.168.1.1/feed.xml");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_url_private_ip_172_range_blocked() {
+        // 172.16.0.0/12 全范围 (172.16.x.x - 172.31.x.x)
+        assert!(validate_url("http://172.16.0.1/feed.xml").is_err());
+        assert!(validate_url("http://172.24.0.1/feed.xml").is_err());
+        assert!(validate_url("http://172.31.255.1/feed.xml").is_err());
+    }
+
+    #[test]
+    fn test_validate_url_ipv6_loopback_blocked() {
+        assert!(validate_url("http://[::1]/feed.xml").is_err());
+    }
+
+    #[test]
+    fn test_validate_url_unspecified_blocked() {
+        assert!(validate_url("http://0.0.0.0/feed.xml").is_err());
+    }
+
+    #[test]
+    fn test_validate_url_link_local_blocked() {
+        assert!(validate_url("http://169.254.1.1/feed.xml").is_err());
+    }
+
+    #[test]
+    fn test_validate_url_10_range_blocked() {
+        assert!(validate_url("http://10.0.0.1/feed.xml").is_err());
     }
 
     #[test]
