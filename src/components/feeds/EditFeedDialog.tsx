@@ -157,7 +157,7 @@ export function EditFeedDialog({ isOpen, onClose, feed }: EditFeedDialogProps) {
               <span className="text-sm text-foreground">自动 AI 翻译</span>
             </label>
             {error && (
-              <p className="text-sm text-destructive">{error}</p>
+              <p data-testid="edit-feed-error" className="text-sm text-destructive">{error}</p>
             )}
           </div>
           <div className="flex justify-end gap-2 mt-6">

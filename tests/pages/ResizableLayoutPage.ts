@@ -19,7 +19,7 @@ export class ResizableLayoutPage {
 
   constructor(page: Page) {
     this.page = page
-    this.layout = page.locator('div.h-screen')
+    this.layout = page.locator('[data-testid="resizable-layout"]')
     // Sidebar (feed) panel
     this.feedPanel = page.locator('[data-testid="feed-panel-content"]')
     // Article list panel (middle)
@@ -48,7 +48,6 @@ export class ResizableLayoutPage {
     await expect(this.rssHeading).toBeVisible()
     await expect(this.feedPanel).toBeVisible()
     await expect(this.articlePanel).toBeVisible()
-    await this.page.waitForTimeout(100)
   }
 
   /**

@@ -59,6 +59,7 @@ export function ArticleListHeader({
         {/* Refresh button */}
         <button
           type="button"
+          data-testid="article-refresh-button"
           onClick={onRefresh}
           disabled={isRefreshing}
           aria-label="Refresh"
@@ -95,6 +96,7 @@ export function ArticleListHeader({
         {!hideMarkAllRead && (
           <button
             type="button"
+            data-testid="mark-all-read-button"
             onClick={onMarkAllRead}
             aria-label="Mark all as read"
             className={cn(

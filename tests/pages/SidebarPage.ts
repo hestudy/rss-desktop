@@ -50,22 +50,22 @@ export class SidebarPage {
     this.addFeedButton = this.panelContent.getByTitle('添加订阅')
 
     // Navigation buttons in the sidebar
-    this.allArticlesButton = this.panelContent.locator('button').filter({ hasText: '全部文章' })
-    this.favoritesButton = this.panelContent.locator('button').filter({ hasText: '收藏文章' })
+    this.allArticlesButton = this.panelContent.locator('[data-testid="all-articles-button"]')
+    this.favoritesButton = this.panelContent.locator('[data-testid="favorites-button"]')
 
-    // Feed items - each feed is wrapped in a div with group class
-    this.feedItems = this.panelContent.locator('div.group.relative.rounded-md')
+    // Feed items
+    this.feedItems = this.panelContent.locator('[data-testid="feed-item"]')
 
-    // Empty state text
-    this.emptyState = this.panelContent.locator('text=还没有订阅')
+    // Empty state
+    this.emptyState = this.panelContent.locator('[data-testid="feed-empty-state"]')
 
     // Bottom area with settings button
-    this.bottomArea = this.panelContent.locator('div.border-t').last()
+    this.bottomArea = this.panelContent.locator('[data-testid="sidebar-bottom"]')
     // Use exact title matching
     this.settingsButton = this.panelContent.getByTitle('设置', { exact: true })
 
-    // Unified Settings Dialog (rendered via Portal to body)
-    this.settingsDialog = page.locator('div.fixed.inset-0.z-50').filter({ has: page.locator('text=RSS Reader') })
+    // Unified Settings Dialog
+    this.settingsDialog = page.locator('[data-testid="settings-dialog"]')
     this.settingsNavAppearance = this.settingsDialog.locator('button', { hasText: '外观' })
   }
 
@@ -82,7 +82,6 @@ export class SidebarPage {
    */
   async clickAllArticles() {
     await this.allArticlesButton.click()
-    await this.page.waitForTimeout(300)
   }
 
   /**
@@ -90,7 +89,6 @@ export class SidebarPage {
    */
   async clickFavorites() {
     await this.favoritesButton.click()
-    await this.page.waitForTimeout(300)
   }
 
   /**
@@ -122,7 +120,6 @@ export class SidebarPage {
   async selectFeed(title: string) {
     const feedButton = this.panelContent.locator('button').filter({ hasText: title }).first()
     await feedButton.click()
-    await this.page.waitForTimeout(300)
   }
 
   /**
@@ -130,8 +127,6 @@ export class SidebarPage {
    */
   async openSettings() {
     await this.settingsButton.click()
-    await this.page.waitForTimeout(300)
-    // Wait for the dialog to appear
     await expect(this.settingsDialog).toBeVisible({ timeout: 3000 })
   }
 
@@ -141,7 +136,6 @@ export class SidebarPage {
   async openAppearanceSettings() {
     await this.openSettings()
     await this.settingsNavAppearance.click()
-    await this.page.waitForTimeout(200)
   }
 
   /**
@@ -156,7 +150,7 @@ export class SidebarPage {
    */
   async closeSettings() {
     await this.page.keyboard.press('Escape')
-    await this.page.waitForTimeout(300)
+    await expect(this.settingsDialog).not.toBeVisible({ timeout: 3000 })
   }
 
   /**

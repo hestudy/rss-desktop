@@ -19,9 +19,9 @@ export class ArticleListPage {
     this.container = page.locator('[data-testid="article-list-panel-content"]')
     // Articles now use ArticleCard component with data-testid
     this.articleItems = this.container.locator('[data-testid="article-card"]')
-    this.markAllReadButton = page.locator('button', { hasText: '全部已读' })
-    this.emptyState = page.locator('text=暂无文章')
-    this.loadingState = page.locator('text=加载中')
+    this.markAllReadButton = page.locator('[data-testid="mark-all-read-button"]')
+    this.emptyState = page.locator('[data-testid="article-empty-state"]')
+    this.loadingState = page.locator('[data-testid="article-loading"]')
   }
 
   /**
@@ -32,7 +32,6 @@ export class ArticleListPage {
       this.articleItems.first().waitFor({ state: 'visible' }).catch(() => {}),
       this.emptyState.waitFor({ state: 'visible' }).catch(() => {}),
     ])
-    await this.page.waitForTimeout(500)
   }
 
   /**
@@ -57,7 +56,8 @@ export class ArticleListPage {
   async clickArticle(index: number) {
     const article = this.articleItems.nth(index)
     await article.click()
-    await this.page.waitForTimeout(500)
+    // Wait for article viewer to show the selected article
+    await this.page.locator('[data-testid="reader-panel-content"] h1').first().waitFor({ state: 'visible', timeout: 5000 }).catch(() => {})
   }
 
   /**
@@ -65,8 +65,8 @@ export class ArticleListPage {
    */
   async isArticleRead(index: number): Promise<boolean> {
     const article = this.articleItems.nth(index)
-    const classList = await article.getAttribute('class')
-    return classList?.includes('opacity-80') || classList?.includes('bg-read-background') || false
+    const unreadIndicator = article.locator('[data-testid="unread-indicator"]')
+    return !(await unreadIndicator.isVisible().catch(() => false))
   }
 
   /**
@@ -89,7 +89,8 @@ export class ArticleListPage {
    */
   async markAllAsRead() {
     await this.markAllReadButton.click()
-    await this.page.waitForTimeout(1000)
+    // Wait for the button to potentially disappear (all articles now read)
+    await this.markAllReadButton.waitFor({ state: 'hidden', timeout: 3000 }).catch(() => {})
   }
 
   /**

@@ -60,8 +60,8 @@ export class ReaderPanelPage {
     this.previousButton = this.panelContent.locator('button[title*="上一篇"]')
     this.nextButton = this.panelContent.locator('button[title*="下一篇"]')
 
-    // Article counter text like "1 / 3"
-    this.articleCounter = this.panelContent.locator('div.text-sm.text-muted-foreground').filter({ hasText: /\d+\s*\/\s*\d+/ })
+    // Article counter
+    this.articleCounter = page.locator('[data-testid="article-counter"]')
 
     // Favorite button (identified by title)
     this.favoriteButton = this.panelContent.locator('button[title*="收藏"]')
@@ -70,8 +70,8 @@ export class ReaderPanelPage {
     this.externalLinkButton = this.panelContent.locator('button[title="在浏览器中打开"]')
     this.settingsButton = this.panelContent.locator('button[title="阅读设置"]')
 
-    // Progress bar - the thin colored bar below toolbar
-    this.progressBar = this.panelContent.locator('div.h-1.bg-muted')
+    // Progress bar
+    this.progressBar = page.locator('[data-testid="reading-progress-bar"]')
   }
 
   /**
@@ -130,7 +130,6 @@ export class ReaderPanelPage {
    */
   async toggleFavorite() {
     await this.favoriteButton.click()
-    await this.page.waitForTimeout(300)
   }
 
   /**
@@ -138,7 +137,6 @@ export class ReaderPanelPage {
    */
   async clickNext() {
     await this.nextButton.click()
-    await this.page.waitForTimeout(300)
   }
 
   /**
@@ -146,7 +144,6 @@ export class ReaderPanelPage {
    */
   async clickPrevious() {
     await this.previousButton.click()
-    await this.page.waitForTimeout(300)
   }
 
   /**

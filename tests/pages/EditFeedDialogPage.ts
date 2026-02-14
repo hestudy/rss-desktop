@@ -16,7 +16,7 @@ export class EditFeedDialogPage {
     this.urlInput = page.locator('#edit-feed-url')
     this.submitButton = page.locator('button[type="submit"]')
     this.cancelButton = page.locator('button', { hasText: '取消' })
-    this.errorText = page.locator('p[class*="text-destructive"]')
+    this.errorText = page.locator('[data-testid="edit-feed-error"]')
   }
 
   async waitForOpen() {
@@ -71,7 +71,13 @@ export class EditFeedDialogPage {
     if (url !== undefined) {
       await this.fillUrl(url)
     }
-    await this.page.waitForTimeout(300)
+    await this.page.waitForFunction(
+      () => {
+        const btn = document.querySelector('button[type="submit"]') as HTMLButtonElement
+        return btn && !btn.disabled
+      },
+      { timeout: 2000 }
+    ).catch(() => {})
     await this.submit()
   }
 }

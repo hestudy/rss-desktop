@@ -19,7 +19,7 @@ export class AddFeedDialogPage {
     this.urlInput = page.locator('#feed-url')
     this.submitButton = page.locator('button[type="submit"]')
     this.cancelButton = page.locator('button', { hasText: '取消' })
-    this.errorText = page.locator('p[class*="text-destructive"]')
+    this.errorText = page.locator('[data-testid="feed-url-error"]')
     this.dialogTitle = page.locator('h2', { hasText: '添加 RSS 订阅' })
   }
 
@@ -76,7 +76,7 @@ export class AddFeedDialogPage {
     await this.fillUrl(url)
 
     // Wait for input to be processed and button to be enabled
-    await this.page.waitForTimeout(300)
+    await expect(this.submitButton).toBeEnabled({ timeout: 2000 })
 
     // Check if button is enabled before clicking
     const isEnabled = await this.isSubmitEnabled()

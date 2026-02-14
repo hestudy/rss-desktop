@@ -67,26 +67,25 @@ export class ArticleViewerPage {
     this.fetchFullContentButton = page.getByTitle('抓取全文')
     this.aiSummaryButton = page.getByTitle('生成 AI 摘要')
 
-    this.fetchErrorBanner = page.locator('.bg-destructive\\/10')
+    this.fetchErrorBanner = page.locator('[data-testid="fetch-error-banner"]')
     this.toggleContentButton = page.locator('button[title*="切换为"]')
 
-    this.aiSummaryCard = page.locator('.border-primary\\/20')
+    this.aiSummaryCard = page.locator('[data-testid="ai-summary-card"]')
     this.aiSummaryToggle = this.aiSummaryCard.locator('button').first()
-    this.aiSummaryContent = this.aiSummaryCard.locator('div.px-4.pb-3')
+    this.aiSummaryContent = page.locator('[data-testid="ai-summary-content"]')
 
-    // Content area - the scrollable div
-    this.contentArea = this.readerPanel.locator('.overflow-y-auto').first()
+    // Content area
+    this.contentArea = page.locator('[data-testid="article-content-area"]')
     this.articleTitle = this.readerPanel.locator('h1').first()
 
-    // Progress bar - use the outer container (h-1 bg-muted) which is always visible when showProgress is true
-    // The inner bar may have width: 0% initially, making it invisible to Playwright
-    this.progressBar = this.readerPanel.locator('div.h-1.bg-muted')
+    // Progress bar
+    this.progressBar = page.locator('[data-testid="reading-progress-bar"]')
 
-    // Article counter (e.g., "1 / 3") - target the specific counter div with ml-2
-    this.articleCounter = this.readerPanel.locator('div.text-sm.text-muted-foreground.ml-2')
+    // Article counter (e.g., "1 / 3")
+    this.articleCounter = page.locator('[data-testid="article-counter"]')
 
-    // Unified Settings Dialog (rendered via Portal to body)
-    this.settingsDialog = page.locator('div.fixed.inset-0.z-50').filter({ has: page.locator('text=RSS Reader') })
+    // Unified Settings Dialog
+    this.settingsDialog = page.locator('[data-testid="settings-dialog"]')
     this.settingsCloseButton = this.settingsDialog.locator('button').filter({ has: page.locator('svg') }).last()
     this.settingsNavReading = this.settingsDialog.locator('button', { hasText: '阅读' })
 
@@ -497,7 +496,7 @@ export class ArticleViewerPage {
     // Wait for scroll to complete
     await this.page.waitForFunction(
       () => {
-        const el = document.querySelector('[data-testid="reader-panel-content"] .overflow-y-auto') as HTMLElement
+        const el = document.querySelector('[data-testid="article-content-area"]') as HTMLElement
         return el && el.scrollTop + el.clientHeight >= el.scrollHeight - 10
       },
       { timeout: 2000 }
@@ -514,7 +513,7 @@ export class ArticleViewerPage {
     // Wait for scroll to complete
     await this.page.waitForFunction(
       () => {
-        const el = document.querySelector('[data-testid="reader-panel-content"] .overflow-y-auto') as HTMLElement
+        const el = document.querySelector('[data-testid="article-content-area"]') as HTMLElement
         return el && el.scrollTop === 0
       },
       { timeout: 2000 }
@@ -532,7 +531,7 @@ export class ArticleViewerPage {
     // Wait for scroll to complete
     await this.page.waitForFunction(
       ({ initial, delta }) => {
-        const el = document.querySelector('[data-testid="reader-panel-content"] .overflow-y-auto') as HTMLElement
+        const el = document.querySelector('[data-testid="article-content-area"]') as HTMLElement
         return el && Math.abs(el.scrollTop - (initial + delta)) < 5
       },
       { initial: initialScroll, delta: amount },

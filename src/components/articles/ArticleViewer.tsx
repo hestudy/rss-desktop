@@ -467,7 +467,7 @@ export function ArticleViewer({
               <ChevronRight className="w-5 h-5" />
             </button>
           )}
-          <div className="text-sm text-muted-foreground ml-2">
+          <div data-testid="article-counter" className="text-sm text-muted-foreground ml-2">
             {articles.findIndex(a => a.id === article.id) + 1} / {articles.length}
           </div>
         </div>
@@ -555,7 +555,7 @@ export function ArticleViewer({
 
       {/* 阅读进度条 */}
       {readerSettings.showProgress && (
-        <div className="h-1 bg-muted">
+        <div data-testid="reading-progress-bar" className="h-1 bg-muted">
           <div
             className="h-full bg-primary transition-all duration-300"
             style={{ width: `${scrollProgress}%` }}
@@ -564,13 +564,13 @@ export function ArticleViewer({
       )}
 
       {fetchError && (
-        <div className="px-4 py-2 bg-destructive/10 text-destructive text-sm border-b border-destructive/20">
+        <div data-testid="fetch-error-banner" className="px-4 py-2 bg-destructive/10 text-destructive text-sm border-b border-destructive/20">
           {fetchError}
         </div>
       )}
 
       {/* 内容区域 */}
-      <div className="flex-1 overflow-y-auto px-8 py-6 scroll-smooth" ref={contentRef} onScroll={handleScroll}>
+      <div data-testid="article-content-area" className="flex-1 overflow-y-auto px-8 py-6 scroll-smooth" ref={contentRef} onScroll={handleScroll}>
         <article className="mx-auto" style={getContentStyle()}>
           {/* 文章标题 */}
           <h1 className="text-2xl font-bold mb-4 text-foreground">
@@ -602,7 +602,7 @@ export function ArticleViewer({
 
           {/* AI 摘要卡片 */}
           {(aiSummary || isGeneratingSummary) && (
-            <div className="mb-6 rounded-lg border border-primary/20 bg-primary/5 overflow-hidden">
+            <div data-testid="ai-summary-card" className="mb-6 rounded-lg border border-primary/20 bg-primary/5 overflow-hidden">
               <button
                 onClick={() => setSummaryCollapsed(!summaryCollapsed)}
                 className="w-full flex items-center justify-between px-4 py-2.5 text-sm font-medium text-primary hover:bg-primary/10 transition-colors"
@@ -614,7 +614,7 @@ export function ArticleViewer({
                 <ChevronDown className={cn("w-4 h-4 transition-transform", !summaryCollapsed && "rotate-180")} />
               </button>
               {!summaryCollapsed && (
-                <div className="px-4 pb-3 text-sm text-foreground/80 leading-relaxed">
+                <div data-testid="ai-summary-content" className="px-4 pb-3 text-sm text-foreground/80 leading-relaxed">
                   {isGeneratingSummary ? (
                     <div className="flex items-center gap-2 text-muted-foreground py-2">
                       <Loader2 className="w-4 h-4 animate-spin" />

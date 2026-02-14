@@ -72,7 +72,7 @@ export function AddFeedDialog({ isOpen, onClose }: { isOpen: boolean; onClose: (
                 aria-invalid={!!error}
               />
               {error && (
-                <p className="text-sm text-destructive mt-2">{error}</p>
+                <p data-testid="feed-url-error" className="text-sm text-destructive mt-2">{error}</p>
               )}
             </div>
             <label htmlFor="add-feed-full-content" className="flex items-center gap-2 cursor-pointer select-none">

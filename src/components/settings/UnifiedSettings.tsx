@@ -110,9 +110,10 @@ function UnifiedSettingsPanel({ initialTab, onClose }: UnifiedSettingsPanelProps
   }, [onClose])
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-8">
+    <div data-testid="settings-dialog" className="fixed inset-0 z-50 flex items-center justify-center p-8">
       {/* 遮罩层 */}
       <div
+        data-testid="dialog-backdrop"
         className="fixed inset-0 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200"
         onClick={onClose}
       />

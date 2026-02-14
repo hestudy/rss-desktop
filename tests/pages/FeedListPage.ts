@@ -22,12 +22,12 @@ export class FeedListPage {
     this.page = page
     this.container = page.locator('[data-testid="feed-panel-content"]')
     this.header = page.getByRole('heading', { name: 'RSS Reader' })
-    this.feedItems = page.locator('div.group.relative.rounded-md')
+    this.feedItems = page.locator('[data-testid="feed-item"]')
     this.addButton = page.getByTitle('添加订阅')
     this.refreshAllButton = page.getByTitle('刷新全部')
-    this.allArticlesButton = page.locator('button').filter({ hasText: '全部文章' })
-    this.emptyState = page.locator('text=还没有订阅')
-    this.globalUnreadBadge = page.locator('span.bg-sidebar-active.text-white').first()
+    this.allArticlesButton = page.locator('[data-testid="all-articles-button"]')
+    this.emptyState = page.locator('[data-testid="feed-empty-state"]')
+    this.globalUnreadBadge = page.locator('[data-testid="global-unread-badge"]')
     this.feedActionButtons = page.locator('[data-testid="feed-actions"]')
   }
 
@@ -60,7 +60,11 @@ export class FeedListPage {
 
       if (isAddOpen || isEditOpen) {
         await this.page.keyboard.press('Escape')
-        await this.page.waitForTimeout(500)
+        // Wait for dialog to close
+        await Promise.race([
+          addDialogTitle.waitFor({ state: 'hidden', timeout: 2000 }).catch(() => {}),
+          editDialogTitle.waitFor({ state: 'hidden', timeout: 2000 }).catch(() => {}),
+        ])
 
         const stillOpen = (await addDialogTitle.isVisible().catch(() => false))
           || (await editDialogTitle.isVisible().catch(() => false))
@@ -72,10 +76,10 @@ export class FeedListPage {
       }
     }
 
-    const backdrop = this.page.locator('div[class*="bg-black/50"]')
+    const backdrop = this.page.locator('[data-testid="dialog-backdrop"]')
     if (await backdrop.isVisible().catch(() => false)) {
       await backdrop.click({ force: true })
-      await this.page.waitForTimeout(500)
+      await backdrop.waitFor({ state: 'hidden', timeout: 2000 }).catch(() => {})
     }
   }
 
@@ -93,7 +97,11 @@ export class FeedListPage {
   async clickRefreshAll() {
     await this.ensureReady()
     await this.refreshAllButton.click()
-    await this.page.waitForTimeout(2000)
+    // Wait for refresh to start (spinner appears) then complete
+    await this.page.waitForFunction(
+      () => !document.querySelector('button[title="刷新全部"] .animate-spin'),
+      { timeout: 10000 }
+    ).catch(() => {})
   }
 
   /**
@@ -105,7 +113,6 @@ export class FeedListPage {
     for (let i = 0; i < 3; i++) {
       try {
         await this.allArticlesButton.click({ timeout: 5000 })
-        await this.page.waitForTimeout(300)
         break
       } catch (error) {
         await this.closeAnyDialog()
@@ -130,15 +137,16 @@ export class FeedListPage {
     await this.ensureReady()
     const feedButton = this.page.locator('button').filter({ hasText: title }).first()
     await feedButton.click()
-    await this.page.waitForTimeout(500)
+    // Wait for article list to respond to feed selection
+    await this.page.locator('[data-testid="article-list-panel-content"]').waitFor({ state: 'visible' })
   }
 
   /**
    * Get the unread count for a specific feed
    */
   async getFeedUnreadCount(title: string): Promise<number> {
-    const feedElement = this.page.locator('div').filter({ hasText: title }).first()
-    const badge = feedElement.locator('span.bg-sidebar-active.text-white')
+    const feedElement = this.page.locator('[data-testid="feed-item"]').filter({ hasText: title }).first()
+    const badge = feedElement.locator('[data-testid="feed-unread-count"]')
     const text = await badge.textContent()
     return text ? parseInt(text, 10) : 0
   }
@@ -155,7 +163,7 @@ export class FeedListPage {
    * Get the global unread count from the header
    */
   async getGlobalUnreadCount(): Promise<number> {
-    const badge = this.container.locator('span.bg-sidebar-active.text-white').first()
+    const badge = this.container.locator('[data-testid="global-unread-badge"]')
     const text = await badge.textContent()
     return text ? parseInt(text, 10) : 0
   }
@@ -164,7 +172,7 @@ export class FeedListPage {
    * Hover over a feed to reveal action buttons
    */
   async hoverFeed(title: string) {
-    const feedElement = this.page.locator('div.group.relative.rounded-md').filter({ hasText: title }).first()
+    const feedElement = this.page.locator('[data-testid="feed-item"]').filter({ hasText: title }).first()
     await feedElement.hover()
   }
 
@@ -175,13 +183,13 @@ export class FeedListPage {
     const dropdownTrigger = actions.locator('button').first()
     await dropdownTrigger.click()
     // Click the "编辑" menu item from the dropdown (rendered in portal)
-    const editMenuItem = this.page.locator('div.fixed.z-\\[9999\\] button').filter({ hasText: '编辑' })
+    const editMenuItem = this.page.locator('[data-testid="feed-menu-edit"]')
     await editMenuItem.click()
   }
 
   getFeedActions(title: string): Locator {
     return this.page
-      .locator('div.group.relative.rounded-md')
+      .locator('[data-testid="feed-item"]')
       .filter({ hasText: title })
       .locator('[data-testid="feed-actions"]')
   }
@@ -208,19 +216,23 @@ export class FeedListPage {
     const refreshButton = feedElement.locator('button').nth(-2)
     await refreshButton.click()
 
-    await this.page.waitForTimeout(2000)
+    // Wait for refresh to complete (spinner disappears)
+    await this.page.waitForFunction(
+      () => !document.querySelector('.animate-spin'),
+      { timeout: 10000 }
+    ).catch(() => {})
   }
 
   /**
    * Confirm delete operation in the confirmation dialog
    */
   private async confirmDelete() {
-    await this.page.waitForSelector('text=确定要删除这个订阅吗？', { timeout: 5000 })
+    await this.page.locator('[data-testid="confirm-dialog"]').waitFor({ state: 'visible', timeout: 5000 })
 
-    const confirmButton = this.page.locator('button').filter({ hasText: '确定' })
+    const confirmButton = this.page.locator('[data-testid="confirm-ok-button"]')
     await confirmButton.click()
 
-    await this.page.waitForSelector('text=确定要删除这个订阅吗？', { state: 'hidden', timeout: 5000 })
+    await this.page.locator('[data-testid="confirm-dialog"]').waitFor({ state: 'hidden', timeout: 5000 })
   }
 
   /**

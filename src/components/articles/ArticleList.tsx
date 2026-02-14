@@ -101,9 +101,9 @@ export function ArticleList() {
       <ScrollArea ref={scrollRef} className="flex-1">
         <div>
           {isLoading ? (
-            <div className="text-center py-8 text-muted-foreground">加载中...</div>
+            <div data-testid="article-loading" className="text-center py-8 text-muted-foreground">加载中...</div>
           ) : articles.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
+            <div data-testid="article-empty-state" className="text-center py-8 text-muted-foreground">
               {showFavoritesOnly ? '暂无收藏文章' : '暂无文章'}
             </div>
           ) : (

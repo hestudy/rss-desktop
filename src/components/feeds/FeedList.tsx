@@ -113,6 +113,7 @@ export function FeedList() {
         <div className="px-2 space-y-0.5">
           {/* "全部" 选项 */}
           <button
+            data-testid="all-articles-button"
             onClick={() => selectFeed(null)}
             className={`group relative w-full text-left px-3 py-2 rounded-md transition-all duration-200 ${
               selectedFeedId === null && !showFavoritesOnly
@@ -123,7 +124,7 @@ export function FeedList() {
             <div className="flex items-center justify-between">
               <span className="font-medium text-sm">全部文章</span>
               {globalUnread > 0 && (
-                <span className="bg-sidebar-active text-white text-xs px-1.5 py-0.5 rounded-full font-medium min-w-[1.25rem] text-center">
+                <span data-testid="global-unread-badge" className="bg-sidebar-active text-white text-xs px-1.5 py-0.5 rounded-full font-medium min-w-[1.25rem] text-center">
                   {globalUnread}
                 </span>
               )}
@@ -132,6 +133,7 @@ export function FeedList() {
 
           {/* 收藏文章入口 */}
           <button
+            data-testid="favorites-button"
             onClick={() => selectFavorites()}
             className={`group relative w-full text-left px-3 py-2 rounded-md transition-all duration-200 ${
               showFavoritesOnly
@@ -152,6 +154,7 @@ export function FeedList() {
             {feeds.map(({ feed, unread_count }) => (
               <div
                 key={feed.id}
+                data-testid="feed-item"
                 className={`group relative rounded-md transition-all duration-200 ${
                   selectedFeedId === feed.id
                     ? 'bg-sidebar-hover text-sidebar-fg'
@@ -172,7 +175,7 @@ export function FeedList() {
                     <div className="flex items-center justify-between flex-1 min-w-0">
                       <span className="truncate text-sm font-medium">{feed.title}</span>
                       {unread_count > 0 && (
-                        <span className="text-sidebar-muted text-xs font-medium ml-2 flex-shrink-0">
+                        <span data-testid="feed-unread-count" className="text-sidebar-muted text-xs font-medium ml-2 flex-shrink-0">
                           {unread_count}
                         </span>
                       )}
@@ -194,22 +197,24 @@ export function FeedList() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem
+                          data-testid="feed-menu-refresh"
                           onClick={() => handleRefreshFeed(feed.id)}
                           disabled={refreshingFeedIds.has(feed.id)}
                         >
                           <RefreshCw className={`w-3.5 h-3.5 ${refreshingFeedIds.has(feed.id) ? 'animate-spin' : ''}`} />
                           刷新
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setEditingFeed(feed)}>
+                        <DropdownMenuItem data-testid="feed-menu-edit" onClick={() => setEditingFeed(feed)}>
                           <Pencil className="w-3.5 h-3.5" />
                           编辑
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setLogFeed(feed)}>
+                        <DropdownMenuItem data-testid="feed-menu-log" onClick={() => setLogFeed(feed)}>
                           <ScrollText className="w-3.5 h-3.5" />
                           刷新日志
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
+                          data-testid="feed-menu-delete"
                           variant="destructive"
                           onClick={() => handleRemoveFeed(feed.id)}
                         >
@@ -224,7 +229,7 @@ export function FeedList() {
             ))}
 
             {feeds.length === 0 && !isLoading && (
-              <div className="text-center py-8 text-sidebar-muted">
+              <div data-testid="feed-empty-state" className="text-center py-8 text-sidebar-muted">
                 <p>还没有订阅</p>
                 <p className="text-sm">点击右上角的 + 添加订阅</p>
               </div>
@@ -233,7 +238,7 @@ export function FeedList() {
         </ScrollArea>
 
         {/* 底部固定区域 - 刷新 + 日志 + 队列 + 设置 */}
-        <div className="p-3 border-t border-sidebar-border flex items-center justify-between">
+        <div data-testid="sidebar-bottom" className="p-3 border-t border-sidebar-border flex items-center justify-between">
           <div className="flex items-center gap-1">
             <Button
               size="sm"

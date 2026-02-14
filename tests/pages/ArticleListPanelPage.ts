@@ -36,15 +36,15 @@ export class ArticleListPanelPage {
 
     // Header elements
     this.headerTitle = this.panelContent.locator('h2').first()
-    this.markAllReadButton = this.panelContent.locator('button', { hasText: '全部已读' })
+    this.markAllReadButton = this.panelContent.locator('[data-testid="mark-all-read-button"]')
 
     // Article items - using data-testid from ArticleCard component
     this.articleItems = this.panelContent.locator('[data-testid="article-card"]')
 
     // States
-    this.emptyState = this.panelContent.locator('text=暂无文章')
+    this.emptyState = this.panelContent.locator('[data-testid="article-empty-state"]')
     this.favoritesEmptyState = this.panelContent.locator('text=暂无收藏文章')
-    this.loadingState = this.panelContent.locator('text=加载中')
+    this.loadingState = this.panelContent.locator('[data-testid="article-loading"]')
   }
 
   /**
@@ -58,8 +58,6 @@ export class ArticleListPanelPage {
       this.emptyState.waitFor({ state: 'visible' }).catch(() => {}),
       this.favoritesEmptyState.waitFor({ state: 'visible' }).catch(() => {}),
     ])
-    // Small buffer for React state to settle
-    await this.page.waitForTimeout(300)
   }
 
   /**
@@ -81,7 +79,8 @@ export class ArticleListPanelPage {
    */
   async clickArticle(index: number) {
     await this.articleItems.nth(index).click()
-    await this.page.waitForTimeout(300)
+    // Wait for article viewer to respond
+    await this.page.locator('[data-testid="reader-panel-content"] h1').first().waitFor({ state: 'visible', timeout: 5000 }).catch(() => {})
   }
 
   /**
