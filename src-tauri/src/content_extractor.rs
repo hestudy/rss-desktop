@@ -1,8 +1,9 @@
 use crate::error::{Result, RssError};
 use crate::fetcher::validate_url;
 use dom_smoothie::{Config, Readability};
+use headless_chrome::{Browser, LaunchOptions};
 use regex::Regex;
-use std::sync::LazyLock;
+use std::sync::{LazyLock, Mutex};
 use std::time::Duration;
 
 const MAX_CONTENT_SIZE: usize = 5 * 1_048_576; // 5MB
@@ -23,6 +24,110 @@ static RE_STRIP_TAGS: LazyLock<Regex> = LazyLock::new(|| {
     ))
     .unwrap()
 });
+
+static CHROME_BROWSER: LazyLock<Mutex<Option<Browser>>> =
+    LazyLock::new(|| Mutex::new(None));
+
+/// 清理 Chrome 浏览器实例，释放资源。可在应用退出时调用。
+pub fn cleanup_chrome() {
+    if let Ok(mut guard) = CHROME_BROWSER.lock() {
+        if guard.is_some() {
+            log::info!("正在关闭 Chrome 浏览器实例");
+            *guard = None;
+        }
+    }
+}
+
+fn get_or_init_browser() -> Result<Browser> {
+    let mut guard = CHROME_BROWSER.lock().map_err(|e| {
+        RssError::ContentExtractionError(format!("浏览器锁获取失败: {}", e))
+    })?;
+
+    if let Some(ref browser) = *guard {
+        if browser.get_version().is_ok() {
+            return Ok(browser.clone());
+        }
+    }
+
+    let options = LaunchOptions {
+        headless: true,
+        sandbox: true,
+        idle_browser_timeout: Duration::from_secs(60),
+        ..Default::default()
+    };
+
+    let browser = Browser::new(options).map_err(|e| {
+        RssError::ContentExtractionError(format!(
+            "无法启动 Chrome 浏览器，请确保系统已安装 Chrome 或 Chromium: {}",
+            e
+        ))
+    })?;
+
+    *guard = Some(browser.clone());
+    Ok(browser)
+}
+
+fn try_fetch_via_chrome(url: &str) -> Result<String> {
+    // Chrome 能访问 file://, chrome:// 等协议，必须严格校验
+    validate_url(url)?;
+    if !url.starts_with("https://") {
+        return Err(RssError::ContentExtractionError(
+            "Chrome 渲染仅支持 HTTPS URL".to_string(),
+        ));
+    }
+
+    let tab = {
+        let browser = get_or_init_browser()?;
+        browser.new_tab().map_err(|e| {
+            RssError::ContentExtractionError(format!("创建浏览器标签页失败: {}", e))
+        })?
+    };
+
+    tab.set_default_timeout(Duration::from_secs(30));
+
+    tab.navigate_to(url).map_err(|e| {
+        RssError::ContentExtractionError(format!("页面导航失败: {}", e))
+    })?;
+
+    tab.wait_until_navigated().map_err(|e| {
+        RssError::ContentExtractionError(format!("等待页面加载超时: {}", e))
+    })?;
+
+    // 等待 SPA 根节点有子内容，最多 10 秒
+    let _ = tab.wait_for_element_with_custom_timeout(
+        "#root > *, #app > *, #__next > *, #__nuxt > *, [id='root'] > *, [id='app'] > *",
+        Duration::from_secs(10),
+    );
+
+    let html = tab.get_content().map_err(|e| {
+        RssError::ContentExtractionError(format!("获取渲染后页面内容失败: {}", e))
+    })?;
+
+    if let Err(e) = tab.close(true) {
+        log::warn!("关闭 Chrome 标签页失败: {}", e);
+    }
+    Ok(html)
+}
+
+fn fetch_spa_content_via_chrome(url: &str) -> Result<String> {
+    match try_fetch_via_chrome(url) {
+        Ok(html) => Ok(html),
+        Err(first_err) => {
+            log::warn!("Chrome 首次请求失败，尝试重置浏览器: {}", first_err);
+            // 重置 Browser 实例并重试一次
+            match CHROME_BROWSER.lock() {
+                Ok(mut guard) => {
+                    *guard = None;
+                }
+                Err(_) => {
+                    log::warn!("Chrome 浏览器锁已中毒，无法重置");
+                    return Err(first_err);
+                }
+            }
+            try_fetch_via_chrome(url)
+        }
+    }
+}
 
 pub fn fetch_and_extract_content(url: &str) -> Result<String> {
     // SSRF 防护
@@ -72,6 +177,11 @@ pub fn fetch_and_extract_content(url: &str) -> Result<String> {
         )));
     }
 
+    // 检测 SPA 页面，走 Chrome 渲染路径
+    if is_likely_spa(&html) {
+        return fetch_and_extract_spa(url);
+    }
+
     // 用 catch_unwind 包裹解析，防止第三方库 panic 导致线程崩溃
     safe_extract_content_from_html(&html, Some(url))
 }
@@ -83,29 +193,7 @@ pub fn extract_content_from_html(html: &str, url: Option<&str>) -> Result<String
         ));
     }
 
-    let cleaned = preprocess_html(html);
-
-    let cfg = Config {
-        max_elements_to_parse: 10000,
-        ..Default::default()
-    };
-
-    let mut readability = Readability::new(cleaned.as_str(), url, Some(cfg))
-        .map_err(|e| RssError::ContentExtractionError(format!("HTML 解析失败: {}", e)))?;
-
-    let article = readability
-        .parse()
-        .map_err(|e| RssError::ContentExtractionError(format!("内容提取失败: {}", e)))?;
-
-    let content = article.content.to_string();
-
-    if content.trim().is_empty() {
-        return Err(RssError::ContentExtractionError(
-            "未找到可读内容".to_string(),
-        ));
-    }
-
-    Ok(content)
+    do_extract_html(html, url, "未找到可读内容")
 }
 
 /// 检查 Content-Type，拒绝非 HTML 内容
@@ -141,13 +229,41 @@ fn check_content_length_header(header: Option<&str>) -> Result<()> {
     Ok(())
 }
 
-/// 用 catch_unwind 包裹内容提取，防止第三方库 panic 导致线程崩溃
-pub fn safe_extract_content_from_html(html: &str, url: Option<&str>) -> Result<String> {
+fn do_extract_html(html: &str, url: Option<&str>, empty_msg: &str) -> Result<String> {
+    let cleaned = preprocess_html(html);
+
+    let cfg = Config {
+        max_elements_to_parse: 10000,
+        ..Default::default()
+    };
+
+    let mut readability = Readability::new(cleaned.as_str(), url, Some(cfg))
+        .map_err(|e| RssError::ContentExtractionError(format!("HTML 解析失败: {}", e)))?;
+
+    let article = readability
+        .parse()
+        .map_err(|e| RssError::ContentExtractionError(format!("内容提取失败: {}", e)))?;
+
+    let content = article.content.to_string();
+
+    if content.trim().is_empty() {
+        return Err(RssError::ContentExtractionError(empty_msg.to_string()));
+    }
+
+    Ok(content)
+}
+
+fn safe_extract(
+    html: &str,
+    url: Option<&str>,
+    panic_prefix: &str,
+    extractor: fn(&str, Option<&str>) -> Result<String>,
+) -> Result<String> {
     let html_owned = html.to_string();
     let url_owned = url.map(|u| u.to_string());
 
     let result = std::panic::catch_unwind(move || {
-        extract_content_from_html(&html_owned, url_owned.as_deref())
+        extractor(&html_owned, url_owned.as_deref())
     });
 
     match result {
@@ -161,11 +277,29 @@ pub fn safe_extract_content_from_html(html: &str, url: Option<&str>) -> Result<S
                 "未知内部错误".to_string()
             };
             Err(RssError::ContentExtractionError(format!(
-                "内容解析过程中发生异常: {}",
-                msg
+                "{}: {}",
+                panic_prefix, msg
             )))
         }
     }
+}
+
+/// 用 catch_unwind 包裹内容提取，防止第三方库 panic 导致线程崩溃
+pub fn safe_extract_content_from_html(html: &str, url: Option<&str>) -> Result<String> {
+    safe_extract(html, url, "内容解析过程中发生异常", extract_content_from_html)
+}
+
+fn fetch_and_extract_spa(url: &str) -> Result<String> {
+    let html = fetch_spa_content_via_chrome(url)?;
+    safe_extract_rendered_html(&html, Some(url))
+}
+
+fn extract_rendered_html(html: &str, url: Option<&str>) -> Result<String> {
+    do_extract_html(html, url, "Chrome 渲染后仍未找到可读内容")
+}
+
+fn safe_extract_rendered_html(html: &str, url: Option<&str>) -> Result<String> {
+    safe_extract(html, url, "渲染后内容解析过程中发生异常", extract_rendered_html)
 }
 
 /// 预处理 HTML，移除非内容标签以减少 DOM 元素数量
@@ -496,5 +630,54 @@ mod tests {
             panic!("simulated dom_smoothie panic");
         });
         assert!(result.is_err(), "catch_unwind should capture the panic");
+    }
+
+    #[test]
+    fn test_extract_rendered_html_with_content() {
+        let html = r#"
+        <html><head><title>SPA Page</title></head>
+        <body><div id="root">
+            <article>
+                <h1>Rendered Article</h1>
+                <p>This content was rendered by JavaScript framework.
+                It contains enough text for the readability algorithm to
+                properly identify it as the main content area.</p>
+                <p>Second paragraph with additional content that helps
+                the extraction algorithm work correctly.</p>
+                <p>Third paragraph to ensure sufficient content for
+                the readability heuristics to kick in properly.</p>
+            </article>
+        </div></body></html>"#;
+
+        let result = extract_rendered_html(html, Some("https://example.com"));
+        assert!(result.is_ok(), "Should extract rendered content: {:?}", result.err());
+        let content = result.unwrap();
+        assert!(
+            content.contains("rendered by JavaScript"),
+            "Should contain rendered text, got: {}",
+            content
+        );
+    }
+
+    #[test]
+    fn test_extract_rendered_html_empty_after_render() {
+        let html = r#"<html><head></head><body><div id="root"></div></body></html>"#;
+        let result = extract_rendered_html(html, Some("https://example.com"));
+        assert!(result.is_err(), "Should fail when rendered content is empty");
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("内容提取失败") || err_msg.contains("未找到可读内容"),
+            "Error should mention extraction failure: {}",
+            err_msg
+        );
+    }
+
+    #[test]
+    #[ignore] // 需要系统安装 Chrome/Chromium
+    fn test_chrome_renders_spa_page() {
+        let result = fetch_spa_content_via_chrome("https://example.com");
+        assert!(result.is_ok(), "Chrome should render page: {:?}", result.err());
+        let html = result.unwrap();
+        assert!(!html.is_empty(), "Rendered HTML should not be empty");
     }
 }
