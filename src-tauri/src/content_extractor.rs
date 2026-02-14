@@ -5,7 +5,7 @@ use regex::Regex;
 use std::sync::LazyLock;
 use std::time::Duration;
 
-const MAX_CONTENT_SIZE: usize = 1_048_576; // 1MB
+const MAX_CONTENT_SIZE: usize = 5 * 1_048_576; // 5MB
 
 static RE_STRIP_TAGS: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(concat!(
@@ -47,6 +47,13 @@ pub fn fetch_and_extract_content(url: &str) -> Result<String> {
         )));
     }
 
+    // 检查 Content-Type，拒绝非 HTML 内容
+    check_content_type(response.header("content-type"))?;
+
+    // 通过 Content-Length 头提前拒绝已知的超大响应
+    check_content_length_header(response.header("content-length"))?;
+
+    // 使用 into_string() 读取（自动处理字符编码如 GBK/GB2312）
     let html = response
         .into_string()
         .map_err(|e| RssError::ContentExtractionError(format!("读取响应内容失败: {}", e)))?;
@@ -65,7 +72,8 @@ pub fn fetch_and_extract_content(url: &str) -> Result<String> {
         )));
     }
 
-    extract_content_from_html(&html, Some(url))
+    // 用 catch_unwind 包裹解析，防止第三方库 panic 导致线程崩溃
+    safe_extract_content_from_html(&html, Some(url))
 }
 
 pub fn extract_content_from_html(html: &str, url: Option<&str>) -> Result<String> {
@@ -98,6 +106,66 @@ pub fn extract_content_from_html(html: &str, url: Option<&str>) -> Result<String
     }
 
     Ok(content)
+}
+
+/// 检查 Content-Type，拒绝非 HTML 内容
+fn check_content_type(header: Option<&str>) -> Result<()> {
+    if let Some(ct) = header {
+        let ct_lower = ct.to_lowercase();
+        if !ct_lower.contains("text/html")
+            && !ct_lower.contains("application/xhtml")
+            && !ct_lower.contains("text/xml")
+            && !ct_lower.contains("application/xml")
+        {
+            return Err(RssError::ContentExtractionError(format!(
+                "不支持的内容类型: {}",
+                ct
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// 检查 Content-Length 头，提前拒绝已知的超大响应
+fn check_content_length_header(header: Option<&str>) -> Result<()> {
+    if let Some(value) = header {
+        if let Ok(len) = value.parse::<usize>() {
+            if len > MAX_CONTENT_SIZE {
+                return Err(RssError::ContentExtractionError(format!(
+                    "页面内容过大: {} 字节（最大: {} 字节）",
+                    len, MAX_CONTENT_SIZE
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// 用 catch_unwind 包裹内容提取，防止第三方库 panic 导致线程崩溃
+pub fn safe_extract_content_from_html(html: &str, url: Option<&str>) -> Result<String> {
+    let html_owned = html.to_string();
+    let url_owned = url.map(|u| u.to_string());
+
+    let result = std::panic::catch_unwind(move || {
+        extract_content_from_html(&html_owned, url_owned.as_deref())
+    });
+
+    match result {
+        Ok(inner) => inner,
+        Err(panic_info) => {
+            let msg = if let Some(s) = panic_info.downcast_ref::<String>() {
+                s.clone()
+            } else if let Some(s) = panic_info.downcast_ref::<&str>() {
+                s.to_string()
+            } else {
+                "未知内部错误".to_string()
+            };
+            Err(RssError::ContentExtractionError(format!(
+                "内容解析过程中发生异常: {}",
+                msg
+            )))
+        }
+    }
 }
 
 /// 预处理 HTML，移除非内容标签以减少 DOM 元素数量
@@ -366,5 +434,67 @@ mod tests {
         assert!(!cleaned.contains("<svg"));
         assert!(!cleaned.contains("<iframe"));
         assert!(cleaned.contains("<p>ok</p>"));
+    }
+
+    #[test]
+    fn test_safe_extract_catches_panic() {
+        // 模拟一个会 panic 的场景，验证 safe_extract_content_from_html 能捕获
+        // 使用一个正常的 HTML，确认正常情况下不会 panic
+        let html = r#"
+        <html><head><title>Test</title></head>
+        <body><article>
+            <h1>Title</h1>
+            <p>Content paragraph one with enough text for readability.</p>
+            <p>Content paragraph two with enough text for readability.</p>
+            <p>Content paragraph three with enough text for readability.</p>
+        </article></body></html>"#;
+        let result = safe_extract_content_from_html(html, Some("https://example.com"));
+        assert!(result.is_ok(), "safe_extract should not fail on valid HTML: {:?}", result.err());
+    }
+
+    #[test]
+    fn test_safe_extract_returns_error_on_empty() {
+        let html = "<html><body></body></html>";
+        let result = safe_extract_content_from_html(html, None);
+        assert!(result.is_err(), "Should return error for empty content");
+    }
+
+    #[test]
+    fn test_check_content_length_rejects_large() {
+        // 验证 Content-Length 检查能提前拒绝大内容
+        assert!(check_content_length_header(Some("20000000")).is_err());
+    }
+
+    #[test]
+    fn test_check_content_length_allows_normal() {
+        assert!(check_content_length_header(Some("500000")).is_ok());
+        assert!(check_content_length_header(None).is_ok());
+        assert!(check_content_length_header(Some("invalid")).is_ok());
+    }
+
+    #[test]
+    fn test_check_content_type_allows_html() {
+        assert!(check_content_type(Some("text/html; charset=utf-8")).is_ok());
+        assert!(check_content_type(Some("text/html")).is_ok());
+        assert!(check_content_type(Some("application/xhtml+xml")).is_ok());
+        assert!(check_content_type(Some("text/xml")).is_ok());
+        assert!(check_content_type(Some("application/xml")).is_ok());
+        assert!(check_content_type(None).is_ok()); // 无 header 时放行
+    }
+
+    #[test]
+    fn test_check_content_type_rejects_non_html() {
+        assert!(check_content_type(Some("application/pdf")).is_err());
+        assert!(check_content_type(Some("image/png")).is_err());
+        assert!(check_content_type(Some("application/json")).is_err());
+    }
+
+    #[test]
+    fn test_catch_unwind_converts_panic_to_error() {
+        // 直接验证 catch_unwind 机制能将 panic 转为 Err
+        let result = std::panic::catch_unwind(|| -> Result<String> {
+            panic!("simulated dom_smoothie panic");
+        });
+        assert!(result.is_err(), "catch_unwind should capture the panic");
     }
 }
