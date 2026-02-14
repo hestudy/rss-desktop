@@ -114,73 +114,6 @@ mod tests {
         }
     }
 
-    // 测试: 新文章检测结果
-    #[test]
-    fn test_detect_new_articles() {
-        // 模拟场景: 现有文章和新增文章
-        let existing_ids = vec!["article1".to_string(), "article2".to_string()];
-
-        let new_articles = vec![
-            "article1".to_string(), // 已存在
-            "article3".to_string(), // 新文章
-            "article4".to_string(), // 新文章
-        ];
-
-        let new_count = count_new_articles(&existing_ids, &new_articles);
-        assert_eq!(new_count, 2, "Should detect 2 new articles");
-    }
-
-    // 测试: 空文章列表处理
-    #[test]
-    fn test_detect_new_articles_empty() {
-        let existing_ids = vec!["article1".to_string()];
-        let new_articles: Vec<String> = vec![];
-
-        let new_count = count_new_articles(&existing_ids, &new_articles);
-        assert_eq!(new_count, 0, "No new articles in empty list");
-
-        // 反向测试: 现有列表为空
-        let existing_ids: Vec<String> = vec![];
-        let new_articles = vec!["article1".to_string(), "article2".to_string()];
-
-        let new_count = count_new_articles(&existing_ids, &new_articles);
-        assert_eq!(
-            new_count, 2,
-            "All articles are new when existing list is empty"
-        );
-    }
-
-    // 测试: 通知聚合限制
-    #[test]
-    fn test_should_send_notification_aggregation() {
-        let settings = AppSettings {
-            max_notifications_per_batch: 3,
-            ..Default::default()
-        };
-
-        // 小于限制，应该发送
-        assert!(should_send_notification(2, &settings));
-
-        // 等于限制，应该发送
-        assert!(should_send_notification(3, &settings));
-
-        // 超过限制，不应发送（需要聚合）
-        assert!(!should_send_notification(4, &settings));
-    }
-
-    // 测试: 最大通知数量边界
-    #[test]
-    fn test_should_send_notification_boundaries() {
-        let settings = AppSettings {
-            max_notifications_per_batch: 1,
-            ..Default::default()
-        };
-
-        assert!(should_send_notification(0, &settings));
-        assert!(should_send_notification(1, &settings));
-        assert!(!should_send_notification(2, &settings));
-    }
-
     // 测试: 0 次错误重试
     #[test]
     fn test_retry_backoff_zero_errors() {
@@ -214,17 +147,4 @@ pub fn calculate_retry_backoff(consecutive_errors: u32) -> std::time::Duration {
     let exponent = (errors - 1).min(5) as u32;
     let secs = (BASE_RETRY_SECS * 2u64.pow(exponent)).min(MAX_RETRY_SECS);
     std::time::Duration::from_secs(secs)
-}
-
-/// 统计新文章数量
-pub fn count_new_articles(existing_ids: &[String], new_article_ids: &[String]) -> usize {
-    new_article_ids
-        .iter()
-        .filter(|id| !existing_ids.contains(id))
-        .count()
-}
-
-/// 判断是否应该发送通知（考虑聚合限制）
-pub fn should_send_notification(new_count: usize, settings: &AppSettings) -> bool {
-    new_count <= settings.max_notifications_per_batch
 }

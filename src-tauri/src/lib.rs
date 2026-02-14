@@ -24,7 +24,7 @@ pub use models::{Feed, Article, AddFeedRequest, UpdateFeedRequest, GetArticlesRe
 pub use error::{RssError, Result};
 pub use settings::{AiSettings, AppSettings, SchedulerState, PollInterval, NotificationType};
 pub use background_scheduler::{BackgroundScheduler, NewArticlesEvent, ArticleSummary};
-pub use notifications::NotificationManager;
+pub(crate) use notifications::NotificationManager;
 pub use tray::TrayManager;
 pub use task_queue::{TaskQueue, TaskType, TaskPriority, QueueTask};
 
@@ -81,7 +81,7 @@ pub fn run() {
             }
 
             // 创建通知管理器
-            let notification_manager = NotificationManager::new(app.handle().clone());
+            let notification_manager = Arc::new(NotificationManager::new(app.handle().clone()));
 
             // 注册共享 Storage 到 Tauri 状态（所有命令通过 State<Arc<SqliteStorage>> 访问）
             app.manage(shared_storage.clone());
@@ -89,7 +89,7 @@ pub fn run() {
             // 将调度器和其他组件存储在应用状态中
             app.manage(scheduler.clone());
             app.manage(unread_count.clone());
-            app.manage(Arc::new(notification_manager));
+            app.manage(notification_manager.clone());
 
             let max_concurrency = 3;
             let task_queue = Arc::new(TaskQueue::new(
@@ -116,6 +116,7 @@ pub fn run() {
             let storage_for_events = shared_storage.clone();
             let unread_count_clone = unread_count.clone();
             let task_queue_for_scheduler = task_queue.clone();
+            let notifier = notification_manager.clone();
 
             tauri::async_runtime::spawn(async move {
                 if let Err(e) = scheduler_clone.start(storage_for_scheduler, Some(task_queue_for_scheduler)).await {
@@ -147,23 +148,9 @@ pub fn run() {
                     // 发送事件到前端更新 UI
                     let _ = app_handle.emit("new-articles", &event);
 
-                    // 如果启用了通知，发送通知事件
-                    if settings.enable_notifications && settings.notification_type == NotificationType::System {
-                        let notification_data = serde_json::json!({
-                            "title": if event.new_count == 1 {
-                                format!("来自 {} 的新文章", event.feed_title)
-                            } else {
-                                format!("来自 {} 的 {} 篇新文章", event.feed_title, event.new_count)
-                            },
-                            "body": event.articles.iter()
-                                .take(settings.max_notifications_per_batch)
-                                .map(|a| a.title.as_str())
-                                .collect::<Vec<_>>()
-                                .join("\n"),
-                            "feed_id": event.feed_id,
-                            "count": event.new_count,
-                        });
-                        let _ = app_handle.emit("show-notification", &notification_data);
+                    // 发送 OS 系统通知
+                    if let Err(e) = notifier.notify_new_articles(&event, &settings) {
+                        error!("Failed to send notification: {}", e);
                     }
 
                     // 更新未读计数

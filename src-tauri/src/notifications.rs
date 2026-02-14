@@ -1,221 +1,218 @@
 use crate::settings::{AppSettings, NotificationType};
 use crate::background_scheduler::NewArticlesEvent;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Runtime};
+use tauri_plugin_notification::NotificationExt;
 
-/// 通知管理器
-pub struct NotificationManager {
-    app_handle: AppHandle,
+/// 通知管理器 - 使用 tauri-plugin-notification 发送 OS 系统通知
+pub struct NotificationManager<R: Runtime> {
+    app_handle: AppHandle<R>,
 }
 
-impl NotificationManager {
-    /// 创建新的通知管理器
-    pub fn new(app_handle: AppHandle) -> Self {
+impl<R: Runtime> NotificationManager<R> {
+    pub fn new(app_handle: AppHandle<R>) -> Self {
         Self { app_handle }
     }
 
-    /// 检查通知权限
-    pub fn check_permission(&self) -> bool {
-        // Tauri 2.x 通知插件会自动处理权限
-        true
-    }
-
-    /// 请求通知权限
-    pub async fn request_permission(&self) -> std::result::Result<bool, String> {
-        // Tauri 2.x 通知插件会自动请求权限
-        Ok(true)
-    }
-
     /// 发送新文章通知
-    pub fn notify_new_articles(&self, event: &NewArticlesEvent, settings: &AppSettings) -> std::result::Result<(), String> {
-        // 检查是否启用通知
+    pub fn notify_new_articles(
+        &self,
+        event: &NewArticlesEvent,
+        settings: &AppSettings,
+    ) -> std::result::Result<(), String> {
         if !settings.enable_notifications {
             return Ok(());
         }
 
-        // 检查通知类型
         match settings.notification_type {
-            NotificationType::None => return Ok(()),
+            NotificationType::None => Ok(()),
             NotificationType::System => {
-                // 发送系统通知
-                self.send_system_notification(event, settings)?;
+                self.send_system_notification(event, settings)
             }
         }
-
-        Ok(())
     }
 
-    /// 发送系统通知
-    fn send_system_notification(&self, event: &NewArticlesEvent, settings: &AppSettings) -> std::result::Result<(), String> {
+    /// 通过 tauri-plugin-notification 发送 OS 系统通知
+    fn send_system_notification(
+        &self,
+        event: &NewArticlesEvent,
+        settings: &AppSettings,
+    ) -> std::result::Result<(), String> {
         let title = if event.new_count == 1 {
             format!("来自 {} 的新文章", event.feed_title)
         } else {
-            format!("来自 {} 的 {} 篇新文章", event.feed_title, event.new_count)
+            format!(
+                "来自 {} 的 {} 篇新文章",
+                event.feed_title, event.new_count
+            )
         };
 
-        let body = if event.new_count <= settings.max_notifications_per_batch {
-            // 显示所有文章标题
-            event.articles
-                .iter()
-                .take(settings.max_notifications_per_batch)
-                .map(|a| a.title.as_str())
-                .collect::<Vec<_>>()
-                .join("\n")
-        } else {
-            // 聚合通知
-            let count = event.new_count.min(settings.max_notifications_per_batch);
-            let others = event.new_count - count;
-            let articles_text = event.articles
-                .iter()
-                .take(count)
-                .map(|a| a.title.as_str())
-                .collect::<Vec<_>>()
-                .join("\n");
-
-            if others > 0 {
-                format!("{}\n...还有 {} 篇文章", articles_text, others)
-            } else {
-                articles_text
-            }
-        };
-
-        // 发送通知到前端，由前端处理通知显示
-        let notification_data = serde_json::json!({
-            "title": title,
-            "body": body,
-            "feed_id": event.feed_id,
-            "count": event.new_count,
-        });
+        let body = build_notification_body(
+            &event.articles,
+            event.new_count,
+            settings.max_notifications_per_batch,
+        );
 
         self.app_handle
-            .emit("show-notification", &notification_data)
-            .map_err(|e| format!("Failed to send notification event: {}", e))?;
-
-        Ok(())
-    }
-
-    /// 发送简单通知
-    pub fn notify(&self, title: &str, body: &str) -> std::result::Result<(), String> {
-        let notification_data = serde_json::json!({
-            "title": title,
-            "body": body,
-        });
-
-        self.app_handle
-            .emit("show-notification", &notification_data)
-            .map_err(|e| format!("Failed to send notification event: {}", e))?;
-
-        Ok(())
+            .notification()
+            .builder()
+            .title(&title)
+            .body(&body)
+            .show()
+            .map_err(|e| format!("Failed to show notification: {}", e))
     }
 }
 
-// ============= 测试模块 (TDD: 先写测试) =============
+/// 构建通知正文
+fn build_notification_body(
+    articles: &[crate::background_scheduler::ArticleSummary],
+    new_count: usize,
+    max_per_batch: usize,
+) -> String {
+    let count = new_count.min(max_per_batch);
+    let max_title_len = 80;
+    let titles: Vec<String> = articles
+        .iter()
+        .take(count)
+        .map(|a| {
+            if a.title.len() > max_title_len {
+                format!("{}...", &a.title[..a.title.floor_char_boundary(max_title_len)])
+            } else {
+                a.title.clone()
+            }
+        })
+        .collect();
+    let shown = titles.len();
+    let articles_text = titles.join("\n");
+
+    let others = new_count.saturating_sub(shown);
+    if others > 0 {
+        format!("{}\n...还有 {} 篇文章", articles_text, others)
+    } else {
+        articles_text
+    }
+}
+
+// ============= 测试模块 =============
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json;
+    use crate::background_scheduler::ArticleSummary;
 
-    // 测试: NewArticlesEvent 可以被正确处理
+    fn make_articles(n: usize) -> Vec<ArticleSummary> {
+        (1..=n)
+            .map(|i| ArticleSummary {
+                id: format!("{}", i),
+                title: format!("Article {}", i),
+                url: format!("https://example.com/{}", i),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn test_build_body_within_limit() {
+        let articles = make_articles(3);
+        let body = build_notification_body(&articles, 3, 5);
+        assert_eq!(body, "Article 1\nArticle 2\nArticle 3");
+    }
+
+    #[test]
+    fn test_build_body_exceeds_limit() {
+        let articles = make_articles(5);
+        let body = build_notification_body(&articles, 8, 3);
+        assert!(body.contains("Article 1"));
+        assert!(body.contains("Article 2"));
+        assert!(body.contains("Article 3"));
+        assert!(body.contains("还有 5 篇文章"));
+    }
+
+    #[test]
+    fn test_build_body_empty() {
+        let articles: Vec<ArticleSummary> = vec![];
+        let body = build_notification_body(&articles, 0, 5);
+        assert_eq!(body, "");
+    }
+
+    #[test]
+    fn test_build_body_single_article() {
+        let articles = make_articles(1);
+        let body = build_notification_body(&articles, 1, 5);
+        assert_eq!(body, "Article 1");
+    }
+
+    #[test]
+    fn test_build_body_exact_limit() {
+        let articles = make_articles(5);
+        let body = build_notification_body(&articles, 5, 5);
+        assert_eq!(
+            body,
+            "Article 1\nArticle 2\nArticle 3\nArticle 4\nArticle 5"
+        );
+        assert!(!body.contains("还有"));
+    }
+
+    #[test]
+    fn test_notification_title_single() {
+        let title = format!("来自 {} 的新文章", "Test Feed");
+        assert_eq!(title, "来自 Test Feed 的新文章");
+    }
+
+    #[test]
+    fn test_notification_title_multiple() {
+        let title = format!("来自 {} 的 {} 篇新文章", "Test Feed", 5);
+        assert_eq!(title, "来自 Test Feed 的 5 篇新文章");
+    }
+
     #[test]
     fn test_notification_event_structure() {
         let event = NewArticlesEvent {
             feed_id: "test-feed".to_string(),
             feed_title: "Test Feed".to_string(),
             new_count: 3,
-            articles: vec![
-                crate::background_scheduler::ArticleSummary {
-                    id: "1".to_string(),
-                    title: "Article 1".to_string(),
-                    url: "https://example.com/1".to_string(),
-                },
-                crate::background_scheduler::ArticleSummary {
-                    id: "2".to_string(),
-                    title: "Article 2".to_string(),
-                    url: "https://example.com/2".to_string(),
-                },
-                crate::background_scheduler::ArticleSummary {
-                    id: "3".to_string(),
-                    title: "Article 3".to_string(),
-                    url: "https://example.com/3".to_string(),
-                },
-            ],
+            articles: make_articles(3),
         };
-
         assert_eq!(event.feed_id, "test-feed");
-        assert_eq!(event.feed_title, "Test Feed");
         assert_eq!(event.new_count, 3);
         assert_eq!(event.articles.len(), 3);
     }
 
-    // 测试: 系统通知标题格式（单篇文章）
     #[test]
-    fn test_notification_title_single_article() {
-        let title = "来自 Test Feed 的新文章";
-        assert!(title.contains("Test Feed"));
-        assert!(title.contains("新文章"));
-    }
-
-    // 测试: 系统通知标题格式（多篇文章）
-    #[test]
-    fn test_notification_title_multiple_articles() {
-        let title = format!("来自 Test Feed 的 {} 篇新文章", 5);
-        assert!(title.contains("Test Feed"));
-        assert!(title.contains("5"));
-        assert!(title.contains("篇新文章"));
-    }
-
-    // 测试: AppSettings 序列化
-    #[test]
-    fn test_settings_serialization() {
+    fn test_settings_notification_disabled() {
         let settings = AppSettings {
-            enable_notifications: true,
+            enable_notifications: false,
             ..Default::default()
         };
-
-        let json = serde_json::to_string(&settings).unwrap();
-        assert!(json.contains("enable_notifications"));
+        assert!(!settings.enable_notifications);
     }
 
-    // 测试: 通知类型序列化
     #[test]
-    fn test_notification_type_serialization() {
-        let system = NotificationType::System;
-        let none = NotificationType::None;
-
-        assert_eq!(serde_json::to_string(&system).unwrap(), "\"system\"");
-        assert_eq!(serde_json::to_string(&none).unwrap(), "\"none\"");
-    }
-
-    // 测试: 文章标题拼接
-    #[test]
-    fn test_article_titles_join() {
-        let titles = vec![
-            "Article 1".to_string(),
-            "Article 2".to_string(),
-            "Article 3".to_string(),
-        ];
-
-        let joined = titles.iter()
-            .map(|s| s.as_str())
-            .collect::<Vec<_>>()
-            .join("\n");
-
-        assert_eq!(joined, "Article 1\nArticle 2\nArticle 3");
-    }
-
-    // 测试: 聚合通知文本格式
-    #[test]
-    fn test_aggregate_notification_text() {
-        let count = 3;
-        let others = 5;
-        let articles_text = "Article 1\nArticle 2\nArticle 3";
-
-        let result = if others > 0 {
-            format!("{}\n...还有 {} 篇文章", articles_text, others)
-        } else {
-            articles_text.to_string()
+    fn test_settings_notification_type_none() {
+        let settings = AppSettings {
+            notification_type: NotificationType::None,
+            ..Default::default()
         };
+        assert_eq!(settings.notification_type, NotificationType::None);
+    }
 
-        assert!(result.contains("Article 1"));
-        assert!(result.contains("还有 5 篇文章"));
+    #[test]
+    fn test_build_body_truncates_long_title() {
+        let articles = vec![ArticleSummary {
+            id: "1".to_string(),
+            title: "A".repeat(200),
+            url: "https://example.com/1".to_string(),
+        }];
+        let body = build_notification_body(&articles, 1, 5);
+        assert!(body.len() < 200);
+        assert!(body.ends_with("..."));
+    }
+
+    #[test]
+    fn test_build_body_new_count_exceeds_articles_len() {
+        // new_count=10 但只有 2 篇文章，max_per_batch=5
+        let articles = make_articles(2);
+        let body = build_notification_body(&articles, 10, 5);
+        assert!(body.contains("Article 1"));
+        assert!(body.contains("Article 2"));
+        // others = 10 - 2(shown) = 8
+        assert!(body.contains("还有 8 篇文章"));
     }
 }
