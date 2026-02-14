@@ -295,9 +295,17 @@ export function buildTauriMockScript(): string {
           maxNotificationsPerBatch: 5,
           enableBackgroundRefresh: true,
           closeToTray: true,
+        });
 
-      case 'save_settings':
-        return Promise.resolve(undefined);
+      case 'update_settings':
+        return Promise.resolve(args.settings || {
+          pollInterval: '30m',
+          notificationType: 'system',
+          enableNotifications: false,
+          maxNotificationsPerBatch: 5,
+          enableBackgroundRefresh: true,
+          closeToTray: true,
+        });
 
       case 'get_scheduler_state':
         return Promise.resolve({
@@ -310,6 +318,164 @@ export function buildTauriMockScript(): string {
       case 'start_scheduler':
       case 'stop_scheduler':
         return Promise.resolve(undefined);
+
+      case 'get_feed_logs': {
+        const feedId = args.feedId;
+        const mockLogs = [
+          {
+            id: 'log-1',
+            feed_id: feedId,
+            feed_title: feeds.find(f => f.feed.id === feedId)?.feed.title || 'Unknown',
+            timestamp: '2025-02-06T10:00:00Z',
+            success: true,
+            new_article_count: 2,
+            new_articles: [
+              { title: 'New Article 1', link: 'https://example.com/new-1' },
+              { title: 'New Article 2', link: 'https://example.com/new-2' },
+            ],
+            error: null,
+            duration_ms: 350,
+          },
+          {
+            id: 'log-2',
+            feed_id: feedId,
+            feed_title: feeds.find(f => f.feed.id === feedId)?.feed.title || 'Unknown',
+            timestamp: '2025-02-05T08:00:00Z',
+            success: false,
+            new_article_count: 0,
+            new_articles: [],
+            error: 'Network timeout',
+            duration_ms: 5000,
+          },
+        ];
+        return Promise.resolve(mockLogs);
+      }
+
+      case 'get_all_feed_logs': {
+        const allLogs = [
+          {
+            id: 'log-g1',
+            feed_id: 'feed-1',
+            feed_title: 'Tech Blog',
+            timestamp: '2025-02-06T10:00:00Z',
+            success: true,
+            new_article_count: 2,
+            new_articles: [
+              { title: 'New Article 1', link: 'https://example.com/new-1' },
+              { title: 'New Article 2', link: 'https://example.com/new-2' },
+            ],
+            error: null,
+            duration_ms: 350,
+          },
+          {
+            id: 'log-g2',
+            feed_id: 'feed-2',
+            feed_title: 'Daily News',
+            timestamp: '2025-02-05T08:00:00Z',
+            success: false,
+            new_article_count: 0,
+            new_articles: [],
+            error: 'Connection refused',
+            duration_ms: 3000,
+          },
+        ];
+        return Promise.resolve(allLogs);
+      }
+
+      case 'queue_get_status':
+        return Promise.resolve({
+          pending_count: 1,
+          running_count: 1,
+          completed_count: 1,
+          failed_count: 1,
+          tasks: [
+            {
+              id: 'task-1',
+              task_type: { type: 'ai_summary', article_id: 'article-1' },
+              priority: 'normal',
+              status: { status: 'running' },
+              created_at: '2025-02-06T10:00:00Z',
+              started_at: '2025-02-06T10:00:01Z',
+              completed_at: null,
+            },
+            {
+              id: 'task-2',
+              task_type: { type: 'fetch_full_content', article_id: 'article-2', url: 'https://example.com/article-2' },
+              priority: 'normal',
+              status: { status: 'pending' },
+              created_at: '2025-02-06T10:00:02Z',
+              started_at: null,
+              completed_at: null,
+            },
+            {
+              id: 'task-3',
+              task_type: { type: 'ai_translation', article_id: 'article-3', target_lang: 'zh-CN' },
+              priority: 'normal',
+              status: { status: 'completed' },
+              created_at: '2025-02-06T09:50:00Z',
+              started_at: '2025-02-06T09:50:01Z',
+              completed_at: '2025-02-06T09:50:05Z',
+            },
+            {
+              id: 'task-4',
+              task_type: { type: 'ai_summary', article_id: 'article-1' },
+              priority: 'normal',
+              status: { status: 'failed', error: 'API rate limit exceeded', retries: 2 },
+              created_at: '2025-02-06T09:40:00Z',
+              started_at: '2025-02-06T09:40:01Z',
+              completed_at: '2025-02-06T09:40:03Z',
+            },
+          ],
+        });
+
+      case 'queue_cancel_task':
+        return Promise.resolve(undefined);
+
+      case 'queue_clear_completed':
+        return Promise.resolve(1);
+
+      case 'queue_add_task':
+        return Promise.resolve('task-new-1');
+
+      case 'translate_article': {
+        const transArt = articleState[args.id];
+        if (!transArt) {
+          return Promise.reject('Article not found');
+        }
+        transArt.ai_translation = '这是翻译后的文章内容。TypeScript 泛型允许你编写灵活、可复用的代码。';
+        return Promise.resolve({ ...transArt });
+      }
+
+      case 'get_ai_usage_summary':
+        return Promise.resolve({
+          total_prompt_tokens: 15000,
+          total_completion_tokens: 5000,
+          total_tokens: 20000,
+          total_cost: 0.0035,
+          total_calls: 10,
+          summary_tokens: 12000,
+          summary_cost: 0.0025,
+          summary_calls: 7,
+          translation_tokens: 8000,
+          translation_cost: 0.001,
+          translation_calls: 3,
+          daily_stats: [
+            { date: '2025-02-06', prompt_tokens: 3000, completion_tokens: 1000, total_tokens: 4000, cost: 0.0008, calls: 3 },
+            { date: '2025-02-05', prompt_tokens: 5000, completion_tokens: 2000, total_tokens: 7000, cost: 0.0014, calls: 4 },
+          ],
+        });
+
+      case 'clear_ai_usage_records':
+        return Promise.resolve(undefined);
+
+      case 'get_builtin_model_prices':
+        return Promise.resolve([
+          { model: 'gpt-4o-mini', input_price: 0.15, output_price: 0.6 },
+          { model: 'gpt-4o', input_price: 2.5, output_price: 10 },
+        ]);
+
+      case 'check_update':
+        return Promise.resolve(null);
 
       default:
         console.warn('[Tauri Mock] Unknown command:', command, args);

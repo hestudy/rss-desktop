@@ -143,13 +143,14 @@ export function DropdownMenuItem({
   variant = 'default',
   disabled = false,
   className,
+  ...rest
 }: {
   children: ReactNode
   onClick?: () => void
   variant?: 'default' | 'destructive'
   disabled?: boolean
   className?: string
-}) {
+} & Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'onClick' | 'disabled' | 'className'>) {
   const { close } = useDropdownMenu()
 
   const handleClick = (e: React.MouseEvent) => {
@@ -161,6 +162,7 @@ export function DropdownMenuItem({
 
   return (
     <button
+      {...rest}
       onClick={handleClick}
       disabled={disabled}
       className={cn(
