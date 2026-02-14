@@ -490,10 +490,10 @@ describe('RssApi - 任务队列', () => {
     it('应该支持不传 options', async () => {
       mockInvoke.mockResolvedValue('task-456')
 
-      await RssApi.queueAddTask('generate_summary', 'a-2')
+      await RssApi.queueAddTask('ai_summary', 'a-2')
 
       expect(mockInvoke).toHaveBeenCalledWith('queue_add_task', {
-        taskType: 'generate_summary',
+        taskType: 'ai_summary',
         articleId: 'a-2',
         url: undefined,
         targetLang: undefined,
