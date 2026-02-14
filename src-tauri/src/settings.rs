@@ -100,7 +100,7 @@ pub struct AppSettings {
     pub max_notifications_per_batch: usize,
 
     /// 是否启用后台刷新
-    #[serde(default)]
+    #[serde(default = "default_enable_background_refresh")]
     pub enable_background_refresh: bool,
 
     /// 关闭窗口时最小化到托盘（而非退出）
@@ -120,6 +120,10 @@ fn default_close_to_tray() -> bool {
     true
 }
 
+fn default_enable_background_refresh() -> bool {
+    true
+}
+
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
@@ -127,7 +131,7 @@ impl Default for AppSettings {
             notification_type: NotificationType::default(),
             enable_notifications: default_enable_notifications(),
             max_notifications_per_batch: default_max_notifications(),
-            enable_background_refresh: false,
+            enable_background_refresh: default_enable_background_refresh(),
             close_to_tray: default_close_to_tray(),
         }
     }
@@ -338,7 +342,7 @@ mod tests {
         assert_eq!(settings.notification_type, NotificationType::System);
         assert!(settings.enable_notifications);
         assert_eq!(settings.max_notifications_per_batch, 5);
-        assert!(!settings.enable_background_refresh);
+        assert!(settings.enable_background_refresh); // 默认启用后台刷新
         assert!(settings.close_to_tray); // 默认启用关闭到托盘
     }
 
@@ -382,7 +386,7 @@ mod tests {
         assert_eq!(settings.notification_type, NotificationType::System);
         assert!(settings.enable_notifications);
         assert_eq!(settings.max_notifications_per_batch, 5);
-        assert!(!settings.enable_background_refresh);
+        assert!(settings.enable_background_refresh); // 缺失时默认为 true
         assert!(settings.close_to_tray); // 缺失时默认为 true
     }
 

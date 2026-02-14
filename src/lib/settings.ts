@@ -58,7 +58,7 @@ export const AppSettingsSchema = z.object({
   notificationType: z.enum(['system', 'none']).default('system'),
   enableNotifications: z.boolean().default(true),
   maxNotificationsPerBatch: z.number().int().min(0).max(100).default(5),
-  enableBackgroundRefresh: z.boolean().default(false),
+  enableBackgroundRefresh: z.boolean().default(true),
   closeToTray: z.boolean().default(true),
 })
 
@@ -122,7 +122,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   notificationType: 'system',
   enableNotifications: true,
   maxNotificationsPerBatch: 5,
-  enableBackgroundRefresh: false,
+  enableBackgroundRefresh: true,
   closeToTray: true,
 }
 

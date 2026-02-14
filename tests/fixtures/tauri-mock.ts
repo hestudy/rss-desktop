@@ -247,6 +247,9 @@ export function buildTauriMockScript(): string {
           prompt: '你是一个专业的文章摘要助手。',
           enableAutoSummary: false,
           language: 'zh-CN',
+          maxConcurrency: 3,
+          customInputPrice: null,
+          customOutputPrice: null,
         });
 
       case 'update_ai_settings':
@@ -258,6 +261,9 @@ export function buildTauriMockScript(): string {
           prompt: '你是一个专业的文章摘要助手。',
           enableAutoSummary: false,
           language: 'zh-CN',
+          maxConcurrency: 3,
+          customInputPrice: null,
+          customOutputPrice: null,
         });
 
       case 'update_feed_info': {
@@ -287,8 +293,8 @@ export function buildTauriMockScript(): string {
           notificationType: 'system',
           enableNotifications: false,
           maxNotificationsPerBatch: 5,
-          enableBackgroundRefresh: false,
-        });
+          enableBackgroundRefresh: true,
+          closeToTray: true,
 
       case 'save_settings':
         return Promise.resolve(undefined);

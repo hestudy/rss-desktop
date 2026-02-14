@@ -165,7 +165,7 @@ describe('Settings Types', () => {
       expect(DEFAULT_SETTINGS.notificationType).toBe('system')
       expect(DEFAULT_SETTINGS.enableNotifications).toBe(true)
       expect(DEFAULT_SETTINGS.maxNotificationsPerBatch).toBe(5)
-      expect(DEFAULT_SETTINGS.enableBackgroundRefresh).toBe(false)
+      expect(DEFAULT_SETTINGS.enableBackgroundRefresh).toBe(true)
       expect(DEFAULT_SETTINGS.closeToTray).toBe(true)
     })
 
