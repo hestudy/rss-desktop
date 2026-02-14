@@ -12,8 +12,14 @@ import {
   Rss,
   Sparkles,
   Coins,
+  RefreshCw,
+  Download,
+  RotateCcw,
+  CheckCircle,
+  AlertCircle,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useUpdater } from '@/hooks/useUpdater'
 import { useTheme, type ThemePreset, type ThemeMode } from '@/contexts/ThemeContext'
 import { useReader } from '@/contexts/ReaderContext'
 import { DEFAULT_READER_SETTINGS } from '@/types'
@@ -833,6 +839,8 @@ function AiUsageSection() {
 // ============= 关于 =============
 
 function AboutSection() {
+  const updater = useUpdater()
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
@@ -841,8 +849,91 @@ function AboutSection() {
         </div>
         <div>
           <h3 className="font-semibold">RSS Reader</h3>
-          <p className="text-sm text-muted-foreground">v0.1.0</p>
+          <p className="text-sm text-muted-foreground">v0.0.1</p>
         </div>
+      </div>
+
+      {/* 更新检查区域 */}
+      <div className="rounded-lg border border-border p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-medium">检查更新</h3>
+          {updater.status === 'idle' || updater.status === 'error' || updater.status === 'up-to-date' ? (
+            <button
+              onClick={() => updater.checkForUpdates()}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              检查更新
+            </button>
+          ) : null}
+        </div>
+
+        {updater.status === 'checking' && (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <RefreshCw className="w-4 h-4 animate-spin" />
+            正在检查更新...
+          </div>
+        )}
+
+        {updater.status === 'up-to-date' && (
+          <div className="flex items-center gap-2 text-sm text-green-600">
+            <CheckCircle className="w-4 h-4" />
+            已是最新版本
+          </div>
+        )}
+
+        {updater.status === 'available' && (
+          <div className="space-y-2">
+            <p className="text-sm">
+              发现新版本: <span className="font-medium">v{updater.newVersion}</span>
+            </p>
+            {updater.releaseNotes && (
+              <p className="text-xs text-muted-foreground line-clamp-3">{updater.releaseNotes}</p>
+            )}
+            <button
+              onClick={() => updater.downloadAndInstall()}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+            >
+              <Download className="w-3.5 h-3.5" />
+              下载并安装
+            </button>
+          </div>
+        )}
+
+        {updater.status === 'downloading' && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Download className="w-4 h-4 animate-pulse" />
+              正在下载... {updater.progress}%
+            </div>
+            <div className="w-full h-2 rounded-full bg-muted overflow-hidden" role="progressbar" aria-valuenow={updater.progress} aria-valuemin={0} aria-valuemax={100} aria-label="下载进度">
+              <div
+                className="h-full bg-primary rounded-full transition-all duration-300"
+                style={{ width: `${updater.progress}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {updater.status === 'ready' && (
+          <div className="space-y-2">
+            <p className="text-sm text-green-600">更新已下载完成，重启应用以完成安装。</p>
+            <button
+              onClick={() => updater.restartApp()}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              重启应用
+            </button>
+          </div>
+        )}
+
+        {updater.status === 'error' && (
+          <div className="flex items-center gap-2 text-sm text-red-500">
+            <AlertCircle className="w-4 h-4" />
+            {updater.errorMessage ?? '检查更新失败'}
+          </div>
+        )}
       </div>
 
       <div className="space-y-3 text-sm">
