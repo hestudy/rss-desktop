@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useUpdater } from '@/hooks/useUpdater'
+import { useAppVersion } from '@/hooks/useAppVersion'
 import { useTheme, type ThemePreset, type ThemeMode } from '@/contexts/ThemeContext'
 import { useReader } from '@/contexts/ReaderContext'
 import { DEFAULT_READER_SETTINGS } from '@/types'
@@ -850,6 +851,7 @@ function AiUsageSection() {
 
 function AboutSection() {
   const updater = useUpdater()
+  const version = useAppVersion()
 
   return (
     <div className="space-y-6">
@@ -859,7 +861,7 @@ function AboutSection() {
         </div>
         <div>
           <h3 className="font-semibold">RSS Reader</h3>
-          <p className="text-sm text-muted-foreground">v0.0.1</p>
+          {version && <p className="text-sm text-muted-foreground">{version}</p>}
         </div>
       </div>
 
