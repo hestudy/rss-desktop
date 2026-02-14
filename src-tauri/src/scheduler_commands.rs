@@ -128,12 +128,17 @@ pub async fn update_settings(
 
 #[tauri::command]
 pub async fn get_ai_settings(storage: State<'_, Arc<SqliteStorage>>) -> CommandResult<AiSettings> {
-    match storage.get_kv("ai_settings") {
+    let mut settings = match storage.get_kv("ai_settings") {
         Ok(Some(value)) => serde_json::from_value(value)
-            .map_err(|e| format!("Failed to parse AI settings: {}", e)),
-        Ok(None) => Ok(AiSettings::default()),
-        Err(e) => Err(format!("Failed to get AI settings: {}", e)),
+            .map_err(|e| format!("Failed to parse AI settings: {}", e))?,
+        Ok(None) => AiSettings::default(),
+        Err(e) => return Err(format!("Failed to get AI settings: {}", e)),
+    };
+    // 从系统密钥管理服务加载 API Key
+    if let Some(key) = crate::keyring_helper::load_api_key() {
+        settings.api_key = key;
     }
+    Ok(settings)
 }
 
 #[tauri::command]
@@ -141,6 +146,13 @@ pub async fn update_ai_settings(
     settings: AiSettings,
     storage: State<'_, Arc<SqliteStorage>>,
 ) -> CommandResult<AiSettings> {
+    // 校验 API endpoint 防止 SSRF 和 Key 窃取
+    if !settings.api_endpoint.trim().is_empty() {
+        crate::fetcher::validate_api_endpoint(&settings.api_endpoint)?;
+    }
+    // 将 API Key 存入系统密钥管理服务（不写入数据库）
+    crate::keyring_helper::store_api_key(&settings.api_key)?;
+    // 序列化时 api_key 会被 skip_serializing 跳过
     let value = serde_json::to_value(&settings)
         .map_err(|e| format!("Failed to serialize AI settings: {}", e))?;
     storage.set_kv("ai_settings", &value)

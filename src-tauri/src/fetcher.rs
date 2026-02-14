@@ -3,7 +3,7 @@ use crate::error::RssError;
 use crate::models::{Article, Feed};
 use chrono::Utc;
 use feed_rs::parser;
-use std::net::IpAddr;
+use std::net::{IpAddr, ToSocketAddrs};
 use std::time::Duration;
 use uuid::Uuid;
 
@@ -68,7 +68,33 @@ pub fn validate_url(url: &str) -> Result<bool> {
         }
     }
 
+    // DNS 解析后检查实际 IP，防止 DNS Rebinding 绕过
+    let port = parsed.port().unwrap_or(if parsed.scheme() == "https" { 443 } else { 80 });
+    let host_with_port = format!("{}:{}", host, port);
+    if let Ok(addrs) = host_with_port.to_socket_addrs() {
+        for addr in addrs {
+            if is_private_or_reserved(&addr.ip()) {
+                return Err(RssError::InvalidUrl(
+                    "URL resolves to private/reserved IP address".to_string(),
+                ));
+            }
+        }
+    }
+
     Ok(true)
+}
+
+/// 验证 AI API endpoint URL（必须 HTTPS + SSRF 防护）
+pub fn validate_api_endpoint(endpoint: &str) -> std::result::Result<(), String> {
+    if endpoint.trim().is_empty() {
+        return Err("API endpoint is empty".to_string());
+    }
+    if !endpoint.starts_with("https://") {
+        return Err("API endpoint must use HTTPS".to_string());
+    }
+    validate_url(endpoint)
+        .map_err(|e| format!("Invalid API endpoint: {}", e))?;
+    Ok(())
 }
 
 /// 从 URL 获取并解析 RSS Feed

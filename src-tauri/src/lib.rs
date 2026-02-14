@@ -18,6 +18,7 @@ mod ai_translator;
 mod ai_pricing;
 mod task_queue;
 mod queue_commands;
+mod keyring_helper;
 
 // 导出常用类型
 pub use models::{Feed, Article, AddFeedRequest, UpdateFeedRequest, GetArticlesRequest, ApiResponse, FeedWithUnreadCount, FeedLog, LogArticleSummary};

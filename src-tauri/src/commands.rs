@@ -360,9 +360,15 @@ pub async fn open_link(url: String) -> CommandResult<()> {
     Ok(())
 }
 
-/// 存储键值对
+/// 允许前端通过通用 KV 接口写入的 key 白名单
+const ALLOWED_STORE_KEYS: &[&str] = &["panel-layout-v2"];
+
+/// 存储键值对（仅允许白名单中的 key）
 #[tauri::command]
 pub async fn set_store_value(key: String, value: serde_json::Value, storage: State<'_, Arc<SqliteStorage>>) -> CommandResult<()> {
+    if !ALLOWED_STORE_KEYS.contains(&key.as_str()) {
+        return Err(format!("Key '{}' is not allowed in generic store", key));
+    }
     storage.set_kv(&key, &value)
         .map_err(|e| format!("Failed to set store value: {}", e))?;
     Ok(())

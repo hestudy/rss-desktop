@@ -136,6 +136,9 @@ fn call_translate_api(
     settings: &AiSettings,
 ) -> Result<(String, u32, u32), String> {
     let base = settings.api_endpoint.trim_end_matches('/');
+    // 纵深防御：在实际调用前再次校验 endpoint
+    crate::fetcher::validate_api_endpoint(&settings.api_endpoint)
+        .map_err(|e| format!("Invalid API endpoint: {}", e))?;
     let endpoint = format!("{}/chat/completions", base);
 
     let body = serde_json::json!({

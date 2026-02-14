@@ -164,8 +164,8 @@ pub struct AiSettings {
     #[serde(default = "default_api_endpoint")]
     pub api_endpoint: String,
 
-    /// API Key
-    #[serde(default)]
+    /// API Key（不持久化到数据库，通过系统密钥管理服务存储）
+    #[serde(default, skip_serializing)]
     pub api_key: String,
 
     /// 模型名称
@@ -457,7 +457,7 @@ mod tests {
         assert_eq!(settings.language, "zh-CN");
     }
 
-    // 测试: AiSettings 序列化和反序列化
+    // 测试: AiSettings 序列化和反序列化（api_key 不参与序列化）
     #[test]
     fn test_ai_settings_serialize_roundtrip() {
         let settings = AiSettings {
@@ -474,9 +474,15 @@ mod tests {
         };
 
         let json = serde_json::to_string(&settings).unwrap();
+        // api_key 应被 skip_serializing 跳过，不出现在 JSON 中
+        assert!(!json.contains("test-key"), "api_key should not be serialized");
         let parsed: AiSettings = serde_json::from_str(&json).unwrap();
-
-        assert_eq!(parsed, settings);
+        // 反序列化后 api_key 应为默认空字符串
+        assert_eq!(parsed.api_key, "");
+        assert_eq!(parsed.api_endpoint, settings.api_endpoint);
+        assert_eq!(parsed.model, settings.model);
+        assert_eq!(parsed.max_tokens, settings.max_tokens);
+        assert_eq!(parsed.enable_auto_summary, settings.enable_auto_summary);
     }
 
     // 测试: AiSettings 缺失字段使用默认值
@@ -494,14 +500,19 @@ mod tests {
     }
 }
 
-/// 从 SqliteStorage KV 加载 AI 设置
+/// 从 SqliteStorage KV 加载 AI 设置（API Key 从系统密钥管理服务加载）
 pub fn load_ai_settings_from_storage(storage: &crate::storage_sqlite::SqliteStorage) -> AiSettings {
-    match storage.get_kv("ai_settings") {
+    let mut settings = match storage.get_kv("ai_settings") {
         Ok(Some(value)) => {
             serde_json::from_value(value).unwrap_or_default()
         }
         _ => AiSettings::default(),
+    };
+    // 从系统密钥管理服务加载 API Key
+    if let Some(key) = crate::keyring_helper::load_api_key() {
+        settings.api_key = key;
     }
+    settings
 }
 
 /// 从 SqliteStorage KV 加载应用设置

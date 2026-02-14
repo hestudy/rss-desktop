@@ -50,6 +50,9 @@ pub fn generate_summary(content: &str, settings: &AiSettings, article_id: Option
     }
 
     let base = settings.api_endpoint.trim_end_matches('/');
+    // 纵深防御：在实际调用前再次校验 endpoint
+    crate::fetcher::validate_api_endpoint(&settings.api_endpoint)
+        .map_err(|e| format!("Invalid API endpoint: {}", e))?;
     let endpoint = format!("{}/chat/completions", base);
 
     debug!(
