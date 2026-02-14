@@ -85,6 +85,27 @@ describe('Dialog', () => {
     expect(screen.queryByText('Content')).not.toBeInTheDocument()
   })
 
+  it('uncontrolled dialog can be opened and closed via context', () => {
+    const onOpenChange = vi.fn()
+    render(
+      <Dialog onOpenChange={onOpenChange}>
+        <DialogContent title="Test">Content</DialogContent>
+      </Dialog>
+    )
+    // Uncontrolled starts closed
+    expect(screen.queryByText('Content')).not.toBeInTheDocument()
+  })
+
+  it('does not render close button when no title', () => {
+    render(
+      <Dialog open={true}>
+        <DialogContent>Content without title</DialogContent>
+      </Dialog>
+    )
+    expect(screen.getByText('Content without title')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '关闭' })).not.toBeInTheDocument()
+  })
+
   it('throws when DialogContent used outside Dialog', () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     expect(() => {

@@ -696,6 +696,440 @@ describe('ArticleViewer', () => {
     expect(RssApi.openLink).toHaveBeenCalledWith('https://example.com/article')
   })
 
+  describe('AI summary card', () => {
+    it('should display AI summary card when summary exists', async () => {
+      const summarizedArticle: Article = {
+        ...mockArticle,
+        ai_summary: 'Cached AI summary',
+      }
+      vi.mocked(RssApi.generateSummary).mockResolvedValue(summarizedArticle)
+
+      render(
+        <ArticleViewer
+          article={mockArticle}
+          articles={mockArticles}
+          readerSettings={mockReaderSettings}
+        />
+      )
+
+      const summaryButton = screen.getByTitle('生成 AI 摘要')
+      fireEvent.click(summaryButton)
+
+      await waitFor(() => {
+        expect(screen.getByTestId('ai-summary-card')).toBeInTheDocument()
+        expect(screen.getByTestId('ai-summary-content')).toHaveTextContent('Cached AI summary')
+      })
+    })
+
+    it('should collapse and expand AI summary card', async () => {
+      const summarizedArticle: Article = {
+        ...mockArticle,
+        ai_summary: 'Summary text',
+      }
+      vi.mocked(RssApi.generateSummary).mockResolvedValue(summarizedArticle)
+
+      render(
+        <ArticleViewer
+          article={mockArticle}
+          articles={mockArticles}
+          readerSettings={mockReaderSettings}
+        />
+      )
+
+      const summaryButton = screen.getByTitle('生成 AI 摘要')
+      fireEvent.click(summaryButton)
+
+      await waitFor(() => {
+        expect(screen.getByTestId('ai-summary-content')).toBeInTheDocument()
+      })
+
+      // Click the collapse button (the AI 摘要 header)
+      const collapseBtn = screen.getByText('AI 摘要').closest('button')!
+      fireEvent.click(collapseBtn)
+
+      expect(screen.queryByTestId('ai-summary-content')).not.toBeInTheDocument()
+
+      // Expand again
+      fireEvent.click(collapseBtn)
+      expect(screen.getByTestId('ai-summary-content')).toBeInTheDocument()
+    })
+  })
+
+  describe('AI translation', () => {
+    it('should translate article and show translation', async () => {
+      const translatedArticle: Article = {
+        ...mockArticle,
+        ai_translation: '<p>Translated content</p>',
+      }
+      vi.mocked(RssApi.translateArticle).mockResolvedValue(translatedArticle)
+
+      render(
+        <ArticleViewer
+          article={mockArticle}
+          articles={mockArticles}
+          readerSettings={mockReaderSettings}
+        />
+      )
+
+      const translateBtn = screen.getByTitle('翻译文章')
+      fireEvent.click(translateBtn)
+
+      await waitFor(() => {
+        expect(screen.getByText('Translated content')).toBeInTheDocument()
+      })
+    })
+
+    it('should toggle translation on/off when already translated', async () => {
+      const translatedArticle: Article = {
+        ...mockArticle,
+        ai_translation: '<p>Translated content</p>',
+      }
+      vi.mocked(RssApi.translateArticle).mockResolvedValue(translatedArticle)
+
+      render(
+        <ArticleViewer
+          article={mockArticle}
+          articles={mockArticles}
+          readerSettings={mockReaderSettings}
+        />
+      )
+
+      const translateBtn = screen.getByTitle('翻译文章')
+      fireEvent.click(translateBtn)
+
+      await waitFor(() => {
+        expect(screen.getByText('Translated content')).toBeInTheDocument()
+      })
+
+      // Click again to toggle off - should show original
+      fireEvent.click(screen.getByTitle('显示原文'))
+
+      await waitFor(() => {
+        expect(screen.getByText('Test content paragraph 1')).toBeInTheDocument()
+      })
+    })
+  })
+
+  describe('error handling', () => {
+    it('should show error banner when fetch full content fails', async () => {
+      vi.mocked(RssApi.fetchFullContent).mockRejectedValue(new Error('Network error'))
+
+      render(
+        <ArticleViewer
+          article={mockArticle}
+          articles={mockArticles}
+          readerSettings={mockReaderSettings}
+        />
+      )
+
+      const fetchButton = screen.getByTitle('抓取全文')
+      fireEvent.click(fetchButton)
+
+      await waitFor(() => {
+        expect(screen.getByTestId('fetch-error-banner')).toHaveTextContent('Network error')
+      })
+    })
+
+    it('should show error when generate summary fails', async () => {
+      vi.mocked(RssApi.generateSummary).mockRejectedValue('string error')
+
+      render(
+        <ArticleViewer
+          article={mockArticle}
+          articles={mockArticles}
+          readerSettings={mockReaderSettings}
+        />
+      )
+
+      const summaryBtn = screen.getByTitle('生成 AI 摘要')
+      fireEvent.click(summaryBtn)
+
+      await waitFor(() => {
+        expect(screen.getByTestId('fetch-error-banner')).toBeInTheDocument()
+      })
+    })
+
+    it('should show error when translate fails', async () => {
+      vi.mocked(RssApi.translateArticle).mockRejectedValue(new Error('Translation failed'))
+
+      render(
+        <ArticleViewer
+          article={mockArticle}
+          articles={mockArticles}
+          readerSettings={mockReaderSettings}
+        />
+      )
+
+      const translateBtn = screen.getByTitle('翻译文章')
+      fireEvent.click(translateBtn)
+
+      await waitFor(() => {
+        expect(screen.getByTestId('fetch-error-banner')).toHaveTextContent('Translation failed')
+      })
+    })
+
+    it('should rollback favorite state on API error', async () => {
+      vi.mocked(RssApi.setArticleFavorite).mockRejectedValue(new Error('API error'))
+
+      render(
+        <ArticleViewer
+          article={mockArticle}
+          articles={mockArticles}
+          readerSettings={mockReaderSettings}
+        />
+      )
+
+      const favoriteButton = screen.getByTitle('收藏 (F)')
+      fireEvent.click(favoriteButton)
+
+      // After error, should rollback to unfavorited
+      await waitFor(() => {
+        expect(screen.getByTitle('收藏 (F)')).toBeInTheDocument()
+      })
+    })
+  })
+
+  describe('content fallback', () => {
+    it('should show description when no content', () => {
+      const articleNoContent: Article = {
+        ...mockArticle,
+        content: undefined,
+        description: 'Fallback description text',
+      }
+
+      render(
+        <ArticleViewer
+          article={articleNoContent}
+          articles={mockArticles}
+          readerSettings={mockReaderSettings}
+        />
+      )
+
+      expect(screen.getByText('Fallback description text')).toBeInTheDocument()
+    })
+
+    it('should show "未知时间" when no published_at', () => {
+      const articleNoDate: Article = {
+        ...mockArticle,
+        published_at: undefined,
+      }
+
+      render(
+        <ArticleViewer
+          article={articleNoDate}
+          articles={mockArticles}
+          readerSettings={mockReaderSettings}
+        />
+      )
+
+      expect(screen.getByText('未知时间')).toBeInTheDocument()
+    })
+  })
+
+  describe('keyboard shortcuts', () => {
+    it('should not respond to shortcuts when in input field', () => {
+      const mockOnNext = vi.fn()
+
+      render(
+        <ArticleViewer
+          article={mockArticle}
+          articles={mockArticles}
+          onNext={mockOnNext}
+          hasNext={true}
+          readerSettings={mockReaderSettings}
+        />
+      )
+
+      const input = document.createElement('input')
+      document.body.appendChild(input)
+      fireEvent.keyDown(input, { key: 'n' })
+      expect(mockOnNext).not.toHaveBeenCalled()
+      document.body.removeChild(input)
+    })
+  })
+
+  describe('reader settings style', () => {
+    it('should apply reader settings to content area', () => {
+      const customSettings: ReaderSettings = {
+        ...mockReaderSettings,
+        fontSize: 20,
+        lineHeight: 2,
+        letterSpacing: 1,
+        textAlign: 'center' as const,
+        maxWidth: 80,
+      }
+
+      render(
+        <ArticleViewer
+          article={mockArticle}
+          articles={mockArticles}
+          readerSettings={customSettings}
+        />
+      )
+
+      const article = screen.getByTestId('article-content-area').querySelector('article')!
+      expect(article.style.fontSize).toBe('20px')
+      expect(article.style.lineHeight).toBe('2')
+      expect(article.style.maxWidth).toBe('80ch')
+    })
+  })
+
+  describe('translated title', () => {
+    it('should show translated title when translation is active', async () => {
+      const articleWithTranslatedTitle: Article = {
+        ...mockArticle,
+        ai_translation: '<p>Translated</p>',
+        ai_translated_title: '翻译后的标题',
+      }
+      vi.mocked(RssApi.translateArticle).mockResolvedValue(articleWithTranslatedTitle)
+
+      render(
+        <ArticleViewer
+          article={{ ...mockArticle, ai_translated_title: '翻译后的标题' }}
+          articles={mockArticles}
+          readerSettings={mockReaderSettings}
+        />
+      )
+
+      const translateBtn = screen.getByTitle('翻译文章')
+      fireEvent.click(translateBtn)
+
+      await waitFor(() => {
+        expect(screen.getByText('翻译后的标题')).toBeInTheDocument()
+      })
+    })
+  })
+
+  describe('scroll progress', () => {
+    it('should have scroll handler on content area', () => {
+      render(
+        <ArticleViewer
+          article={mockArticle}
+          articles={mockArticles}
+          readerSettings={mockReaderSettings}
+        />
+      )
+
+      const contentArea = screen.getByTestId('article-content-area')
+      expect(contentArea).toBeInTheDocument()
+    })
+  })
+
+  describe('auto-fetch from DB on mount', () => {
+    it('should fetch latest article data on mount and update if full_content available', async () => {
+      const latestArticle: Article = {
+        ...mockArticle,
+        full_content: '<p>Pre-fetched content</p>',
+        ai_summary: 'Pre-generated summary',
+      }
+      vi.mocked(RssApi.getArticle).mockResolvedValue(latestArticle)
+
+      render(
+        <ArticleViewer
+          article={mockArticle}
+          articles={mockArticles}
+          readerSettings={mockReaderSettings}
+        />
+      )
+
+      await waitFor(() => {
+        expect(RssApi.getArticle).toHaveBeenCalledWith('article-1')
+      })
+
+      await waitFor(() => {
+        expect(screen.getByText('Pre-fetched content')).toBeInTheDocument()
+      })
+    })
+
+    it('should not fetch from DB if article already has all data', () => {
+      const completeArticle: Article = {
+        ...mockArticle,
+        full_content: '<p>Full</p>',
+        ai_summary: 'Summary',
+        ai_translation: '<p>Translation</p>',
+      }
+
+      render(
+        <ArticleViewer
+          article={completeArticle}
+          articles={mockArticles}
+          readerSettings={mockReaderSettings}
+        />
+      )
+
+      expect(RssApi.getArticle).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('fetch full content error with string', () => {
+    it('should handle non-Error object in fetch full content', async () => {
+      vi.mocked(RssApi.fetchFullContent).mockRejectedValue({ code: 'UNKNOWN' })
+
+      render(
+        <ArticleViewer
+          article={mockArticle}
+          articles={mockArticles}
+          readerSettings={mockReaderSettings}
+        />
+      )
+
+      const fetchButton = screen.getByTitle('抓取全文')
+      fireEvent.click(fetchButton)
+
+      await waitFor(() => {
+        expect(screen.getByTestId('fetch-error-banner')).toHaveTextContent('抓取全文失败，请稍后重试')
+      })
+    })
+  })
+
+  describe('translate with existing translation', () => {
+    it('should show translate button and call API on click', async () => {
+      const translatedArticle: Article = {
+        ...mockArticle,
+        ai_translation: '<p>Translated</p>',
+      }
+      vi.mocked(RssApi.translateArticle).mockResolvedValue(translatedArticle)
+
+      render(
+        <ArticleViewer
+          article={mockArticle}
+          articles={mockArticles}
+          readerSettings={mockReaderSettings}
+        />
+      )
+
+      // Click translate
+      fireEvent.click(screen.getByTitle('翻译文章'))
+      await waitFor(() => {
+        expect(RssApi.translateArticle).toHaveBeenCalledWith('article-1')
+      })
+
+      // Translation should be shown
+      await waitFor(() => {
+        expect(screen.getByText('Translated')).toBeInTheDocument()
+      })
+    })
+  })
+
+  describe('favorite article', () => {
+    it('should show filled star for favorited article', () => {
+      const favArticle: Article = {
+        ...mockArticle,
+        favorite: true,
+      }
+
+      render(
+        <ArticleViewer
+          article={favArticle}
+          articles={mockArticles}
+          readerSettings={mockReaderSettings}
+        />
+      )
+
+      expect(screen.getByTitle('取消收藏 (F)')).toBeInTheDocument()
+    })
+  })
+
   describe('state cache on article switch', () => {
     beforeEach(() => {
       clearAllCache()

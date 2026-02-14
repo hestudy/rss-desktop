@@ -168,4 +168,41 @@ describe('DropdownMenu', () => {
     fireEvent.mouseDown(screen.getByTestId('outside'))
     expect(screen.queryByText('Item')).not.toBeInTheDocument()
   })
+
+  it('throws when DropdownMenuItem used outside DropdownMenu', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(() => {
+      render(<DropdownMenuItem>Orphan</DropdownMenuItem>)
+    }).toThrow('DropdownMenu components must be used within DropdownMenu')
+    spy.mockRestore()
+  })
+
+  it('supports align="end" prop on content', () => {
+    render(
+      <DropdownMenu>
+        <DropdownMenuTrigger>Open</DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem>Item</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    )
+    fireEvent.click(screen.getByText('Open'))
+    expect(screen.getByText('Item')).toBeInTheDocument()
+  })
+
+  it('does not close when clicking inside the menu content', () => {
+    render(
+      <DropdownMenu>
+        <DropdownMenuTrigger>Open</DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuItem disabled>Disabled Item</DropdownMenuItem>
+          <DropdownMenuItem>Active Item</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    )
+    fireEvent.click(screen.getByText('Open'))
+    // Click on disabled item - menu should stay open
+    fireEvent.click(screen.getByText('Disabled Item'))
+    expect(screen.getByText('Active Item')).toBeInTheDocument()
+  })
 })

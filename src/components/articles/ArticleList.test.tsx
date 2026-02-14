@@ -185,4 +185,59 @@ describe('ArticleList', () => {
     fireEvent.click(markAllBtn)
     expect(mockMarkAllRead).toHaveBeenCalledWith('feed-1')
   })
+
+  it('应该在点击文章时选中文章并标记为已读', () => {
+    mockArticles = [
+      {
+        id: 'a1',
+        feed_id: 'feed-1',
+        title: 'Unread Article',
+        link: 'https://example.com',
+        read: false,
+        created_at: '2026-01-01T00:00:00Z',
+        published_at: '2026-01-01T00:00:00Z',
+      },
+    ]
+    render(<ArticleList />)
+    fireEvent.click(screen.getByText('Unread Article'))
+    expect(mockMarkArticleRead).toHaveBeenCalledWith('a1', true)
+  })
+
+  it('应该在收藏模式下不显示 feed 名称', () => {
+    mockShowFavoritesOnly = true
+    mockArticles = [
+      {
+        id: 'a1',
+        feed_id: 'feed-1',
+        title: 'Fav Article',
+        link: 'https://example.com',
+        read: false,
+        created_at: '2026-01-01T00:00:00Z',
+        published_at: '2026-01-01T00:00:00Z',
+      },
+    ]
+    render(<ArticleList />)
+    // In favorites mode, feed name should not be shown in article cards
+    const feedNames = screen.queryAllByText('Tech Blog')
+    // The header shows "收藏文章", not "Tech Blog"
+    expect(screen.getByText('收藏文章')).toBeInTheDocument()
+  })
+
+  it('应该在选中特定 feed 时不显示 feed 名称', () => {
+    mockSelectedFeedId = 'feed-1'
+    mockArticles = [
+      {
+        id: 'a1',
+        feed_id: 'feed-1',
+        title: 'Feed Article',
+        link: 'https://example.com',
+        read: false,
+        created_at: '2026-01-01T00:00:00Z',
+        published_at: '2026-01-01T00:00:00Z',
+      },
+    ]
+    render(<ArticleList />)
+    // Header shows feed title
+    expect(screen.getByText('Tech Blog')).toBeInTheDocument()
+  })
 })

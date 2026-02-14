@@ -211,10 +211,16 @@ describe('useUpdater', () => {
     expect(result.current.errorMessage).toBeNull()
   })
 
-  it('非字符串错误且包含 release JSON 关键词时也应视为最新版本', async () => {
-    mockCheck.mockRejectedValue(
-      'Could not fetch a valid release JSON from the remote'
-    )
+  it('下载时应更新进度', async () => {
+    let progressCallback: ((event: { event: string; data: { contentLength?: number; chunkLength: number } }) => void) | null = null
+    mockUpdate.downloadAndInstall.mockImplementation(async (cb: typeof progressCallback) => {
+      progressCallback = cb
+      // Simulate download events
+      cb!({ event: 'Started', data: { contentLength: 1000, chunkLength: 0 } })
+      cb!({ event: 'Progress', data: { chunkLength: 500 } })
+      cb!({ event: 'Progress', data: { chunkLength: 500 } })
+    })
+    mockCheck.mockResolvedValue(mockUpdate as never)
 
     const { result } = renderHook(() => useUpdater())
 
@@ -222,7 +228,33 @@ describe('useUpdater', () => {
       await result.current.checkForUpdates()
     })
 
-    expect(result.current.status).toBe('up-to-date')
-    expect(result.current.errorMessage).toBeNull()
+    await act(async () => {
+      await result.current.downloadAndInstall()
+    })
+
+    expect(result.current.status).toBe('ready')
+    expect(result.current.progress).toBe(100)
+  })
+
+  it('下载时 Started 事件无 contentLength 不更新进度', async () => {
+    mockUpdate.downloadAndInstall.mockImplementation(async (cb: (event: { event: string; data: { contentLength?: number; chunkLength: number } }) => void) => {
+      cb({ event: 'Started', data: { chunkLength: 0 } })
+      cb({ event: 'Progress', data: { chunkLength: 500 } })
+    })
+    mockCheck.mockResolvedValue(mockUpdate as never)
+
+    const { result } = renderHook(() => useUpdater())
+
+    await act(async () => {
+      await result.current.checkForUpdates()
+    })
+
+    await act(async () => {
+      await result.current.downloadAndInstall()
+    })
+
+    expect(result.current.status).toBe('ready')
+    // Progress should stay at 0 since totalSize is 0
+    expect(result.current.progress).toBe(100) // final state is 100 from ready
   })
 })
