@@ -48,6 +48,7 @@ vi.mock('lucide-react', () => ({
   CheckCircle2: (props: Record<string, unknown>) => <svg data-testid="check-icon" {...props} />,
   Clock: (props: Record<string, unknown>) => <svg data-testid="clock-icon" {...props} />,
   ExternalLink: (props: Record<string, unknown>) => <svg data-testid="external-link-icon" {...props} />,
+  X: (props: Record<string, unknown>) => <svg data-testid="x-icon" {...props} />,
 }))
 
 const makeTask = (overrides: Partial<QueueTask> & { id: string }): QueueTask => ({
@@ -393,7 +394,7 @@ describe('QueueTaskDetailDialog', () => {
         <QueueTaskDetailDialog {...defaultProps} task={task} open={true} onOpenChange={onOpenChange} />
       )
 
-      const closeBtn = screen.getByRole('button', { name: '✕' })
+      const closeBtn = screen.getByRole('button', { name: '关闭' })
       fireEvent.click(closeBtn)
       expect(onOpenChange).toHaveBeenCalledWith(false)
     })

@@ -32,6 +32,7 @@ vi.mock('../../contexts/RssContext', () => ({
     selectFavorites: mockSelectFavorites,
     showFavoritesOnly: false,
     getGlobalUnreadCount: mockGetGlobalUnreadCount,
+    refreshingFeedIds: new Set<string>(),
   }),
 }))
 
@@ -60,6 +61,10 @@ vi.mock('lucide-react', () => ({
   Mail: (props: Record<string, unknown>) => <svg data-testid="mail-icon" {...props} />,
   Calendar: (props: Record<string, unknown>) => <svg data-testid="calendar-icon" {...props} />,
   Pencil: (props: Record<string, unknown>) => <svg data-testid="pencil-icon" {...props} />,
+  Loader2: (props: Record<string, unknown>) => <svg data-testid="loader-icon" {...props} />,
+  MoreHorizontal: (props: Record<string, unknown>) => <svg data-testid="more-icon" {...props} />,
+  ScrollText: (props: Record<string, unknown>) => <svg data-testid="scroll-text-icon" {...props} />,
+  X: (props: Record<string, unknown>) => <svg data-testid="x-icon" {...props} />,
 }))
 
 vi.mock('../queue/QueueIndicator', () => ({
@@ -108,13 +113,13 @@ describe('FeedList', () => {
   })
 
   describe('edit feed button', () => {
-    it('renders an edit button for each feed in the action area', () => {
+    it('renders a dropdown trigger for each feed in the action area', () => {
       render(<FeedList />)
 
       const actionContainers = document.querySelectorAll('[data-testid="feed-actions"]')
       actionContainers.forEach((container) => {
-        const editButton = container.querySelector('[data-testid="pencil-icon"]')
-        expect(editButton).toBeTruthy()
+        const triggerButton = container.querySelector('[data-testid="more-icon"]')
+        expect(triggerButton).toBeTruthy()
       })
     })
   })

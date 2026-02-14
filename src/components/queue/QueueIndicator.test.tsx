@@ -194,5 +194,60 @@ describe('QueueIndicator', () => {
         expect(screen.getByTestId('dialog-task-id')).toHaveTextContent('task-1')
       })
     })
+
+    it('should navigate to article when clicking navigate button', async () => {
+      mockStatus = activeSnapshot
+      mockSelectFeedAndLoad.mockResolvedValue(undefined)
+      render(<QueueIndicator />)
+
+      fireEvent.click(screen.getByRole('button', { name: '任务队列' }))
+      await waitFor(() => {
+        expect(screen.getByTestId('queue-task-item')).toBeInTheDocument()
+      })
+
+      fireEvent.click(screen.getByTestId('queue-task-item'))
+      await waitFor(() => {
+        expect(screen.getByText('查看文章')).toBeInTheDocument()
+      })
+
+      fireEvent.click(screen.getByText('查看文章'))
+      await waitFor(() => {
+        expect(mockSelectFeedAndLoad).toHaveBeenCalledWith('feed-1')
+        expect(mockSelectArticle).toHaveBeenCalledWith('art-1')
+      })
+    })
+  })
+
+  describe('keyboard and click-outside', () => {
+    it('should close panel on Escape key', async () => {
+      render(<QueueIndicator />)
+      fireEvent.click(screen.getByRole('button', { name: '任务队列' }))
+      await waitFor(() => {
+        expect(screen.getByText('暂无任务')).toBeInTheDocument()
+      })
+
+      fireEvent.keyDown(document, { key: 'Escape' })
+      await waitFor(() => {
+        expect(screen.queryByText('暂无任务')).not.toBeInTheDocument()
+      })
+    })
+
+    it('should close panel on outside click', async () => {
+      render(
+        <div>
+          <div data-testid="outside">Outside</div>
+          <QueueIndicator />
+        </div>
+      )
+      fireEvent.click(screen.getByRole('button', { name: '任务队列' }))
+      await waitFor(() => {
+        expect(screen.getByText('暂无任务')).toBeInTheDocument()
+      })
+
+      fireEvent.mouseDown(screen.getByTestId('outside'))
+      await waitFor(() => {
+        expect(screen.queryByText('暂无任务')).not.toBeInTheDocument()
+      })
+    })
   })
 })

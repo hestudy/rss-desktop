@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { ArticleList } from './ArticleList'
 
 const mockLoadArticles = vi.fn()
@@ -13,16 +13,20 @@ let mockSelectedFeedId: string | null = null
 let mockShowFavoritesOnly = false
 let mockArticles: unknown[] = []
 
+let mockIsLoading = false
+
 vi.mock('../../contexts/RssContext', () => ({
   useRss: () => ({
     articles: mockArticles,
     selectedFeedId: mockSelectedFeedId,
-    isLoading: false,
+    isLoading: mockIsLoading,
     markArticleRead: mockMarkArticleRead,
     openLink: mockOpenLink,
     loadArticles: mockLoadArticles,
     markAllRead: mockMarkAllRead,
-    feeds: [],
+    feeds: [
+      { feed: { id: 'feed-1', title: 'Tech Blog', url: '' }, unread_count: 2 },
+    ],
     showFavoritesOnly: mockShowFavoritesOnly,
     refreshFeed: mockRefreshFeed,
     refreshAllFeeds: mockRefreshAllFeeds,
@@ -43,6 +47,7 @@ vi.mock('lucide-react', () => ({
   Filter: (props: Record<string, unknown>) => <svg data-testid="filter-icon" {...props} />,
   ExternalLink: (props: Record<string, unknown>) => <svg data-testid="external-icon" {...props} />,
   Star: (props: Record<string, unknown>) => <svg data-testid="star-icon" {...props} />,
+  Clock: (props: Record<string, unknown>) => <svg data-testid="clock-icon" {...props} />,
 }))
 
 describe('ArticleList', () => {
@@ -51,6 +56,7 @@ describe('ArticleList', () => {
     mockSelectedFeedId = null
     mockShowFavoritesOnly = false
     mockArticles = []
+    mockIsLoading = false
   })
 
   it('应该在初始挂载时加载全部文章（selectedFeedId 为 null）', () => {
@@ -94,5 +100,89 @@ describe('ArticleList', () => {
     render(<ArticleList />)
 
     expect(screen.getByText('收藏文章')).toBeInTheDocument()
+  })
+
+  it('应该显示加载状态', () => {
+    mockIsLoading = true
+    render(<ArticleList />)
+    expect(screen.getByText('加载中...')).toBeInTheDocument()
+  })
+
+  it('应该显示空状态', () => {
+    mockArticles = []
+    render(<ArticleList />)
+    expect(screen.getByText('暂无文章')).toBeInTheDocument()
+  })
+
+  it('应该显示收藏空状态', () => {
+    mockShowFavoritesOnly = true
+    mockArticles = []
+    render(<ArticleList />)
+    expect(screen.getByText('暂无收藏文章')).toBeInTheDocument()
+  })
+
+  it('应该渲染文章列表', () => {
+    mockArticles = [
+      {
+        id: 'a1',
+        feed_id: 'feed-1',
+        title: 'Test Article',
+        link: 'https://example.com',
+        read: false,
+        created_at: '2026-01-01T00:00:00Z',
+        published_at: '2026-01-01T00:00:00Z',
+      },
+    ]
+    render(<ArticleList />)
+    expect(screen.getByText('Test Article')).toBeInTheDocument()
+  })
+
+  it('应该在选中 feed 时显示 feed 标题', () => {
+    mockSelectedFeedId = 'feed-1'
+    render(<ArticleList />)
+    expect(screen.getByText('Tech Blog')).toBeInTheDocument()
+  })
+
+  it('应该在全部文章模式下显示 feed 名称', () => {
+    mockSelectedFeedId = null
+    mockShowFavoritesOnly = false
+    mockArticles = [
+      {
+        id: 'a1',
+        feed_id: 'feed-1',
+        title: 'Test Article',
+        link: 'https://example.com',
+        read: false,
+        created_at: '2026-01-01T00:00:00Z',
+        published_at: '2026-01-01T00:00:00Z',
+      },
+    ]
+    render(<ArticleList />)
+    expect(screen.getByText('Tech Blog')).toBeInTheDocument()
+  })
+
+  it('应该点击刷新按钮时调用 refreshAllFeeds', () => {
+    mockSelectedFeedId = null
+    render(<ArticleList />)
+    const refreshBtn = screen.getByLabelText('Refresh')
+    fireEvent.click(refreshBtn)
+    expect(mockRefreshAllFeeds).toHaveBeenCalled()
+  })
+
+  it('应该在选中 feed 时点击刷新调用 refreshFeed', async () => {
+    mockSelectedFeedId = 'feed-1'
+    mockRefreshFeed.mockResolvedValue(undefined)
+    render(<ArticleList />)
+    const refreshBtn = screen.getByLabelText('Refresh')
+    fireEvent.click(refreshBtn)
+    expect(mockRefreshFeed).toHaveBeenCalledWith('feed-1')
+  })
+
+  it('应该点击全部已读按钮时调用 markAllRead', () => {
+    mockSelectedFeedId = 'feed-1'
+    render(<ArticleList />)
+    const markAllBtn = screen.getByLabelText('Mark all as read')
+    fireEvent.click(markAllBtn)
+    expect(mockMarkAllRead).toHaveBeenCalledWith('feed-1')
   })
 })

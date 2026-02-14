@@ -608,6 +608,94 @@ describe('ArticleViewer', () => {
     mockFeeds = [{ feed: { id: 'feed-1', use_full_content: false, use_ai_summary: false }, unread_count: 0 }]
   })
 
+  it('应该通过 F 键切换收藏', async () => {
+    vi.mocked(RssApi.setArticleFavorite).mockResolvedValue(undefined)
+
+    render(
+      <ArticleViewer
+        article={mockArticle}
+        articles={mockArticles}
+        readerSettings={mockReaderSettings}
+      />
+    )
+
+    fireEvent.keyDown(window, { key: 'f' })
+    await waitFor(() => {
+      expect(RssApi.setArticleFavorite).toHaveBeenCalledWith('article-1', true)
+    })
+  })
+
+  it('应该通过 N 键导航到下一篇', () => {
+    const mockOnNext = vi.fn()
+
+    render(
+      <ArticleViewer
+        article={mockArticles[0]}
+        articles={mockArticles}
+        onNext={mockOnNext}
+        hasNext={true}
+        readerSettings={mockReaderSettings}
+      />
+    )
+
+    fireEvent.keyDown(window, { key: 'n' })
+    expect(mockOnNext).toHaveBeenCalled()
+  })
+
+  it('应该通过 P 键导航到上一篇', () => {
+    const mockOnPrevious = vi.fn()
+
+    render(
+      <ArticleViewer
+        article={mockArticles[1]}
+        articles={mockArticles}
+        onPrevious={mockOnPrevious}
+        hasPrevious={true}
+        readerSettings={mockReaderSettings}
+      />
+    )
+
+    fireEvent.keyDown(window, { key: 'p' })
+    expect(mockOnPrevious).toHaveBeenCalled()
+  })
+
+  it('应该通过方向键导航', () => {
+    const mockOnNext = vi.fn()
+    const mockOnPrevious = vi.fn()
+
+    render(
+      <ArticleViewer
+        article={mockArticles[1]}
+        articles={mockArticles}
+        onNext={mockOnNext}
+        onPrevious={mockOnPrevious}
+        hasNext={true}
+        hasPrevious={true}
+        readerSettings={mockReaderSettings}
+      />
+    )
+
+    fireEvent.keyDown(window, { key: 'ArrowRight' })
+    expect(mockOnNext).toHaveBeenCalled()
+
+    fireEvent.keyDown(window, { key: 'ArrowLeft' })
+    expect(mockOnPrevious).toHaveBeenCalled()
+  })
+
+  it('应该点击外部链接按钮打开浏览器', () => {
+    render(
+      <ArticleViewer
+        article={mockArticle}
+        articles={mockArticles}
+        readerSettings={mockReaderSettings}
+      />
+    )
+
+    const openButton = screen.getByTitle('在浏览器中打开')
+    fireEvent.click(openButton)
+    expect(RssApi.openLink).toHaveBeenCalledWith('https://example.com/article')
+  })
+
   describe('state cache on article switch', () => {
     beforeEach(() => {
       clearAllCache()

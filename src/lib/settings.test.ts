@@ -4,11 +4,15 @@ import {
   getSettings,
   updateSettings,
   getSchedulerState,
+  getAiSettings,
+  updateAiSettings,
   type PollInterval,
   type AppSettings,
   type SchedulerState,
   type PartialAppSettings,
+  type AiSettings,
   DEFAULT_SETTINGS,
+  DEFAULT_AI_SETTINGS,
 } from './settings'
 
 // Mock Tauri invoke
@@ -217,5 +221,40 @@ describe('Validation', () => {
 
     expect(validMin.maxNotificationsPerBatch).toBe(0)
     expect(validMax.maxNotificationsPerBatch).toBe(100)
+  })
+})
+
+describe('AI Settings API', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  describe('getAiSettings', () => {
+    it('should return AI settings', async () => {
+      vi.mocked(invoke).mockResolvedValueOnce(DEFAULT_AI_SETTINGS)
+
+      const result = await getAiSettings()
+
+      expect(result).toEqual(DEFAULT_AI_SETTINGS)
+      expect(invoke).toHaveBeenCalledWith('get_ai_settings')
+    })
+  })
+
+  describe('updateAiSettings', () => {
+    it('should merge and update AI settings', async () => {
+      const partial: Partial<AiSettings> = { model: 'gpt-4o' }
+      const expected = { ...DEFAULT_AI_SETTINGS, ...partial }
+
+      vi.mocked(invoke).mockResolvedValueOnce(DEFAULT_AI_SETTINGS)
+      vi.mocked(invoke).mockResolvedValueOnce(expected)
+
+      const result = await updateAiSettings(partial)
+
+      expect(result.model).toBe('gpt-4o')
+      expect(invoke).toHaveBeenCalledWith('get_ai_settings')
+      expect(invoke).toHaveBeenCalledWith('update_ai_settings', {
+        settings: expected,
+      })
+    })
   })
 })

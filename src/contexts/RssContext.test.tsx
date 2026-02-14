@@ -3,6 +3,7 @@ import { renderHook, waitFor, act } from '@testing-library/react'
 import { RssProvider, useRss } from './RssContext'
 import { RssApi } from '../lib/api'
 import type { ReactNode } from 'react'
+import type { FeedWithUnreadCount, Article } from '../types'
 
 // Mock RssApi
 vi.mock('../lib/api', () => ({
@@ -19,6 +20,11 @@ vi.mock('../lib/api', () => ({
     openLink: vi.fn(),
     getFavoriteArticles: vi.fn(),
   },
+}))
+
+// Mock Tauri event listener
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: vi.fn(() => Promise.resolve(() => {})),
 }))
 
 describe('RssContext', () => {
@@ -134,17 +140,17 @@ describe('RssContext', () => {
   describe('selectFeed (existing behavior)', () => {
     it('should not wait for loadArticles to complete', async () => {
       const mockArticles = [
-        { 
-          id: 'article-1', 
-          title: 'Test Article', 
-          feed_id: 'feed-1', 
+        {
+          id: 'article-1',
+          title: 'Test Article',
+          feed_id: 'feed-1',
           link: 'https://example.com/article-1',
           read: false,
           created_at: '2024-01-01T00:00:00Z'
         },
       ]
-      
-      vi.mocked(RssApi.getArticles).mockImplementation(() => 
+
+      vi.mocked(RssApi.getArticles).mockImplementation(() =>
         new Promise(resolve => setTimeout(() => resolve(mockArticles), 100))
       )
 
@@ -157,11 +163,424 @@ describe('RssContext', () => {
       const endTime = Date.now()
 
       expect(endTime - startTime).toBeLessThan(50)
-      
+
       await waitFor(() => {
         expect(result.current.selectedFeedId).toBe('feed-1')
         expect(result.current.showFavoritesOnly).toBe(false)
       })
+    })
+  })
+
+  describe('useRss outside provider', () => {
+    it('should throw when used outside RssProvider', () => {
+      expect(() => {
+        renderHook(() => useRss())
+      }).toThrow('useRss must be used within RssProvider')
+    })
+  })
+
+  describe('loadFeeds', () => {
+    it('should load feeds successfully', async () => {
+      const mockFeeds: FeedWithUnreadCount[] = [
+        { feed: { id: 'f1', url: 'https://example.com', title: 'Feed 1', created_at: '', updated_at: '' }, unread_count: 3 },
+      ]
+      vi.mocked(RssApi.getFeeds).mockResolvedValue(mockFeeds)
+
+      const { result } = renderHook(() => useRss(), { wrapper })
+
+      await act(async () => {
+        await result.current.loadFeeds()
+      })
+
+      expect(result.current.feeds).toEqual(mockFeeds)
+      expect(result.current.isLoading).toBe(false)
+    })
+
+    it('should set error on failure', async () => {
+      vi.mocked(RssApi.getFeeds).mockRejectedValue(new Error('Network error'))
+
+      const { result } = renderHook(() => useRss(), { wrapper })
+
+      await act(async () => {
+        await result.current.loadFeeds()
+      })
+
+      expect(result.current.error).toBe('Network error')
+    })
+
+    it('should set generic error for non-Error throws', async () => {
+      vi.mocked(RssApi.getFeeds).mockRejectedValue('unknown')
+
+      const { result } = renderHook(() => useRss(), { wrapper })
+
+      await act(async () => {
+        await result.current.loadFeeds()
+      })
+
+      expect(result.current.error).toBe('Failed to load feeds')
+    })
+  })
+
+  describe('loadArticles', () => {
+    it('should load articles for a feed', async () => {
+      const mockArticles: Article[] = [
+        { id: 'a1', feed_id: 'f1', title: 'Art 1', link: '', read: false, created_at: '' },
+      ]
+      vi.mocked(RssApi.getArticles).mockResolvedValue(mockArticles)
+
+      const { result } = renderHook(() => useRss(), { wrapper })
+
+      await act(async () => {
+        await result.current.loadArticles('f1')
+      })
+
+      expect(result.current.articles).toEqual(mockArticles)
+      expect(RssApi.getArticles).toHaveBeenCalledWith({ feed_id: 'f1', limit: 100 })
+    })
+
+    it('should set error on failure', async () => {
+      vi.mocked(RssApi.getArticles).mockRejectedValue(new Error('Load failed'))
+
+      const { result } = renderHook(() => useRss(), { wrapper })
+
+      await act(async () => {
+        await result.current.loadArticles()
+      })
+
+      expect(result.current.error).toBe('Load failed')
+    })
+  })
+
+  describe('addFeed', () => {
+    it('should add feed and reload feeds', async () => {
+      const newFeed = { id: 'f1', url: 'https://example.com', title: 'New', created_at: '', updated_at: '' }
+      vi.mocked(RssApi.addFeed).mockResolvedValue(newFeed)
+      vi.mocked(RssApi.getFeeds).mockResolvedValue([])
+
+      const { result } = renderHook(() => useRss(), { wrapper })
+
+      await act(async () => {
+        const feed = await result.current.addFeed('https://example.com', true, false, false)
+        expect(feed).toEqual(newFeed)
+      })
+
+      expect(RssApi.addFeed).toHaveBeenCalledWith('https://example.com', true, false, false)
+      expect(RssApi.getFeeds).toHaveBeenCalled()
+    })
+
+    it('should set error and rethrow on failure', async () => {
+      vi.mocked(RssApi.addFeed).mockRejectedValue(new Error('Duplicate'))
+
+      const { result } = renderHook(() => useRss(), { wrapper })
+
+      await act(async () => {
+        await expect(result.current.addFeed('https://example.com')).rejects.toThrow('Duplicate')
+      })
+
+      expect(result.current.error).toBe('Duplicate')
+    })
+  })
+
+  describe('removeFeed', () => {
+    it('should remove feed and reload', async () => {
+      vi.mocked(RssApi.removeFeed).mockResolvedValue(undefined)
+      vi.mocked(RssApi.getFeeds).mockResolvedValue([])
+
+      const { result } = renderHook(() => useRss(), { wrapper })
+
+      await act(async () => {
+        await result.current.removeFeed('f1')
+      })
+
+      expect(RssApi.removeFeed).toHaveBeenCalledWith('f1')
+    })
+
+    it('should set error on failure', async () => {
+      vi.mocked(RssApi.removeFeed).mockRejectedValue(new Error('Not found'))
+
+      const { result } = renderHook(() => useRss(), { wrapper })
+
+      await act(async () => {
+        await expect(result.current.removeFeed('f1')).rejects.toThrow('Not found')
+      })
+
+      expect(result.current.error).toBe('Not found')
+    })
+  })
+
+  describe('updateFeed', () => {
+    it('should update feed in list', async () => {
+      const updated: FeedWithUnreadCount = {
+        feed: { id: 'f1', url: 'https://example.com', title: 'Updated', created_at: '', updated_at: '' },
+        unread_count: 0,
+      }
+      vi.mocked(RssApi.getFeeds).mockResolvedValue([updated])
+      vi.mocked(RssApi.updateFeed).mockResolvedValue(updated)
+
+      const { result } = renderHook(() => useRss(), { wrapper })
+
+      // Load feeds first
+      await act(async () => { await result.current.loadFeeds() })
+
+      await act(async () => {
+        await result.current.updateFeed('f1', 'Updated')
+      })
+
+      expect(RssApi.updateFeed).toHaveBeenCalledWith('f1', 'Updated', undefined, undefined, undefined, undefined)
+    })
+
+    it('should set error on failure', async () => {
+      vi.mocked(RssApi.updateFeed).mockRejectedValue(new Error('Update failed'))
+
+      const { result } = renderHook(() => useRss(), { wrapper })
+
+      await act(async () => {
+        await expect(result.current.updateFeed('f1', 'New')).rejects.toThrow('Update failed')
+      })
+
+      expect(result.current.error).toBe('Update failed')
+    })
+  })
+
+  describe('refreshFeed', () => {
+    it('should refresh a single feed', async () => {
+      const refreshed: FeedWithUnreadCount = {
+        feed: { id: 'f1', url: 'https://example.com', title: 'Feed', created_at: '', updated_at: '' },
+        unread_count: 5,
+      }
+      vi.mocked(RssApi.refreshFeed).mockResolvedValue(refreshed)
+      vi.mocked(RssApi.getFeeds).mockResolvedValue([refreshed])
+
+      const { result } = renderHook(() => useRss(), { wrapper })
+
+      await act(async () => { await result.current.loadFeeds() })
+      await act(async () => { await result.current.refreshFeed('f1') })
+
+      expect(RssApi.refreshFeed).toHaveBeenCalledWith('f1')
+    })
+
+    it('should set error on failure', async () => {
+      vi.mocked(RssApi.refreshFeed).mockRejectedValue(new Error('Timeout'))
+
+      const { result } = renderHook(() => useRss(), { wrapper })
+
+      await act(async () => {
+        await expect(result.current.refreshFeed('f1')).rejects.toThrow('Timeout')
+      })
+
+      expect(result.current.error).toBe('Timeout')
+    })
+  })
+
+  describe('refreshAllFeeds', () => {
+    it('should call refreshAllFeeds API', async () => {
+      vi.mocked(RssApi.refreshAllFeeds).mockResolvedValue(undefined)
+
+      const { result } = renderHook(() => useRss(), { wrapper })
+
+      await act(async () => {
+        await result.current.refreshAllFeeds()
+      })
+
+      expect(RssApi.refreshAllFeeds).toHaveBeenCalled()
+    })
+
+    it('should set error on failure', async () => {
+      vi.mocked(RssApi.refreshAllFeeds).mockRejectedValue(new Error('Refresh failed'))
+
+      const { result } = renderHook(() => useRss(), { wrapper })
+
+      await act(async () => {
+        await expect(result.current.refreshAllFeeds()).rejects.toThrow('Refresh failed')
+      })
+
+      expect(result.current.error).toBe('Refresh failed')
+    })
+  })
+
+  describe('silentRefreshAll', () => {
+    it('should call refreshAllFeeds silently', async () => {
+      vi.mocked(RssApi.refreshAllFeeds).mockResolvedValue(undefined)
+
+      const { result } = renderHook(() => useRss(), { wrapper })
+
+      await act(async () => {
+        await result.current.silentRefreshAll()
+      })
+
+      expect(RssApi.refreshAllFeeds).toHaveBeenCalled()
+    })
+
+    it('should not set error on failure', async () => {
+      vi.mocked(RssApi.refreshAllFeeds).mockRejectedValue(new Error('fail'))
+
+      const { result } = renderHook(() => useRss(), { wrapper })
+
+      await act(async () => {
+        await result.current.silentRefreshAll()
+      })
+
+      expect(result.current.error).toBeNull()
+    })
+  })
+
+  describe('selectFavorites', () => {
+    it('should load favorite articles', async () => {
+      const favorites: Article[] = [
+        { id: 'a1', feed_id: 'f1', title: 'Fav', link: '', read: false, created_at: '', favorite: true },
+      ]
+      vi.mocked(RssApi.getFavoriteArticles).mockResolvedValue(favorites)
+
+      const { result } = renderHook(() => useRss(), { wrapper })
+
+      await act(async () => {
+        await result.current.selectFavorites()
+      })
+
+      expect(result.current.showFavoritesOnly).toBe(true)
+      expect(result.current.selectedFeedId).toBeNull()
+      expect(result.current.articles).toEqual(favorites)
+    })
+
+    it('should set error on failure', async () => {
+      vi.mocked(RssApi.getFavoriteArticles).mockRejectedValue(new Error('Fav error'))
+
+      const { result } = renderHook(() => useRss(), { wrapper })
+
+      await act(async () => {
+        await result.current.selectFavorites()
+      })
+
+      expect(result.current.error).toBe('Fav error')
+    })
+  })
+
+  describe('markArticleRead', () => {
+    it('should mark article as read', async () => {
+      const articles: Article[] = [
+        { id: 'a1', feed_id: 'f1', title: 'Art', link: '', read: false, created_at: '' },
+      ]
+      vi.mocked(RssApi.getArticles).mockResolvedValue(articles)
+      vi.mocked(RssApi.markArticleRead).mockResolvedValue(undefined)
+
+      const { result } = renderHook(() => useRss(), { wrapper })
+
+      await act(async () => { await result.current.loadArticles('f1') })
+      await act(async () => { await result.current.markArticleRead('a1', true) })
+
+      expect(result.current.articles[0].read).toBe(true)
+      expect(RssApi.markArticleRead).toHaveBeenCalledWith('a1', true)
+    })
+
+    it('should set error on failure', async () => {
+      vi.mocked(RssApi.markArticleRead).mockRejectedValue(new Error('Mark failed'))
+
+      const { result } = renderHook(() => useRss(), { wrapper })
+
+      await act(async () => {
+        await result.current.markArticleRead('a1', true)
+      })
+
+      expect(result.current.error).toBe('Mark failed')
+    })
+  })
+
+  describe('markAllRead', () => {
+    it('should mark all articles in feed as read', async () => {
+      const articles: Article[] = [
+        { id: 'a1', feed_id: 'f1', title: 'Art 1', link: '', read: false, created_at: '' },
+        { id: 'a2', feed_id: 'f1', title: 'Art 2', link: '', read: false, created_at: '' },
+      ]
+      const feeds: FeedWithUnreadCount[] = [
+        { feed: { id: 'f1', url: '', title: 'Feed', created_at: '', updated_at: '' }, unread_count: 2 },
+      ]
+      vi.mocked(RssApi.getArticles).mockResolvedValue(articles)
+      vi.mocked(RssApi.getFeeds).mockResolvedValue(feeds)
+      vi.mocked(RssApi.markAllRead).mockResolvedValue(undefined)
+
+      const { result } = renderHook(() => useRss(), { wrapper })
+
+      await act(async () => { await result.current.loadFeeds() })
+      await act(async () => { await result.current.loadArticles('f1') })
+      await act(async () => { await result.current.markAllRead('f1') })
+
+      expect(result.current.articles.every(a => a.read)).toBe(true)
+      expect(result.current.feeds[0].unread_count).toBe(0)
+    })
+
+    it('should set error on failure', async () => {
+      vi.mocked(RssApi.markAllRead).mockRejectedValue(new Error('Mark all failed'))
+
+      const { result } = renderHook(() => useRss(), { wrapper })
+
+      await act(async () => {
+        await result.current.markAllRead('f1')
+      })
+
+      expect(result.current.error).toBe('Mark all failed')
+    })
+  })
+
+  describe('openLink', () => {
+    it('should call openLink API', async () => {
+      vi.mocked(RssApi.openLink).mockResolvedValue(undefined)
+
+      const { result } = renderHook(() => useRss(), { wrapper })
+
+      await act(async () => {
+        await result.current.openLink('https://example.com')
+      })
+
+      expect(RssApi.openLink).toHaveBeenCalledWith('https://example.com')
+    })
+
+    it('should set error on failure', async () => {
+      vi.mocked(RssApi.openLink).mockRejectedValue(new Error('Open failed'))
+
+      const { result } = renderHook(() => useRss(), { wrapper })
+
+      await act(async () => {
+        await result.current.openLink('https://example.com')
+      })
+
+      expect(result.current.error).toBe('Open failed')
+    })
+  })
+
+  describe('getGlobalUnreadCount', () => {
+    it('should sum unread counts from all feeds', async () => {
+      const feeds: FeedWithUnreadCount[] = [
+        { feed: { id: 'f1', url: '', title: 'A', created_at: '', updated_at: '' }, unread_count: 3 },
+        { feed: { id: 'f2', url: '', title: 'B', created_at: '', updated_at: '' }, unread_count: 5 },
+      ]
+      vi.mocked(RssApi.getFeeds).mockResolvedValue(feeds)
+
+      const { result } = renderHook(() => useRss(), { wrapper })
+
+      await act(async () => { await result.current.loadFeeds() })
+
+      expect(result.current.getGlobalUnreadCount()).toBe(8)
+    })
+  })
+
+  describe('updateArticleInList', () => {
+    it('should update article in the list', async () => {
+      const articles: Article[] = [
+        { id: 'a1', feed_id: 'f1', title: 'Original', link: '', read: false, created_at: '' },
+      ]
+      vi.mocked(RssApi.getArticles).mockResolvedValue(articles)
+
+      const { result } = renderHook(() => useRss(), { wrapper })
+
+      await act(async () => { await result.current.loadArticles() })
+
+      const updated: Article = { ...articles[0], title: 'Updated', ai_summary: 'Summary' }
+      act(() => {
+        result.current.updateArticleInList(updated)
+      })
+
+      expect(result.current.articles[0].title).toBe('Updated')
+      expect(result.current.articles[0].ai_summary).toBe('Summary')
     })
   })
 })
