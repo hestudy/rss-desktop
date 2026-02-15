@@ -9,7 +9,37 @@ permissions:
   contents: write
 
 jobs:
+  # 生成 Changelog
+  changelog:
+    runs-on: ubuntu-latest
+    outputs:
+      release_body: ${{ steps.read-changelog.outputs.release_body }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 需要完整历史
+
+      - name: Generate Changelog
+        id: generate-changelog
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          args: --latest --strip header
+        env:
+          OUTPUT: CHANGES.md
+
+      - name: Read Changelog
+        id: read-changelog
+        run: |
+          {
+            echo 'release_body<<EOF'
+            cat CHANGES.md
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+  # 构建和发布
   release:
+    needs: changelog
     strategy:
       fail-fast: false
       matrix:
@@ -80,7 +110,7 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'RSS Desktop ${{ github.ref_name }}'
-          releaseBody: 'See the assets to download and install this version.'
+          releaseBody: ${{ needs.changelog.outputs.release_body }}
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
