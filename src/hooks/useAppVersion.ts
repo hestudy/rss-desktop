@@ -10,10 +10,7 @@ export function useAppVersion(): string {
       .then((v) => {
         if (!cancelled) setVersion(`v${v}`)
       })
-      .catch((err) => {
-        if (import.meta.env.DEV) {
-          console.warn('Failed to get app version:', err)
-        }
+      .catch(() => {
         if (!cancelled) setVersion('unknown')
       })
     return () => { cancelled = true }

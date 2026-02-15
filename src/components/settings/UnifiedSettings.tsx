@@ -523,8 +523,8 @@ function AiSection() {
     setSaving(true)
     try {
       await updateAiSettings(updated)
-    } catch (error) {
-      console.error('Failed to save AI settings:', error)
+    } catch {
+      // 静默失败，用户可通过 UI 状态感知
     } finally {
       setSaving(false)
     }

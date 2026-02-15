@@ -20,8 +20,8 @@ export function useQueueStatus(): UseQueueStatusReturn {
     try {
       const snapshot = await RssApi.queueGetStatus()
       setStatus(snapshot)
-    } catch (err) {
-      console.warn('Failed to refresh queue status:', err)
+    } catch {
+      // 静默失败，队列状态更新失败不影响用户体验
     }
   }, [])
 

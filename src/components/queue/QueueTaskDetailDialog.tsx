@@ -83,8 +83,7 @@ export function QueueTaskDetailDialog({
       try {
         const result = await RssApi.getArticle(task.task_type.article_id)
         setArticle(result)
-      } catch (error) {
-        console.error('Failed to load article:', error)
+      } catch {
         setArticle(null)
       } finally {
         setIsLoadingArticle(false)
