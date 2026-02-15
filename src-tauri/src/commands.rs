@@ -6,6 +6,7 @@ use crate::ai_translator;
 use crate::settings::AiSettings;
 use crate::storage_sqlite::{SqliteStorage, MAX_ARTICLES_LIMIT};
 use crate::task_queue::{TaskQueue, TaskType, TaskPriority, QueueTask};
+use crate::notifications::PendingNotificationFeed;
 use tauri::{State, Emitter};
 use std::sync::Arc;
 use log::{warn, info};
@@ -825,4 +826,12 @@ pub fn process_new_articles_background(
             feed_title
         );
     });
+}
+
+/// 获取并清除待跳转的通知 feed_id
+#[tauri::command]
+pub async fn get_pending_notification_feed(
+    pending: State<'_, Arc<PendingNotificationFeed>>,
+) -> CommandResult<Option<String>> {
+    Ok(pending.take())
 }

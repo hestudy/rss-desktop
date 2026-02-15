@@ -2,6 +2,55 @@ use crate::settings::{AppSettings, NotificationType};
 use crate::background_scheduler::NewArticlesEvent;
 use tauri::{AppHandle, Runtime};
 use tauri_plugin_notification::NotificationExt;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
+
+/// 通知导航有效期（秒）
+const PENDING_FEED_TIMEOUT_SECS: u64 = 30;
+
+/// 待处理的通知导航目标（点击通知后跳转的 feed_id）
+/// 超过 PENDING_FEED_TIMEOUT_SECS 秒后自动失效，避免用户很久之后切回窗口时意外跳转。
+pub struct PendingNotificationFeed {
+    inner: Mutex<Option<(String, Instant)>>,
+}
+
+impl PendingNotificationFeed {
+    pub fn new() -> Self {
+        Self {
+            inner: Mutex::new(None),
+        }
+    }
+
+    /// 设置待跳转的 feed_id（同时记录时间戳）
+    pub fn set(&self, id: String) {
+        let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        *guard = Some((id, Instant::now()));
+    }
+
+    /// 取出并清除待跳转的 feed_id。超时则返回 None。
+    pub fn take(&self) -> Option<String> {
+        let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        match guard.take() {
+            Some((id, ts)) if ts.elapsed() < Duration::from_secs(PENDING_FEED_TIMEOUT_SECS) => {
+                Some(id)
+            }
+            _ => None,
+        }
+    }
+
+    /// 仅用于测试：以指定时间戳设置 feed_id
+    #[cfg(test)]
+    fn set_with_instant(&self, id: String, instant: Instant) {
+        let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        *guard = Some((id, instant));
+    }
+}
+
+impl Default for PendingNotificationFeed {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 /// 通知管理器 - 使用 tauri-plugin-notification 发送 OS 系统通知
 pub struct NotificationManager<R: Runtime> {
@@ -214,5 +263,72 @@ mod tests {
         assert!(body.contains("Article 2"));
         // others = 10 - 2(shown) = 8
         assert!(body.contains("还有 8 篇文章"));
+    }
+
+    // ---- PendingNotificationFeed 测试 ----
+
+    #[test]
+    fn test_pending_feed_new_is_none() {
+        let pending = PendingNotificationFeed::new();
+        assert_eq!(pending.take(), None);
+    }
+
+    #[test]
+    fn test_pending_feed_set_and_take() {
+        let pending = PendingNotificationFeed::new();
+        pending.set("feed-123".to_string());
+        assert_eq!(pending.take(), Some("feed-123".to_string()));
+    }
+
+    #[test]
+    fn test_pending_feed_take_clears_value() {
+        let pending = PendingNotificationFeed::new();
+        pending.set("feed-abc".to_string());
+        let _ = pending.take(); // first take
+        assert_eq!(pending.take(), None); // second take should be None
+    }
+
+    #[test]
+    fn test_pending_feed_set_overwrites_previous() {
+        let pending = PendingNotificationFeed::new();
+        pending.set("feed-1".to_string());
+        pending.set("feed-2".to_string());
+        assert_eq!(pending.take(), Some("feed-2".to_string()));
+    }
+
+    #[test]
+    fn test_pending_feed_expired_returns_none() {
+        let pending = PendingNotificationFeed::new();
+        // 设置一个 31 秒前的时间戳
+        let expired = Instant::now() - Duration::from_secs(PENDING_FEED_TIMEOUT_SECS + 1);
+        pending.set_with_instant("feed-old".to_string(), expired);
+        assert_eq!(pending.take(), None);
+    }
+
+    #[test]
+    fn test_pending_feed_within_timeout_returns_value() {
+        let pending = PendingNotificationFeed::new();
+        // 设置一个 5 秒前的时间戳（在 30 秒有效期内）
+        let recent = Instant::now() - Duration::from_secs(5);
+        pending.set_with_instant("feed-recent".to_string(), recent);
+        assert_eq!(pending.take(), Some("feed-recent".to_string()));
+    }
+
+    #[test]
+    fn test_pending_feed_concurrent_access() {
+        use std::sync::Arc;
+        let pending = Arc::new(PendingNotificationFeed::new());
+        let mut handles = vec![];
+        for i in 0..10 {
+            let p = pending.clone();
+            handles.push(std::thread::spawn(move || {
+                p.set(format!("feed-{}", i));
+            }));
+        }
+        for h in handles {
+            h.join().unwrap();
+        }
+        assert!(pending.take().is_some());
+        assert!(pending.take().is_none());
     }
 }

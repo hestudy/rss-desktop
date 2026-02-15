@@ -11,6 +11,7 @@ import { EmptyReaderPlaceholder } from "./components/articles/EmptyReaderPlaceho
 import { ResizeHandle } from "./components/ui/ResizeHandle";
 import { Group, Panel, type Layout, useGroupRef } from "react-resizable-panels";
 import { invoke } from "@tauri-apps/api/core";
+import { useNotificationNavigation } from "./hooks/useNotificationNavigation";
 import "./styles/themes/index.css";
 
 const STORAGE_KEY = "panel-layout-v2";
@@ -34,10 +35,13 @@ interface ThreePanelLayout {
 }
 
 function AppContent() {
-  const { loadFeeds, silentRefreshAll, articles } = useRss();
+  const { loadFeeds, silentRefreshAll, articles, selectFeedAndLoad } = useRss();
   const { selectedArticleId, selectArticle, readerSettings } = useReader();
   const groupRef = useGroupRef();
   const initialRefreshDone = useRef(false);
+
+  // 点击通知后自动跳转到对应订阅
+  useNotificationNavigation(selectFeedAndLoad);
 
   // 获取当前选中的文章
   const selectedArticle = articles.find(a => a.id === selectedArticleId) || null;

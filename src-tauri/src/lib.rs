@@ -26,6 +26,7 @@ pub use error::{RssError, Result};
 pub use settings::{AiSettings, AppSettings, SchedulerState, PollInterval, NotificationType};
 pub use background_scheduler::{BackgroundScheduler, NewArticlesEvent, ArticleSummary};
 pub(crate) use notifications::NotificationManager;
+pub use notifications::PendingNotificationFeed;
 pub use task_queue::{TaskQueue, TaskType, TaskPriority, QueueTask};
 
 use std::path::PathBuf;
@@ -85,6 +86,9 @@ pub fn run() {
             // 创建通知管理器
             let notification_manager = Arc::new(NotificationManager::new(app.handle().clone()));
 
+            // 创建通知导航 pending state
+            let pending_notification_feed = Arc::new(PendingNotificationFeed::new());
+
             // 注册共享 Storage 到 Tauri 状态（所有命令通过 State<Arc<SqliteStorage>> 访问）
             app.manage(shared_storage.clone());
 
@@ -92,6 +96,7 @@ pub fn run() {
             app.manage(scheduler.clone());
             app.manage(unread_count.clone());
             app.manage(notification_manager.clone());
+            app.manage(pending_notification_feed.clone());
 
             let max_concurrency = 3;
             let task_queue = Arc::new(TaskQueue::new(
@@ -119,6 +124,7 @@ pub fn run() {
             let unread_count_clone = unread_count.clone();
             let task_queue_for_scheduler = task_queue.clone();
             let notifier = notification_manager.clone();
+            let pending_feed = pending_notification_feed.clone();
 
             tauri::async_runtime::spawn(async move {
                 if let Err(e) = scheduler_clone.start(storage_for_scheduler, Some(task_queue_for_scheduler)).await {
@@ -153,6 +159,11 @@ pub fn run() {
                     // 发送 OS 系统通知
                     if let Err(e) = notifier.notify_new_articles(&event, &settings) {
                         error!("Failed to send notification: {}", e);
+                    } else {
+                        // 通知发送成功，存储 feed_id 用于点击导航。
+                        // 注意：多条通知快速到达时，只保留最后一个 feed_id。
+                        // 前端在窗口获得焦点时消费此值并跳转。
+                        pending_feed.set(event.feed_id.clone());
                     }
 
                     // 更新未读计数
@@ -221,6 +232,7 @@ pub fn run() {
             commands::get_ai_usage_summary,
             commands::clear_ai_usage_records,
             commands::get_builtin_model_prices,
+            commands::get_pending_notification_feed,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
