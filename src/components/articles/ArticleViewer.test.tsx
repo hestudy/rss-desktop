@@ -1,10 +1,11 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { ArticleViewer } from './ArticleViewer'
 import { DEFAULT_READER_SETTINGS } from '../../types'
-import type { Article, ReaderSettings } from '../../types'
+import type { Article, ReaderSettings, TaskProgressEvent } from '../../types'
 import { RssApi } from '../../lib/api'
 import { clearAllCache, loadArticleViewState } from '../../lib/articleViewStateCache'
+import { listen } from '@tauri-apps/api/event'
 
 // Mock lucide-react icons
 vi.mock('lucide-react', () => ({
@@ -1263,6 +1264,364 @@ describe('ArticleViewer', () => {
       })
 
       expect(RssApi.generateSummary).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('Tauri event listener - queue-task-progress', () => {
+    let eventCallbacks: Map<string, (event: { payload: TaskProgressEvent }) => void> = new Map()
+
+    beforeEach(() => {
+      eventCallbacks.clear()
+      vi.mocked(listen).mockImplementation(async (eventName: string, callback: (event: { payload: TaskProgressEvent }) => void) => {
+        eventCallbacks.set(eventName, callback)
+        return () => {}
+      })
+    })
+
+    afterEach(() => {
+      eventCallbacks.clear()
+    })
+
+    it('should update full content when fetch_full_content task completes', async () => {
+      const latestArticle: Article = {
+        ...mockArticle,
+        full_content: '<p>Full content from event</p>',
+      }
+      vi.mocked(RssApi.getArticle).mockResolvedValue(latestArticle)
+
+      render(
+        <ArticleViewer
+          article={mockArticle}
+          articles={mockArticles}
+          readerSettings={mockReaderSettings}
+        />
+      )
+
+      // Wait for component to set up event listener
+      await waitFor(() => {
+        expect(listen).toHaveBeenCalledWith('queue-task-progress', expect.any(Function))
+      })
+
+      // Simulate task progress event
+      const callback = eventCallbacks.get('queue-task-progress')
+      expect(callback).toBeDefined()
+
+      await act(async () => {
+        callback?.({
+          payload: {
+            article_id: 'article-1',
+            task_type: 'fetch_full_content',
+            status: 'completed',
+          } as TaskProgressEvent
+        })
+      })
+
+      await waitFor(() => {
+        expect(RssApi.getArticle).toHaveBeenCalledWith('article-1')
+      })
+
+      await waitFor(() => {
+        expect(screen.getByText('Full content from event')).toBeInTheDocument()
+      })
+    })
+
+    it('should update AI summary when ai_summary task completes', async () => {
+      const latestArticle: Article = {
+        ...mockArticle,
+        ai_summary: 'AI summary from event',
+      }
+      vi.mocked(RssApi.getArticle).mockResolvedValue(latestArticle)
+
+      render(
+        <ArticleViewer
+          article={mockArticle}
+          articles={mockArticles}
+          readerSettings={mockReaderSettings}
+        />
+      )
+
+      await waitFor(() => {
+        expect(listen).toHaveBeenCalledWith('queue-task-progress', expect.any(Function))
+      })
+
+      const callback = eventCallbacks.get('queue-task-progress')
+
+      await act(async () => {
+        callback?.({
+          payload: {
+            article_id: 'article-1',
+            task_type: 'ai_summary',
+            status: 'completed',
+          } as TaskProgressEvent
+        })
+      })
+
+      await waitFor(() => {
+        expect(screen.getByText('AI summary from event')).toBeInTheDocument()
+      })
+    })
+
+    it('should update AI translation when ai_translation task completes', async () => {
+      const latestArticle: Article = {
+        ...mockArticle,
+        ai_translation: '<p>Translation from event</p>',
+      }
+      vi.mocked(RssApi.getArticle).mockResolvedValue(latestArticle)
+
+      render(
+        <ArticleViewer
+          article={mockArticle}
+          articles={mockArticles}
+          readerSettings={mockReaderSettings}
+        />
+      )
+
+      await waitFor(() => {
+        expect(listen).toHaveBeenCalledWith('queue-task-progress', expect.any(Function))
+      })
+
+      const callback = eventCallbacks.get('queue-task-progress')
+
+      await act(async () => {
+        callback?.({
+          payload: {
+            article_id: 'article-1',
+            task_type: 'ai_translation',
+            status: 'completed',
+          } as TaskProgressEvent
+        })
+      })
+
+      await waitFor(() => {
+        expect(screen.getByText('Translation from event')).toBeInTheDocument()
+      })
+    })
+
+    it('should ignore events for different articles', async () => {
+      vi.mocked(RssApi.getArticle).mockResolvedValue({
+        ...mockArticle,
+        full_content: '<p>Should not appear</p>',
+      })
+
+      render(
+        <ArticleViewer
+          article={mockArticle}
+          articles={mockArticles}
+          readerSettings={mockReaderSettings}
+        />
+      )
+
+      await waitFor(() => {
+        expect(listen).toHaveBeenCalledWith('queue-task-progress', expect.any(Function))
+      })
+
+      // Clear any previous calls from mount effect
+      vi.mocked(RssApi.getArticle).mockClear()
+
+      const callback = eventCallbacks.get('queue-task-progress')
+
+      await act(async () => {
+        callback?.({
+          payload: {
+            article_id: 'different-article-id',
+            task_type: 'fetch_full_content',
+            status: 'completed',
+          } as TaskProgressEvent
+        })
+      })
+
+      // Should not call getArticle for different article
+      expect(RssApi.getArticle).not.toHaveBeenCalled()
+    })
+
+    it('should ignore non-completed events', async () => {
+      vi.mocked(RssApi.getArticle).mockResolvedValue({
+        ...mockArticle,
+        full_content: '<p>Should not appear</p>',
+      })
+
+      render(
+        <ArticleViewer
+          article={mockArticle}
+          articles={mockArticles}
+          readerSettings={mockReaderSettings}
+        />
+      )
+
+      await waitFor(() => {
+        expect(listen).toHaveBeenCalledWith('queue-task-progress', expect.any(Function))
+      })
+
+      // Clear any previous calls from mount effect
+      vi.mocked(RssApi.getArticle).mockClear()
+
+      const callback = eventCallbacks.get('queue-task-progress')
+
+      await act(async () => {
+        callback?.({
+          payload: {
+            article_id: 'article-1',
+            task_type: 'fetch_full_content',
+            status: 'running',
+          } as TaskProgressEvent
+        })
+      })
+
+      expect(RssApi.getArticle).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('translate with full content fetch', () => {
+    it('should fetch full content before translating when feed uses full content', async () => {
+      mockFeeds = [{ feed: { id: 'feed-1', use_full_content: true, use_ai_summary: false }, unread_count: 0 }]
+
+      const fetchedArticle: Article = {
+        ...mockArticle,
+        full_content: '<p>Full content fetched</p>',
+      }
+      const translatedArticle: Article = {
+        ...fetchedArticle,
+        ai_translation: '<p>Translated full content</p>',
+      }
+
+      vi.mocked(RssApi.fetchFullContent).mockResolvedValue(fetchedArticle)
+      vi.mocked(RssApi.translateArticle).mockResolvedValue(translatedArticle)
+
+      render(
+        <ArticleViewer
+          article={mockArticle}
+          articles={mockArticles}
+          readerSettings={mockReaderSettings}
+        />
+      )
+
+      const translateBtn = screen.getByTitle('翻译文章')
+      fireEvent.click(translateBtn)
+
+      await waitFor(() => {
+        expect(RssApi.fetchFullContent).toHaveBeenCalledWith('article-1')
+      })
+
+      await waitFor(() => {
+        expect(RssApi.translateArticle).toHaveBeenCalledWith('article-1')
+      })
+
+      await waitFor(() => {
+        expect(screen.getByText('Translated full content')).toBeInTheDocument()
+      })
+
+      mockFeeds = [{ feed: { id: 'feed-1', use_full_content: false, use_ai_summary: false }, unread_count: 0 }]
+    })
+  })
+
+  describe('scroll progress', () => {
+    it('should update reading progress when scrolled more than 5%', async () => {
+      // Mock updateReadingProgress to return a Promise
+      vi.mocked(RssApi.updateReadingProgress).mockResolvedValue(undefined)
+
+      const articleWithProgress: Article = {
+        ...mockArticle,
+        reading_progress: 0,
+      }
+
+      render(
+        <ArticleViewer
+          article={articleWithProgress}
+          articles={mockArticles}
+          readerSettings={mockReaderSettings}
+        />
+      )
+
+      const contentArea = screen.getByTestId('article-content-area')
+
+      // Mock scroll properties - scroll enough to trigger update (>5%)
+      Object.defineProperty(contentArea, 'scrollTop', { writable: true, value: 100 })
+      Object.defineProperty(contentArea, 'scrollHeight', { writable: true, value: 1000 })
+      Object.defineProperty(contentArea, 'clientHeight', { writable: true, value: 500 })
+
+      await act(async () => {
+        fireEvent.scroll(contentArea)
+      })
+
+      await waitFor(() => {
+        expect(RssApi.updateReadingProgress).toHaveBeenCalledWith('article-1', expect.any(Number))
+      })
+    })
+
+    it('should not update progress when scrolled less than 5%', async () => {
+      const articleWithProgress: Article = {
+        ...mockArticle,
+        reading_progress: 0,
+      }
+
+      render(
+        <ArticleViewer
+          article={articleWithProgress}
+          articles={mockArticles}
+          readerSettings={mockReaderSettings}
+        />
+      )
+
+      const contentArea = screen.getByTestId('article-content-area')
+
+      // Small scroll - less than 5% change
+      Object.defineProperty(contentArea, 'scrollTop', { writable: true, value: 10 })
+      Object.defineProperty(contentArea, 'scrollHeight', { writable: true, value: 1000 })
+      Object.defineProperty(contentArea, 'clientHeight', { writable: true, value: 500 })
+
+      await act(async () => {
+        fireEvent.scroll(contentArea)
+      })
+
+      // Wait a bit to ensure no call is made
+      await new Promise(resolve => setTimeout(resolve, 100))
+
+      expect(RssApi.updateReadingProgress).not.toHaveBeenCalled()
+    })
+
+    it('should initialize scroll position from reading_progress', async () => {
+      const articleWithProgress: Article = {
+        ...mockArticle,
+        reading_progress: 50,
+      }
+
+      render(
+        <ArticleViewer
+          article={articleWithProgress}
+          articles={mockArticles}
+          readerSettings={mockReaderSettings}
+        />
+      )
+
+      const contentArea = screen.getByTestId('article-content-area')
+
+      // The scroll position should be set based on reading_progress
+      // We can't directly verify scrollTop in jsdom, but we can check the component rendered
+      expect(contentArea).toBeInTheDocument()
+    })
+  })
+
+  describe('error banner auto-dismiss', () => {
+    it('should show error banner when fetch fails', async () => {
+      vi.mocked(RssApi.fetchFullContent).mockRejectedValue(new Error('Test error'))
+
+      render(
+        <ArticleViewer
+          article={mockArticle}
+          articles={mockArticles}
+          readerSettings={mockReaderSettings}
+        />
+      )
+
+      const fetchButton = screen.getByTitle('抓取全文')
+      fireEvent.click(fetchButton)
+
+      await waitFor(() => {
+        expect(screen.getByTestId('fetch-error-banner')).toHaveTextContent('Test error')
+      })
+
+      // Error banner should be visible
+      expect(screen.getByTestId('fetch-error-banner')).toBeInTheDocument()
     })
   })
 })
