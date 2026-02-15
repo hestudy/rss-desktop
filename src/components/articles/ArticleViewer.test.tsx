@@ -1268,11 +1268,13 @@ describe('ArticleViewer', () => {
   })
 
   describe('Tauri event listener - queue-task-progress', () => {
-    let eventCallbacks: Map<string, (event: { payload: TaskProgressEvent }) => void> = new Map()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let eventCallbacks: Map<string, (event: any) => void> = new Map()
 
     beforeEach(() => {
       eventCallbacks.clear()
-      vi.mocked(listen).mockImplementation(async (eventName: string, callback: (event: { payload: TaskProgressEvent }) => void) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(listen).mockImplementation(async (eventName: any, callback: any) => {
         eventCallbacks.set(eventName, callback)
         return () => {}
       })

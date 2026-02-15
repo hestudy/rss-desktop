@@ -89,7 +89,7 @@ export function useAutoUpdater(): UseAutoUpdaterReturn {
         setUpdateInfo({
           version: update.version,
           currentVersion: update.currentVersion,
-          date: update.date,
+          date: update.date ? new Date(update.date) : undefined,
           body: update.body,
         })
       } else {
