@@ -477,6 +477,69 @@ export function buildTauriMockScript(): string {
       case 'check_update':
         return Promise.resolve(null);
 
+      case 'export_config':
+        return Promise.resolve({
+          version: '1.0',
+          exportedAt: new Date().toISOString(),
+          feeds: feeds.map(f => ({
+            url: f.feed.url,
+            title: f.feed.title,
+            description: f.feed.description,
+            icon_url: f.feed.icon_url,
+            use_full_content: false,
+            use_ai_summary: false,
+            use_ai_translation: false,
+          })),
+          aiSettings: {
+            apiEndpoint: 'https://api.openai.com/v1',
+            model: 'gpt-4o-mini',
+            maxTokens: 300,
+            prompt: '你是一个专业的文章摘要助手。',
+            enableAutoSummary: false,
+            language: 'zh-CN',
+            maxConcurrency: 3,
+          },
+          appSettings: {
+            pollInterval: '30m',
+            notificationType: 'system',
+            enableNotifications: false,
+            maxNotificationsPerBatch: 5,
+            enableBackgroundRefresh: true,
+            closeToTray: true,
+          },
+        });
+
+      case 'import_config': {
+        const config = args.config;
+        if (!config || !config.feeds) {
+          return Promise.resolve({
+            success: false,
+            feedsImported: 0,
+            feedsSkipped: 0,
+            settingsImported: false,
+            aiSettingsImported: false,
+            error: 'Invalid config format',
+          });
+        }
+        let imported = 0;
+        let skipped = 0;
+        config.feeds.forEach(feed => {
+          const exists = feeds.some(f => f.feed.url === feed.url);
+          if (exists) {
+            skipped++;
+          } else {
+            imported++;
+          }
+        });
+        return Promise.resolve({
+          success: true,
+          feedsImported: imported,
+          feedsSkipped: skipped,
+          settingsImported: !!config.appSettings,
+          aiSettingsImported: !!config.aiSettings,
+        });
+      }
+
       default:
         console.warn('[Tauri Mock] Unknown command:', command, args);
         return Promise.resolve(null);
