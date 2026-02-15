@@ -130,4 +130,25 @@ export class ArticleListPage {
     const desc = article.locator('p').first()
     return await desc.textContent()
   }
+
+  /**
+   * Check if an article has a thumbnail
+   */
+  async hasThumbnail(index: number): Promise<boolean> {
+    const article = this.articleItems.nth(index)
+    const thumbnail = article.locator('[data-testid="article-thumbnail"]')
+    return await thumbnail.isVisible().catch(() => false)
+  }
+
+  /**
+   * Get thumbnail URL of an article
+   */
+  async getThumbnailUrl(index: number): Promise<string | null> {
+    const article = this.articleItems.nth(index)
+    const thumbnail = article.locator('[data-testid="article-thumbnail"]')
+    if (await thumbnail.isVisible().catch(() => false)) {
+      return await thumbnail.getAttribute('src')
+    }
+    return null
+  }
 }

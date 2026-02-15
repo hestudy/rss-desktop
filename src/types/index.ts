@@ -41,6 +41,8 @@ export interface Article {
   ai_translation?: string
   /** AI 翻译的标题 */
   ai_translated_title?: string
+  /** 文章缩略图 URL */
+  thumbnail_url?: string
 }
 
 /**

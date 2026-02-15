@@ -187,8 +187,8 @@ impl SqliteStorage {
         }
 
         conn.execute(
-            "INSERT INTO articles (id, feed_id, title, link, description, content, published_at, read, created_at, reading_progress, favorite, full_content, ai_summary, ai_translation, ai_translated_title, guid)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+            "INSERT INTO articles (id, feed_id, title, link, description, content, published_at, read, created_at, reading_progress, favorite, full_content, ai_summary, ai_translation, ai_translated_title, guid, thumbnail_url)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
             params![
                 article.id,
                 article.feed_id,
@@ -206,6 +206,7 @@ impl SqliteStorage {
                 article.ai_translation,
                 article.ai_translated_title,
                 article.guid,
+                article.thumbnail_url,
             ],
         )?;
         Ok(())
@@ -222,7 +223,7 @@ impl SqliteStorage {
         let sql = if is_all_feeds {
             // 全部 feed：未读优先 + 时间倒序
             format!(
-                "SELECT id, feed_id, title, link, description, content, published_at, read, created_at, reading_progress, favorite, full_content, ai_summary, ai_translation, ai_translated_title, guid
+                "SELECT id, feed_id, title, link, description, content, published_at, read, created_at, reading_progress, favorite, full_content, ai_summary, ai_translation, ai_translated_title, guid, thumbnail_url
                  FROM articles
                  ORDER BY read ASC, COALESCE(published_at, created_at) DESC
                  {}",
@@ -231,7 +232,7 @@ impl SqliteStorage {
         } else {
             // 单个 feed：纯时间倒序
             format!(
-                "SELECT id, feed_id, title, link, description, content, published_at, read, created_at, reading_progress, favorite, full_content, ai_summary, ai_translation, ai_translated_title, guid
+                "SELECT id, feed_id, title, link, description, content, published_at, read, created_at, reading_progress, favorite, full_content, ai_summary, ai_translation, ai_translated_title, guid, thumbnail_url
                  FROM articles
                  WHERE feed_id = ?1
                  ORDER BY COALESCE(published_at, created_at) DESC
@@ -290,7 +291,7 @@ impl SqliteStorage {
     pub fn get_article(&self, id: &str) -> Result<Option<Article>> {
         let conn = self.lock_conn()?;
         let mut stmt = conn.prepare(
-            "SELECT id, feed_id, title, link, description, content, published_at, read, created_at, reading_progress, favorite, full_content, ai_summary, ai_translation, ai_translated_title, guid FROM articles WHERE id = ?1",
+            "SELECT id, feed_id, title, link, description, content, published_at, read, created_at, reading_progress, favorite, full_content, ai_summary, ai_translation, ai_translated_title, guid, thumbnail_url FROM articles WHERE id = ?1",
         )?;
         let mut rows = stmt.query_map(params![id], |row| Self::row_to_article(row))?;
         match rows.next() {
@@ -334,7 +335,7 @@ impl SqliteStorage {
     pub fn get_favorite_articles(&self, limit: Option<usize>) -> Result<Vec<Article>> {
         let conn = self.lock_conn()?;
         let sql = format!(
-            "SELECT id, feed_id, title, link, description, content, published_at, read, created_at, reading_progress, favorite, full_content, ai_summary, ai_translation, ai_translated_title, guid
+            "SELECT id, feed_id, title, link, description, content, published_at, read, created_at, reading_progress, favorite, full_content, ai_summary, ai_translation, ai_translated_title, guid, thumbnail_url
              FROM articles WHERE favorite = 1
              ORDER BY created_at DESC
              {}",
@@ -442,6 +443,7 @@ impl SqliteStorage {
             ai_translation: row.get(13)?,
             ai_translated_title: row.get(14)?,
             guid: row.get(15)?,
+            thumbnail_url: row.get(16)?,
         })
     }
 
@@ -786,6 +788,7 @@ mod tests {
             ai_translation: None,
             ai_translated_title: None,
             guid: None,
+            thumbnail_url: None,
         }
     }
 

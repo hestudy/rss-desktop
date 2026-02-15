@@ -224,6 +224,7 @@ mod tests {
             ai_translation: Some("Trans".to_string()),
             ai_translated_title: Some("翻译标题".to_string()),
             guid: Some("guid-1".to_string()),
+            thumbnail_url: Some("https://example.com/thumb.jpg".to_string()),
         };
         fs::write(tmp.path().join("articles.json"), serde_json::to_string(&vec![&article]).unwrap()).unwrap();
 

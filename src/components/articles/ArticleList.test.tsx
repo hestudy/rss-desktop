@@ -240,4 +240,41 @@ describe('ArticleList', () => {
     // Header shows feed title
     expect(screen.getByText('Tech Blog')).toBeInTheDocument()
   })
+
+  it('应该传递 thumbnail_url 到 ArticleCard', () => {
+    mockArticles = [
+      {
+        id: 'a1',
+        feed_id: 'feed-1',
+        title: 'Article with Thumbnail',
+        link: 'https://example.com',
+        read: false,
+        created_at: '2026-01-01T00:00:00Z',
+        published_at: '2026-01-01T00:00:00Z',
+        thumbnail_url: 'https://example.com/thumb.jpg',
+      },
+    ]
+    render(<ArticleList />)
+    // ArticleCard 应该显示缩略图
+    const thumbnail = screen.getByTestId('article-thumbnail')
+    expect(thumbnail).toHaveAttribute('src', 'https://example.com/thumb.jpg')
+  })
+
+  it('应该在没有 thumbnail_url 时不显示缩略图', () => {
+    mockArticles = [
+      {
+        id: 'a1',
+        feed_id: 'feed-1',
+        title: 'Article without Thumbnail',
+        link: 'https://example.com',
+        read: false,
+        created_at: '2026-01-01T00:00:00Z',
+        published_at: '2026-01-01T00:00:00Z',
+        // 没有 thumbnail_url
+      },
+    ]
+    render(<ArticleList />)
+    // ArticleCard 不应该显示缩略图
+    expect(screen.queryByTestId('article-thumbnail')).not.toBeInTheDocument()
+  })
 })

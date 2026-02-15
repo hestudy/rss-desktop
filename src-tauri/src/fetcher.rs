@@ -97,6 +97,60 @@ pub fn validate_api_endpoint(endpoint: &str) -> std::result::Result<(), String> 
     Ok(())
 }
 
+/// 验证 URL 是否为有效的 HTTP/HTTPS 协议
+fn is_valid_http_url(url: &str) -> bool {
+    url.starts_with("http://") || url.starts_with("https://")
+}
+
+/// 从 RSS entry 中提取缩略图 URL
+/// 优先级: media:thumbnail > media:content[image] > content 中的第一个 <img>
+fn extract_thumbnail(entry: &feed_rs::model::Entry) -> Option<String> {
+    // 1. 检查 media:thumbnail
+    for media in &entry.media {
+        for thumbnail in &media.thumbnails {
+            if !thumbnail.image.uri.is_empty() && is_valid_http_url(&thumbnail.image.uri) {
+                return Some(thumbnail.image.uri.clone());
+            }
+        }
+        // 2. 检查 media:content 中的图片
+        for content in &media.content {
+            if let Some(ref url) = content.url {
+                if let Some(ref content_type) = content.content_type {
+                    let type_str = content_type.to_string();
+                    if type_str.starts_with("image/")
+                        && !url.as_str().is_empty()
+                        && is_valid_http_url(url.as_str())
+                    {
+                        return Some(url.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    // 3. 从 content 或 summary 中使用正则表达式提取第一个 <img> src
+    let html_content = entry
+        .content
+        .as_ref()
+        .and_then(|c| c.body.as_ref())
+        .or_else(|| entry.summary.as_ref().map(|s| &s.content));
+
+    if let Some(html) = html_content {
+        // 使用正则表达式提取 img src（大小写不敏感，支持单引号和双引号）
+        // 匹配: <img ... src="..." ...> 或 <img ... src='...' ...>
+        let img_pattern =
+            regex::Regex::new(r#"(?i)<img[^>]+src\s*=\s*["']([^"']+)["']"#).unwrap();
+        if let Some(caps) = img_pattern.captures(html) {
+            let url = &caps[1];
+            if !url.is_empty() && is_valid_http_url(url) {
+                return Some(url.to_string());
+            }
+        }
+    }
+
+    None
+}
+
 /// 从 URL 获取并解析 RSS Feed
 pub fn fetch_feed(url: &str) -> Result<FeedResult> {
     // 验证 URL（防止 SSRF）
@@ -172,7 +226,8 @@ pub fn fetch_feed(url: &str) -> Result<FeedResult> {
         .entries
         .into_iter()
         .filter_map(|entry| {
-            let title = entry.title.map(|t| t.content)?;
+            let thumbnail_url = extract_thumbnail(&entry);
+            let title = entry.title.as_ref().map(|t| t.content.clone())?;
             let link = entry
                 .links
                 .first()
@@ -185,14 +240,15 @@ pub fn fetch_feed(url: &str) -> Result<FeedResult> {
             };
 
             let published_at = entry.published.or(entry.updated);
-            let content = entry.content.and_then(|c| c.body);
+            let content = entry.content.as_ref().and_then(|c| c.body.clone());
+            let description = entry.summary.as_ref().map(|s| s.content.clone());
 
             Some(Article {
                 id: Uuid::new_v4().to_string(),
                 feed_id: feed_id.clone(),
                 title,
                 link,
-                description: entry.summary.map(|s| s.content),
+                description,
                 content,
                 published_at,
                 read: false,
@@ -204,6 +260,7 @@ pub fn fetch_feed(url: &str) -> Result<FeedResult> {
                 ai_translation: None,
                 ai_translated_title: None,
                 guid,
+                thumbnail_url,
             })
         })
         .take(MAX_ARTICLES_PER_FETCH) // 限制文章数量
@@ -285,5 +342,211 @@ mod tests {
         let result = fetch_feed("https://example.com/feed.xml");
         // 预期会失败，因为这不是真实的 RSS URL
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_extract_thumbnail_from_rss_content() {
+        // 使用 RSS XML 解析来测试缩略图提取
+        // 需要包含 content 命名空间
+        let rss_xml = r#"
+            <?xml version="1.0" encoding="UTF-8"?>
+            <rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+                <channel>
+                    <title>Test Feed</title>
+                    <link>https://example.com</link>
+                    <item>
+                        <title>Test Article with Image</title>
+                        <link>https://example.com/article/1</link>
+                        <description>Description text</description>
+                        <content:encoded><![CDATA[<p>Content</p><img src="https://example.com/content-img.jpg"/><p>More</p>]]></content:encoded>
+                    </item>
+                </channel>
+            </rss>
+        "#;
+        let parsed = feed_rs::parser::parse(rss_xml.as_bytes()).unwrap();
+        let entry = &parsed.entries[0];
+        // feed_rs 会将 content:encoded 解析到 content.body 或 summary
+        // 让我们检查实际解析结果
+        let has_content_img = entry.content.as_ref()
+            .and_then(|c| c.body.as_ref())
+            .map(|b| b.contains("<img"))
+            .unwrap_or(false);
+        let has_summary_img = entry.summary.as_ref()
+            .map(|s| s.content.contains("<img"))
+            .unwrap_or(false);
+
+        // 如果 content 或 summary 中有图片，extract_thumbnail 应该能提取
+        if has_content_img || has_summary_img {
+            let result = extract_thumbnail(entry);
+            assert!(result.is_some(), "Expected thumbnail to be extracted from content or summary");
+        }
+        // 如果两者都没有图片，则返回 None
+    }
+
+    #[test]
+    fn test_extract_thumbnail_from_description() {
+        let rss_xml = r#"
+            <?xml version="1.0" encoding="UTF-8"?>
+            <rss version="2.0">
+                <channel>
+                    <title>Test Feed</title>
+                    <link>https://example.com</link>
+                    <item>
+                        <title>Test Article</title>
+                        <link>https://example.com/article/2</link>
+                        <description><![CDATA[Description <img src="https://example.com/desc-img.png"/>]]></description>
+                    </item>
+                </channel>
+            </rss>
+        "#;
+        let parsed = feed_rs::parser::parse(rss_xml.as_bytes()).unwrap();
+        let entry = &parsed.entries[0];
+        let result = extract_thumbnail(entry);
+        assert_eq!(result, Some("https://example.com/desc-img.png".to_string()));
+    }
+
+    #[test]
+    fn test_extract_thumbnail_no_image() {
+        let rss_xml = r#"
+            <?xml version="1.0" encoding="UTF-8"?>
+            <rss version="2.0">
+                <channel>
+                    <title>Test Feed</title>
+                    <link>https://example.com</link>
+                    <item>
+                        <title>Test Article No Image</title>
+                        <link>https://example.com/article/3</link>
+                        <description>Just plain text description</description>
+                    </item>
+                </channel>
+            </rss>
+        "#;
+        let parsed = feed_rs::parser::parse(rss_xml.as_bytes()).unwrap();
+        let entry = &parsed.entries[0];
+        let result = extract_thumbnail(entry);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_extract_thumbnail_single_quotes() {
+        let rss_xml = r#"
+            <?xml version="1.0" encoding="UTF-8"?>
+            <rss version="2.0">
+                <channel>
+                    <title>Test Feed</title>
+                    <link>https://example.com</link>
+                    <item>
+                        <title>Test Article</title>
+                        <link>https://example.com/article/4</link>
+                        <description><![CDATA[<img src='https://example.com/single-quote.gif'/>]]></description>
+                    </item>
+                </channel>
+            </rss>
+        "#;
+        let parsed = feed_rs::parser::parse(rss_xml.as_bytes()).unwrap();
+        let entry = &parsed.entries[0];
+        let result = extract_thumbnail(entry);
+        assert_eq!(result, Some("https://example.com/single-quote.gif".to_string()));
+    }
+
+    #[test]
+    fn test_extract_thumbnail_media_thumbnail() {
+        // 测试 media:thumbnail 命名空间
+        let rss_xml = r#"
+            <?xml version="1.0" encoding="UTF-8"?>
+            <rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/">
+                <channel>
+                    <title>Test Feed</title>
+                    <link>https://example.com</link>
+                    <item>
+                        <title>Test Article with Media Thumbnail</title>
+                        <link>https://example.com/article/5</link>
+                        <description>Description</description>
+                        <media:thumbnail url="https://example.com/media-thumb.jpg"/>
+                    </item>
+                </channel>
+            </rss>
+        "#;
+        let parsed = feed_rs::parser::parse(rss_xml.as_bytes()).unwrap();
+        let entry = &parsed.entries[0];
+        let result = extract_thumbnail(entry);
+        // media:thumbnail 应该被优先提取
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_extract_thumbnail_case_insensitive() {
+        // 测试大小写不敏感的 IMG 标签
+        let rss_xml = r#"
+            <?xml version="1.0" encoding="UTF-8"?>
+            <rss version="2.0">
+                <channel>
+                    <title>Test Feed</title>
+                    <link>https://example.com</link>
+                    <item>
+                        <title>Test Article</title>
+                        <link>https://example.com/article/6</link>
+                        <description><![CDATA[<IMG SRC="https://example.com/uppercase.jpg"/>]]></description>
+                    </item>
+                </channel>
+            </rss>
+        "#;
+        let parsed = feed_rs::parser::parse(rss_xml.as_bytes()).unwrap();
+        let entry = &parsed.entries[0];
+        let result = extract_thumbnail(entry);
+        assert_eq!(
+            result,
+            Some("https://example.com/uppercase.jpg".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_thumbnail_rejects_javascript_url() {
+        // 测试拒绝非 HTTP/HTTPS URL（如 javascript:）
+        let rss_xml = r#"
+            <?xml version="1.0" encoding="UTF-8"?>
+            <rss version="2.0">
+                <channel>
+                    <title>Test Feed</title>
+                    <link>https://example.com</link>
+                    <item>
+                        <title>Test Article</title>
+                        <link>https://example.com/article/7</link>
+                        <description><![CDATA[<img src="javascript:alert('xss')"/>]]></description>
+                    </item>
+                </channel>
+            </rss>
+        "#;
+        let parsed = feed_rs::parser::parse(rss_xml.as_bytes()).unwrap();
+        let entry = &parsed.entries[0];
+        let result = extract_thumbnail(entry);
+        // 应该返回 None，因为 javascript: URL 被拒绝
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_extract_thumbnail_with_attributes_before_src() {
+        // 测试 src 属性前有其他属性的情况
+        let rss_xml = r#"
+            <?xml version="1.0" encoding="UTF-8"?>
+            <rss version="2.0">
+                <channel>
+                    <title>Test Feed</title>
+                    <link>https://example.com</link>
+                    <item>
+                        <title>Test Article</title>
+                        <link>https://example.com/article/8</link>
+                        <description><![CDATA[<img class="thumbnail" loading="lazy" src="https://example.com/with-attrs.png" alt="test"/>]]></description>
+                    </item>
+                </channel>
+            </rss>
+        "#;
+        let parsed = feed_rs::parser::parse(rss_xml.as_bytes()).unwrap();
+        let entry = &parsed.entries[0];
+        let result = extract_thumbnail(entry);
+        assert_eq!(
+            result,
+            Some("https://example.com/with-attrs.png".to_string())
+        );
     }
 }

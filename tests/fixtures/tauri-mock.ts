@@ -56,6 +56,8 @@ const MOCK_ARTICLES: Article[] = [
     created_at: '2025-02-06T10:00:00Z',
     reading_progress: 0,
     favorite: false,
+    // Article with thumbnail
+    thumbnail_url: 'https://example.com/typescript-generics.jpg',
   },
   {
     id: 'article-2',
@@ -72,6 +74,7 @@ const MOCK_ARTICLES: Article[] = [
     created_at: '2025-02-05T14:30:00Z',
     reading_progress: 45,
     favorite: true,
+    // Article without thumbnail (to test both cases)
   },
   {
     id: 'article-3',
@@ -87,6 +90,8 @@ const MOCK_ARTICLES: Article[] = [
     created_at: '2025-02-04T09:15:00Z',
     reading_progress: 0,
     favorite: false,
+    // Article with another thumbnail
+    thumbnail_url: 'https://example.com/react19.png',
   },
 ]
 

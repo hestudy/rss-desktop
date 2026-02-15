@@ -116,6 +116,7 @@ export function ArticleList() {
                   description={article.description}
                   feedName={!selectedFeedId && !showFavoritesOnly ? getFeedName(article.feed_id) : undefined}
                   publishedAt={article.published_at || article.created_at}
+                  thumbnailUrl={article.thumbnail_url}
                   isRead={article.read}
                   isSelected={selectedArticleId === article.id}
                   isFavorite={article.favorite}

@@ -115,6 +115,9 @@ pub struct Article {
     /// RSS 原始 GUID（用于去重）
     #[serde(default)]
     pub guid: Option<String>,
+    /// 文章缩略图 URL
+    #[serde(default)]
+    pub thumbnail_url: Option<String>,
 }
 
 impl Article {
@@ -248,5 +251,94 @@ impl FeedLog {
             error: Some(error),
             duration_ms,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn create_test_article() -> Article {
+        Article {
+            id: "test-id".to_string(),
+            feed_id: "feed-id".to_string(),
+            title: "Test Article".to_string(),
+            link: "https://example.com/article".to_string(),
+            description: Some("Test description".to_string()),
+            content: Some("<p>Content</p>".to_string()),
+            published_at: Some(Utc::now()),
+            read: false,
+            created_at: Utc::now(),
+            reading_progress: 0.0,
+            favorite: false,
+            full_content: None,
+            ai_summary: None,
+            ai_translation: None,
+            ai_translated_title: None,
+            guid: Some("test-guid".to_string()),
+            thumbnail_url: None,
+        }
+    }
+
+    #[test]
+    fn test_article_has_thumbnail_url_field() {
+        let article = create_test_article();
+        assert!(article.thumbnail_url.is_none());
+
+        let mut article_with_thumbnail = create_test_article();
+        article_with_thumbnail.thumbnail_url = Some("https://example.com/image.jpg".to_string());
+        assert_eq!(article_with_thumbnail.thumbnail_url, Some("https://example.com/image.jpg".to_string()));
+    }
+
+    #[test]
+    fn test_article_serialization_with_thumbnail() {
+        let mut article = create_test_article();
+        article.thumbnail_url = Some("https://example.com/thumb.jpg".to_string());
+
+        let json = serde_json::to_string(&article).unwrap();
+        assert!(json.contains("thumbnail_url"));
+        assert!(json.contains("https://example.com/thumb.jpg"));
+    }
+
+    #[test]
+    fn test_article_deserialization_with_thumbnail() {
+        let json = r#"{
+            "id": "test-id",
+            "feed_id": "feed-id",
+            "title": "Test",
+            "link": "https://example.com",
+            "read": false,
+            "created_at": "2024-01-01T00:00:00Z",
+            "thumbnail_url": "https://example.com/image.png"
+        }"#;
+
+        let article: Article = serde_json::from_str(json).unwrap();
+        assert_eq!(article.thumbnail_url, Some("https://example.com/image.png".to_string()));
+    }
+
+    #[test]
+    fn test_article_deserialization_without_thumbnail() {
+        let json = r#"{
+            "id": "test-id",
+            "feed_id": "feed-id",
+            "title": "Test",
+            "link": "https://example.com",
+            "read": false,
+            "created_at": "2024-01-01T00:00:00Z"
+        }"#;
+
+        let article: Article = serde_json::from_str(json).unwrap();
+        // thumbnail_url 应该使用默认值 None
+        assert!(article.thumbnail_url.is_none());
+    }
+
+    #[test]
+    fn test_article_is_duplicate_same_feed_different_link() {
+        let a1 = create_test_article();
+        let mut a2 = create_test_article();
+        a2.link = "https://example.com/different".to_string();
+        a2.guid = None;
+
+        assert!(!a1.is_duplicate_of(&a2));
     }
 }

@@ -3,7 +3,7 @@ use rusqlite::Connection;
 use std::path::Path;
 use std::sync::Mutex;
 
-const CURRENT_SCHEMA_VERSION: u32 = 1;
+const CURRENT_SCHEMA_VERSION: u32 = 2;
 
 pub struct Database {
     pub conn: Mutex<Connection>,
@@ -144,6 +144,14 @@ impl Database {
                 |row| row.get(0),
             )
             .unwrap_or(0);
+
+        // Migration v1 -> v2: Add thumbnail_url column to articles
+        if version < 2 {
+            conn.execute(
+                "ALTER TABLE articles ADD COLUMN thumbnail_url TEXT",
+                [],
+            )?;
+        }
 
         if version < CURRENT_SCHEMA_VERSION {
             conn.execute(
