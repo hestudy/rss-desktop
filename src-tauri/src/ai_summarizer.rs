@@ -63,7 +63,7 @@ pub fn generate_summary(content: &str, settings: &AiSettings, article_id: Option
         truncated.len()
     );
 
-    let user_prompt = format!("请用{}总结以下文章：\n\n{}", settings.language, truncated);
+    let user_prompt = format!("请用{}总结以下文章（输出纯文本，不要使用Markdown格式）：\n\n{}", settings.language, truncated);
 
     let body = serde_json::json!({
         "model": settings.model,

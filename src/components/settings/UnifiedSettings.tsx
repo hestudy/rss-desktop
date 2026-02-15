@@ -17,6 +17,7 @@ import {
   RotateCcw,
   CheckCircle,
   AlertCircle,
+  Database,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useUpdater } from '@/hooks/useUpdater'
@@ -39,10 +40,11 @@ import {
   type AiSettings,
 } from '@/lib/settings'
 import { SettingToggle } from './SettingToggle'
+import { DataManagementSection } from './DataManagementSection'
 
 // ============= 设置面板 Context =============
 
-type SettingsTab = 'appearance' | 'reading' | 'notification' | 'ai' | 'ai-usage' | 'about'
+type SettingsTab = 'appearance' | 'reading' | 'notification' | 'ai' | 'ai-usage' | 'data' | 'about'
 
 interface UnifiedSettingsContextType {
   open: boolean
@@ -89,6 +91,7 @@ const NAV_ITEMS: { key: SettingsTab; label: string; icon: React.ReactNode }[] = 
   { key: 'notification', label: '通知', icon: <Bell className="w-4 h-4" /> },
   { key: 'ai', label: 'AI', icon: <Sparkles className="w-4 h-4" /> },
   { key: 'ai-usage', label: 'AI 费用', icon: <Coins className="w-4 h-4" /> },
+  { key: 'data', label: '数据管理', icon: <Database className="w-4 h-4" /> },
   { key: 'about', label: '关于', icon: <Info className="w-4 h-4" /> },
 ]
 
@@ -176,6 +179,7 @@ function UnifiedSettingsPanel({ initialTab, onClose }: UnifiedSettingsPanelProps
             {activeTab === 'notification' && <NotificationSection />}
             {activeTab === 'ai' && <AiSection />}
             {activeTab === 'ai-usage' && <AiUsageSection />}
+            {activeTab === 'data' && <DataManagementSection />}
             {activeTab === 'about' && <AboutSection />}
           </div>
         </div>
@@ -485,8 +489,8 @@ function AiSection() {
     setSaving(true)
     try {
       await updateAiSettings(updated)
-    } catch {
-      // silent
+    } catch (error) {
+      console.error('Failed to save AI settings:', error)
     } finally {
       setSaving(false)
     }

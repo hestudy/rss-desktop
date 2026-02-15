@@ -1,4 +1,4 @@
-use crate::settings::{AiSettings, AppSettings, SchedulerState};
+use crate::settings::{AiSettings, AiSettingsResponse, AppSettings, SchedulerState};
 use crate::storage_sqlite::SqliteStorage;
 use crate::commands::CommandResult;
 use tauri::State;
@@ -127,8 +127,8 @@ pub async fn update_settings(
 }
 
 #[tauri::command]
-pub async fn get_ai_settings(storage: State<'_, Arc<SqliteStorage>>) -> CommandResult<AiSettings> {
-    let mut settings = match storage.get_kv("ai_settings") {
+pub async fn get_ai_settings(storage: State<'_, Arc<SqliteStorage>>) -> CommandResult<AiSettingsResponse> {
+    let mut settings: AiSettings = match storage.get_kv("ai_settings") {
         Ok(Some(value)) => serde_json::from_value(value)
             .map_err(|e| format!("Failed to parse AI settings: {}", e))?,
         Ok(None) => AiSettings::default(),
@@ -138,7 +138,7 @@ pub async fn get_ai_settings(storage: State<'_, Arc<SqliteStorage>>) -> CommandR
     if let Some(key) = crate::keyring_helper::load_api_key() {
         settings.api_key = key;
     }
-    Ok(settings)
+    Ok(AiSettingsResponse::from(settings))
 }
 
 #[tauri::command]
@@ -146,17 +146,22 @@ pub async fn update_ai_settings(
     settings: AiSettings,
     storage: State<'_, Arc<SqliteStorage>>,
 ) -> CommandResult<AiSettings> {
+    log::info!("update_ai_settings called, api_key length: {}", settings.api_key.len());
+
     // 校验 API endpoint 防止 SSRF 和 Key 窃取
     if !settings.api_endpoint.trim().is_empty() {
         crate::fetcher::validate_api_endpoint(&settings.api_endpoint)?;
     }
     // 将 API Key 存入系统密钥管理服务（不写入数据库）
     crate::keyring_helper::store_api_key(&settings.api_key)?;
+    log::info!("API key saved to keyring successfully");
+
     // 序列化时 api_key 会被 skip_serializing 跳过
     let value = serde_json::to_value(&settings)
         .map_err(|e| format!("Failed to serialize AI settings: {}", e))?;
     storage.set_kv("ai_settings", &value)
         .map_err(|e| format!("Failed to save AI settings: {}", e))?;
+    log::info!("AI settings saved to database");
     Ok(settings)
 }
 

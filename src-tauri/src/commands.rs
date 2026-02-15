@@ -3,7 +3,6 @@ use crate::fetcher::fetch_feed;
 use crate::content_extractor::fetch_and_extract_content;
 use crate::ai_summarizer;
 use crate::ai_translator;
-use crate::settings::AiSettings;
 use crate::storage_sqlite::{SqliteStorage, MAX_ARTICLES_LIMIT};
 use crate::task_queue::{TaskQueue, TaskType, TaskPriority, QueueTask};
 use crate::notifications::PendingNotificationFeed;
@@ -518,12 +517,7 @@ pub async fn generate_article_summary(
 
     info!("[AISummary] Generating for article \"{}\"", article.title);
 
-    let settings: AiSettings = match storage.get_kv("ai_settings") {
-        Ok(Some(value)) => serde_json::from_value(value)
-            .map_err(|e| format!("Failed to parse AI settings: {}", e))?,
-        Ok(None) => AiSettings::default(),
-        Err(e) => return Err(format!("Failed to get AI settings: {}", e)),
-    };
+    let settings = crate::settings::load_ai_settings_from_storage(&storage);
 
     info!("[AISummary] Using model={}, endpoint={}", settings.model, settings.api_endpoint);
 
@@ -580,12 +574,7 @@ pub async fn translate_article(
         .map_err(|e| format!("Failed to get article: {}", e))?
         .ok_or_else(|| "Article not found".to_string())?;
 
-    let settings: AiSettings = match storage.get_kv("ai_settings") {
-        Ok(Some(value)) => serde_json::from_value(value)
-            .map_err(|e| format!("Failed to parse AI settings: {}", e))?,
-        Ok(None) => AiSettings::default(),
-        Err(e) => return Err(format!("Failed to get AI settings: {}", e)),
-    };
+    let settings = crate::settings::load_ai_settings_from_storage(&storage);
 
     let content = article
         .full_content
@@ -685,10 +674,7 @@ pub async fn get_all_feed_logs(limit: Option<usize>, storage: State<'_, Arc<Sqli
 pub async fn get_ai_usage_summary(
     storage: State<'_, Arc<SqliteStorage>>,
 ) -> CommandResult<crate::models::AiUsageSummary> {
-    let settings: AiSettings = match storage.get_kv("ai_settings") {
-        Ok(Some(value)) => serde_json::from_value(value).unwrap_or_default(),
-        _ => AiSettings::default(),
-    };
+    let settings = crate::settings::load_ai_settings_from_storage(&storage);
 
     storage
         .get_ai_usage_summary(settings.custom_input_price, settings.custom_output_price)

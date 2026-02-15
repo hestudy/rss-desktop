@@ -200,6 +200,40 @@ pub struct AiSettings {
     pub custom_output_price: Option<f64>,
 }
 
+/// AI 设置 API 响应结构体（包含 apiKey）
+/// 用于返回给前端，与 AiSettings 不同的是 api_key 会被序列化
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiSettingsResponse {
+    pub api_endpoint: String,
+    pub api_key: String,
+    pub model: String,
+    pub max_tokens: u32,
+    pub prompt: String,
+    pub enable_auto_summary: bool,
+    pub language: String,
+    pub max_concurrency: u32,
+    pub custom_input_price: Option<f64>,
+    pub custom_output_price: Option<f64>,
+}
+
+impl From<AiSettings> for AiSettingsResponse {
+    fn from(settings: AiSettings) -> Self {
+        Self {
+            api_endpoint: settings.api_endpoint,
+            api_key: settings.api_key,
+            model: settings.model,
+            max_tokens: settings.max_tokens,
+            prompt: settings.prompt,
+            enable_auto_summary: settings.enable_auto_summary,
+            language: settings.language,
+            max_concurrency: settings.max_concurrency,
+            custom_input_price: settings.custom_input_price,
+            custom_output_price: settings.custom_output_price,
+        }
+    }
+}
+
 fn default_api_endpoint() -> String {
     "https://api.openai.com/v1".to_string()
 }
@@ -213,7 +247,7 @@ fn default_max_tokens() -> u32 {
 }
 
 fn default_prompt() -> String {
-    "你是一个专业的文章摘要助手。请用简洁的语言总结以下文章的核心内容，包括主要观点和关键信息。"
+    "你是一个专业的文章摘要助手。请用简洁的语言总结以下文章的核心内容，包括主要观点和关键信息。注意：输出纯文本，不要使用Markdown格式（如**粗体**、#标题、-列表等），直接输出文字内容。"
         .to_string()
 }
 
@@ -449,10 +483,8 @@ mod tests {
         assert_eq!(settings.api_key, "");
         assert_eq!(settings.model, "gpt-4o-mini");
         assert_eq!(settings.max_tokens, 300);
-        assert_eq!(
-            settings.prompt,
-            "你是一个专业的文章摘要助手。请用简洁的语言总结以下文章的核心内容，包括主要观点和关键信息。"
-        );
+        assert!(settings.prompt.contains("文章摘要助手"));
+        assert!(settings.prompt.contains("不要使用Markdown格式"));
         assert!(!settings.enable_auto_summary);
         assert_eq!(settings.language, "zh-CN");
     }

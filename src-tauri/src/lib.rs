@@ -19,6 +19,7 @@ mod ai_pricing;
 mod task_queue;
 mod queue_commands;
 mod keyring_helper;
+mod config_io;
 
 // 导出常用类型
 pub use models::{Feed, Article, AddFeedRequest, UpdateFeedRequest, GetArticlesRequest, ApiResponse, FeedWithUnreadCount, FeedLog, LogArticleSummary};
@@ -60,6 +61,8 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
         .setup(move |app| {
             // 创建数据目录
             std::fs::create_dir_all(&data_dir)?;
@@ -233,6 +236,8 @@ pub fn run() {
             commands::clear_ai_usage_records,
             commands::get_builtin_model_prices,
             commands::get_pending_notification_feed,
+            config_io::export_config,
+            config_io::import_config,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

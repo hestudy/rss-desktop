@@ -83,7 +83,7 @@ export const DEFAULT_AI_SETTINGS: AiSettings = {
   apiKey: '',
   model: 'gpt-4o-mini',
   maxTokens: 300,
-  prompt: '你是一个专业的文章摘要助手。请用简洁的语言总结以下文章的核心内容，包括主要观点和关键信息。',
+  prompt: '你是一个专业的文章摘要助手。请用简洁的语言总结以下文章的核心内容，包括主要观点和关键信息。注意：输出纯文本，不要使用Markdown格式（如**粗体**、#标题、-列表等），直接输出文字内容。',
   enableAutoSummary: false,
   language: 'zh-CN',
   maxConcurrency: 3,
