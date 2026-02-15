@@ -78,6 +78,8 @@ export const AppSettingsExportSchema = z.object({
   maxNotificationsPerBatch: z.number().int().min(0).max(100).default(5),
   enableBackgroundRefresh: z.boolean().default(true),
   closeToTray: z.boolean().default(true),
+  enableAutoUpdateCheck: z.boolean().default(true),
+  autoUpdateCheckInterval: z.enum(['1h', '4h', '8h', '12h', '24h']).default('4h'),
 })
 
 /**

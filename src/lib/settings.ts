@@ -12,6 +12,11 @@ export type PollInterval = '5m' | '15m' | '30m' | '1h' | '2h' | '6h' | '12h' | '
 export type NotificationType = 'system' | 'none'
 
 /**
+ * 自动更新检查间隔
+ */
+export type AutoUpdateCheckInterval = '1h' | '4h' | '8h' | '12h' | '24h'
+
+/**
  * 应用设置
  */
 export interface AppSettings {
@@ -27,6 +32,10 @@ export interface AppSettings {
   enableBackgroundRefresh: boolean
   /** 关闭窗口时最小化到托盘 */
   closeToTray: boolean
+  /** 是否启用自动更新检查 */
+  enableAutoUpdateCheck: boolean
+  /** 自动更新检查间隔 */
+  autoUpdateCheckInterval: AutoUpdateCheckInterval
 }
 
 /**
@@ -46,8 +55,11 @@ export interface SchedulerState {
 /**
  * AppSettings 的部分更新类型
  */
-export type PartialAppSettings = Partial<Omit<AppSettings, 'pollInterval'>> & {
+export type PartialAppSettings = Partial<
+  Omit<AppSettings, 'pollInterval' | 'autoUpdateCheckInterval'>
+> & {
   pollInterval?: PollInterval
+  autoUpdateCheckInterval?: AutoUpdateCheckInterval
 }
 
 /**
@@ -60,6 +72,8 @@ export const AppSettingsSchema = z.object({
   maxNotificationsPerBatch: z.number().int().min(0).max(100).default(5),
   enableBackgroundRefresh: z.boolean().default(true),
   closeToTray: z.boolean().default(true),
+  enableAutoUpdateCheck: z.boolean().default(true),
+  autoUpdateCheckInterval: z.enum(['1h', '4h', '8h', '12h', '24h']).default('4h'),
 })
 
 /**
@@ -124,6 +138,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   maxNotificationsPerBatch: 5,
   enableBackgroundRefresh: true,
   closeToTray: true,
+  enableAutoUpdateCheck: true,
+  autoUpdateCheckInterval: '4h',
 }
 
 // ============= API 函数 =============
@@ -211,4 +227,18 @@ export const POLL_INTERVAL_OPTIONS: { value: PollInterval; label: string }[] = [
 export const NOTIFICATION_TYPE_OPTIONS: { value: NotificationType; label: string }[] = [
   { value: 'system', label: '系统通知' },
   { value: 'none', label: '不通知' },
+]
+
+/**
+ * 获取可用的自动更新检查间隔选项
+ */
+export const AUTO_UPDATE_CHECK_INTERVAL_OPTIONS: {
+  value: AutoUpdateCheckInterval
+  label: string
+}[] = [
+  { value: '1h', label: '1 小时' },
+  { value: '4h', label: '4 小时' },
+  { value: '8h', label: '8 小时' },
+  { value: '12h', label: '12 小时' },
+  { value: '24h', label: '24 小时' },
 ]

@@ -34,6 +34,7 @@ import {
   updateAiSettings,
   POLL_INTERVAL_OPTIONS,
   NOTIFICATION_TYPE_OPTIONS,
+  AUTO_UPDATE_CHECK_INTERVAL_OPTIONS,
   DEFAULT_SETTINGS,
   DEFAULT_AI_SETTINGS,
   type AppSettings,
@@ -464,6 +465,39 @@ function NotificationSection() {
         checked={settings.closeToTray}
         onChange={(v) => handleChange({ closeToTray: v })}
       />
+
+      {/* 分隔线 */}
+      <div className="border-t border-border pt-4 mt-4">
+        <h3 className="text-sm font-medium text-foreground mb-3">自动更新</h3>
+
+        {/* 自动检查更新 */}
+        <SettingToggle
+          label="自动检查更新"
+          description="启动时和定期检查应用更新"
+          checked={settings.enableAutoUpdateCheck}
+          onChange={(v) => handleChange({ enableAutoUpdateCheck: v })}
+        />
+
+        {/* 检查间隔 */}
+        {settings.enableAutoUpdateCheck && (
+          <div className="mt-4">
+            <h3 className="text-sm font-medium text-foreground mb-1">检查间隔</h3>
+            <p className="text-xs text-muted-foreground mb-3">自动检查更新的频率</p>
+            <select
+              value={settings.autoUpdateCheckInterval}
+              onChange={(e) => handleChange({ autoUpdateCheckInterval: e.target.value as AppSettings['autoUpdateCheckInterval'] })}
+              disabled={saving}
+              className="w-full px-3 py-2 rounded-lg border border-border bg-card text-foreground text-sm"
+            >
+              {AUTO_UPDATE_CHECK_INTERVAL_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

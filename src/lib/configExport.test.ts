@@ -141,6 +141,8 @@ describe('ConfigExport Types and Schemas', () => {
         maxNotificationsPerBatch: 5,
         enableBackgroundRefresh: true,
         closeToTray: true,
+        enableAutoUpdateCheck: true,
+        autoUpdateCheckInterval: '4h',
       }
 
       const result = AppSettingsExportSchema.safeParse(appSettings)
@@ -193,6 +195,8 @@ describe('ConfigExport Types and Schemas', () => {
           maxNotificationsPerBatch: 5,
           enableBackgroundRefresh: true,
           closeToTray: true,
+          enableAutoUpdateCheck: true,
+          autoUpdateCheckInterval: '4h',
         },
       }
 
@@ -269,6 +273,8 @@ describe('createExportConfig', () => {
       maxNotificationsPerBatch: 5,
       enableBackgroundRefresh: true,
       closeToTray: true,
+      enableAutoUpdateCheck: true,
+      autoUpdateCheckInterval: '4h',
     }
 
     const result = createExportConfig(feeds, aiSettings, appSettings)
@@ -319,6 +325,8 @@ describe('createExportConfig', () => {
       maxNotificationsPerBatch: 5,
       enableBackgroundRefresh: true,
       closeToTray: true,
+      enableAutoUpdateCheck: true,
+      autoUpdateCheckInterval: '4h',
     }
 
     const result = createExportConfig(feeds, aiSettings, appSettings)
@@ -346,6 +354,8 @@ describe('createExportConfig', () => {
       maxNotificationsPerBatch: 5,
       enableBackgroundRefresh: true,
       closeToTray: true,
+      enableAutoUpdateCheck: true,
+      autoUpdateCheckInterval: '4h',
     })
 
     // Should be valid ISO string

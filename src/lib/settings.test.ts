@@ -11,8 +11,10 @@ import {
   type SchedulerState,
   type PartialAppSettings,
   type AiSettings,
+  type AutoUpdateCheckInterval,
   DEFAULT_SETTINGS,
   DEFAULT_AI_SETTINGS,
+  AUTO_UPDATE_CHECK_INTERVAL_OPTIONS,
 } from './settings'
 
 // Mock Tauri invoke
@@ -43,6 +45,8 @@ describe('Settings API', () => {
         maxNotificationsPerBatch: 10,
         enableBackgroundRefresh: true,
         closeToTray: false,
+        enableAutoUpdateCheck: false,
+        autoUpdateCheckInterval: '12h',
       }
 
       vi.mocked(invoke).mockResolvedValueOnce(customSettings)
@@ -223,6 +227,82 @@ describe('Validation', () => {
 
     expect(validMin.maxNotificationsPerBatch).toBe(0)
     expect(validMax.maxNotificationsPerBatch).toBe(100)
+  })
+})
+
+// ============= Auto Update Settings Tests (TDD: 先写测试) =============
+describe('Auto Update Settings', () => {
+  describe('AutoUpdateCheckInterval Type', () => {
+    it('should accept valid interval values', () => {
+      const validIntervals: AutoUpdateCheckInterval[] = ['1h', '4h', '8h', '12h', '24h']
+
+      const interval: AutoUpdateCheckInterval = '4h'
+      expect(validIntervals).toContain(interval)
+    })
+  })
+
+  describe('AUTO_UPDATE_CHECK_INTERVAL_OPTIONS', () => {
+    it('should provide all available interval options', () => {
+      expect(AUTO_UPDATE_CHECK_INTERVAL_OPTIONS).toHaveLength(5)
+      expect(AUTO_UPDATE_CHECK_INTERVAL_OPTIONS.map((o) => o.value)).toEqual([
+        '1h',
+        '4h',
+        '8h',
+        '12h',
+        '24h',
+      ])
+    })
+
+    it('should have correct labels', () => {
+      const labels = AUTO_UPDATE_CHECK_INTERVAL_OPTIONS.map((o) => o.label)
+      expect(labels).toContain('1 小时')
+      expect(labels).toContain('4 小时')
+      expect(labels).toContain('24 小时')
+    })
+  })
+
+  describe('AppSettings Auto Update Fields', () => {
+    it('should have auto update default values', () => {
+      // 默认启用自动更新检查
+      expect(DEFAULT_SETTINGS.enableAutoUpdateCheck).toBe(true)
+      // 默认 4 小时检查一次
+      expect(DEFAULT_SETTINGS.autoUpdateCheckInterval).toBe('4h')
+    })
+
+    it('should accept auto update settings from backend', async () => {
+      const backendSettings = {
+        ...DEFAULT_SETTINGS,
+        enableAutoUpdateCheck: false,
+        autoUpdateCheckInterval: '12h' as AutoUpdateCheckInterval,
+      }
+
+      vi.mocked(invoke).mockResolvedValueOnce(backendSettings)
+
+      const settings = await getSettings()
+
+      expect(settings.enableAutoUpdateCheck).toBe(false)
+      expect(settings.autoUpdateCheckInterval).toBe('12h')
+    })
+
+    it('should update auto update settings', async () => {
+      const newSettings = {
+        enableAutoUpdateCheck: false,
+        autoUpdateCheckInterval: '24h' as AutoUpdateCheckInterval,
+      }
+
+      const expected: AppSettings = {
+        ...DEFAULT_SETTINGS,
+        ...newSettings,
+      }
+
+      vi.mocked(invoke).mockResolvedValueOnce(DEFAULT_SETTINGS)
+      vi.mocked(invoke).mockResolvedValueOnce(expected)
+
+      const result = await updateSettings(newSettings)
+
+      expect(result.enableAutoUpdateCheck).toBe(false)
+      expect(result.autoUpdateCheckInterval).toBe('24h')
+    })
   })
 })
 

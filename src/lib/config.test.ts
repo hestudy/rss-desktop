@@ -56,6 +56,8 @@ describe('Config API', () => {
           maxNotificationsPerBatch: 5,
           enableBackgroundRefresh: true,
           closeToTray: true,
+          enableAutoUpdateCheck: true,
+          autoUpdateCheckInterval: '4h',
         },
       }
 
@@ -248,6 +250,8 @@ describe('Config API', () => {
           maxNotificationsPerBatch: 10,
           enableBackgroundRefresh: false,
           closeToTray: false,
+          enableAutoUpdateCheck: false,
+          autoUpdateCheckInterval: '12h',
         },
       }
 

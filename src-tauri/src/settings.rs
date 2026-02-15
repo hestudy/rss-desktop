@@ -106,6 +106,14 @@ pub struct AppSettings {
     /// 关闭窗口时最小化到托盘（而非退出）
     #[serde(default = "default_close_to_tray")]
     pub close_to_tray: bool,
+
+    /// 是否启用自动更新检查
+    #[serde(default = "default_enable_auto_update_check")]
+    pub enable_auto_update_check: bool,
+
+    /// 自动更新检查间隔
+    #[serde(default)]
+    pub auto_update_check_interval: AutoUpdateCheckInterval,
 }
 
 fn default_enable_notifications() -> bool {
@@ -124,6 +132,10 @@ fn default_enable_background_refresh() -> bool {
     true
 }
 
+fn default_enable_auto_update_check() -> bool {
+    true
+}
+
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
@@ -133,6 +145,8 @@ impl Default for AppSettings {
             max_notifications_per_batch: default_max_notifications(),
             enable_background_refresh: default_enable_background_refresh(),
             close_to_tray: default_close_to_tray(),
+            enable_auto_update_check: default_enable_auto_update_check(),
+            auto_update_check_interval: AutoUpdateCheckInterval::default(),
         }
     }
 }
@@ -287,11 +301,155 @@ impl Default for SchedulerState {
     }
 }
 
+/// 自动更新检查间隔
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AutoUpdateCheckInterval {
+    /// 1 小时
+    #[serde(rename = "1h")]
+    Hours1,
+    /// 4 小时
+    #[serde(rename = "4h")]
+    Hours4,
+    /// 8 小时
+    #[serde(rename = "8h")]
+    Hours8,
+    /// 12 小时
+    #[serde(rename = "12h")]
+    Hours12,
+    /// 24 小时
+    #[serde(rename = "24h")]
+    Hours24,
+}
+
+impl Default for AutoUpdateCheckInterval {
+    fn default() -> Self {
+        Self::Hours4
+    }
+}
+
+impl AutoUpdateCheckInterval {
+    /// 转换为毫秒数
+    pub fn to_millis(self) -> u64 {
+        match self {
+            Self::Hours1 => 60 * 60 * 1000,
+            Self::Hours4 => 4 * 60 * 60 * 1000,
+            Self::Hours8 => 8 * 60 * 60 * 1000,
+            Self::Hours12 => 12 * 60 * 60 * 1000,
+            Self::Hours24 => 24 * 60 * 60 * 1000,
+        }
+    }
+}
+
 // ============= 测试模块 (TDD: 先写测试) =============
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json;
+
+    // ============= AutoUpdateCheckInterval 测试 =============
+
+    // 测试: AutoUpdateCheckInterval 默认值
+    #[test]
+    fn test_auto_update_check_interval_default() {
+        let interval = AutoUpdateCheckInterval::default();
+        assert_eq!(interval, AutoUpdateCheckInterval::Hours4);
+    }
+
+    // 测试: AutoUpdateCheckInterval 序列化
+    #[test]
+    fn test_auto_update_check_interval_serialize() {
+        let cases = vec![
+            (AutoUpdateCheckInterval::Hours1, "1h"),
+            (AutoUpdateCheckInterval::Hours4, "4h"),
+            (AutoUpdateCheckInterval::Hours8, "8h"),
+            (AutoUpdateCheckInterval::Hours12, "12h"),
+            (AutoUpdateCheckInterval::Hours24, "24h"),
+        ];
+
+        for (interval, expected) in cases {
+            let json = serde_json::to_string(&interval).unwrap();
+            assert_eq!(json, format!("\"{}\"", expected));
+        }
+    }
+
+    // 测试: AutoUpdateCheckInterval 反序列化
+    #[test]
+    fn test_auto_update_check_interval_deserialize() {
+        let cases = vec![
+            ("1h", AutoUpdateCheckInterval::Hours1),
+            ("4h", AutoUpdateCheckInterval::Hours4),
+            ("8h", AutoUpdateCheckInterval::Hours8),
+            ("12h", AutoUpdateCheckInterval::Hours12),
+            ("24h", AutoUpdateCheckInterval::Hours24),
+        ];
+
+        for (json_str, expected) in cases {
+            let parsed: AutoUpdateCheckInterval =
+                serde_json::from_str(&format!("\"{}\"", json_str)).unwrap();
+            assert_eq!(parsed, expected, "Failed to parse {}", json_str);
+        }
+    }
+
+    // 测试: AutoUpdateCheckInterval 转换为毫秒数
+    #[test]
+    fn test_auto_update_check_interval_to_millis() {
+        assert_eq!(AutoUpdateCheckInterval::Hours1.to_millis(), 3_600_000);
+        assert_eq!(AutoUpdateCheckInterval::Hours4.to_millis(), 14_400_000);
+        assert_eq!(AutoUpdateCheckInterval::Hours8.to_millis(), 28_800_000);
+        assert_eq!(AutoUpdateCheckInterval::Hours12.to_millis(), 43_200_000);
+        assert_eq!(AutoUpdateCheckInterval::Hours24.to_millis(), 86_400_000);
+    }
+
+    // 测试: AppSettings 包含自动更新字段
+    #[test]
+    fn test_app_settings_with_auto_update_fields() {
+        let settings = AppSettings {
+            enable_auto_update_check: true,
+            auto_update_check_interval: AutoUpdateCheckInterval::Hours12,
+            ..Default::default()
+        };
+
+        assert!(settings.enable_auto_update_check);
+        assert_eq!(settings.auto_update_check_interval, AutoUpdateCheckInterval::Hours12);
+    }
+
+    // 测试: AppSettings 自动更新字段默认值
+    #[test]
+    fn test_app_settings_auto_update_defaults() {
+        let settings = AppSettings::default();
+
+        // 默认启用自动检查
+        assert!(settings.enable_auto_update_check);
+        // 默认 4 小时检查一次
+        assert_eq!(settings.auto_update_check_interval, AutoUpdateCheckInterval::Hours4);
+    }
+
+    // 测试: AppSettings 自动更新字段序列化
+    #[test]
+    fn test_app_settings_auto_update_serialize() {
+        let settings = AppSettings {
+            enable_auto_update_check: false,
+            auto_update_check_interval: AutoUpdateCheckInterval::Hours24,
+            ..Default::default()
+        };
+
+        let json = serde_json::to_string(&settings).unwrap();
+        assert!(json.contains("\"enableAutoUpdateCheck\":false"));
+        assert!(json.contains("\"autoUpdateCheckInterval\":\"24h\""));
+    }
+
+    // 测试: AppSettings 自动更新字段反序列化
+    #[test]
+    fn test_app_settings_auto_update_deserialize() {
+        let json = r#"{"enableAutoUpdateCheck":false,"autoUpdateCheckInterval":"8h"}"#;
+        let settings: AppSettings = serde_json::from_str(json).unwrap();
+
+        assert!(!settings.enable_auto_update_check);
+        assert_eq!(settings.auto_update_check_interval, AutoUpdateCheckInterval::Hours8);
+    }
+
+    // ============= 原有测试 =============
 
     // 测试: PollInterval 默认值和序列化
     #[test]
@@ -390,6 +548,8 @@ mod tests {
             max_notifications_per_batch: 10,
             enable_background_refresh: true,
             close_to_tray: false,
+            enable_auto_update_check: true,
+            auto_update_check_interval: AutoUpdateCheckInterval::Hours8,
         };
 
         let json = serde_json::to_string(&settings).unwrap();
@@ -407,6 +567,8 @@ mod tests {
             settings.enable_background_refresh
         );
         assert_eq!(parsed.close_to_tray, settings.close_to_tray);
+        assert_eq!(parsed.enable_auto_update_check, settings.enable_auto_update_check);
+        assert_eq!(parsed.auto_update_check_interval, settings.auto_update_check_interval);
     }
 
     // 测试: AppSettings 缺失字段使用默认值

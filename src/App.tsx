@@ -9,9 +9,11 @@ import { ArticleList } from "./components/articles/ArticleList";
 import { ArticleViewer } from "./components/articles/ArticleViewer";
 import { EmptyReaderPlaceholder } from "./components/articles/EmptyReaderPlaceholder";
 import { ResizeHandle } from "./components/ui/ResizeHandle";
+import { UpdateBanner } from "./components/ui/UpdateBanner";
 import { Group, Panel, type Layout, useGroupRef } from "react-resizable-panels";
 import { invoke } from "@tauri-apps/api/core";
 import { useNotificationNavigation } from "./hooks/useNotificationNavigation";
+import { useAutoUpdater } from "./hooks/useAutoUpdater";
 import "./styles/themes/index.css";
 
 const STORAGE_KEY = "panel-layout-v2";
@@ -39,6 +41,9 @@ function AppContent() {
   const { selectedArticleId, selectArticle, readerSettings } = useReader();
   const groupRef = useGroupRef();
   const initialRefreshDone = useRef(false);
+
+  // 自动更新检查
+  const autoUpdater = useAutoUpdater();
 
   // 点击通知后自动跳转到对应订阅
   useNotificationNavigation(selectFeedAndLoad);
@@ -139,72 +144,85 @@ function AppContent() {
   };
 
   return (
-    <Group
-      groupRef={groupRef}
-      data-testid="resizable-layout"
-      orientation="horizontal"
-      className="h-screen"
-      defaultLayout={{
-        "sidebar-panel": DEFAULT_SIDEBAR_SIZE,
-        "article-list-panel": DEFAULT_ARTICLE_LIST_SIZE,
-        "reader-panel": DEFAULT_READER_SIZE,
-      }}
-      onLayoutChange={handleLayoutChange}
-    >
-      {/* 左侧订阅列表 */}
-      <Panel
-        id="sidebar-panel"
-        minSize={`${MIN_SIDEBAR_PERCENT}%`}
-        maxSize={`${MAX_SIDEBAR_PERCENT}%`}
-        defaultSize={`${DEFAULT_SIDEBAR_SIZE}%`}
+    <div className="flex flex-col h-screen">
+      {/* 更新提示 Banner */}
+      {autoUpdater.updateInfo && (
+        <UpdateBanner
+          version={autoUpdater.updateInfo.version}
+          releaseNotes={autoUpdater.updateInfo.body}
+          onDownload={autoUpdater.downloadAndInstall}
+          onDismiss={autoUpdater.dismissUpdate}
+        />
+      )}
+
+      {/* 主内容区域 */}
+      <Group
+        groupRef={groupRef}
+        data-testid="resizable-layout"
+        orientation="horizontal"
+        className="flex-1"
+        defaultLayout={{
+          "sidebar-panel": DEFAULT_SIDEBAR_SIZE,
+          "article-list-panel": DEFAULT_ARTICLE_LIST_SIZE,
+          "reader-panel": DEFAULT_READER_SIZE,
+        }}
+        onLayoutChange={handleLayoutChange}
       >
-        <div data-testid="feed-panel-content" className="h-full">
-          <FeedList />
-        </div>
-      </Panel>
+        {/* 左侧订阅列表 */}
+        <Panel
+          id="sidebar-panel"
+          minSize={`${MIN_SIDEBAR_PERCENT}%`}
+          maxSize={`${MAX_SIDEBAR_PERCENT}%`}
+          defaultSize={`${DEFAULT_SIDEBAR_SIZE}%`}
+        >
+          <div data-testid="feed-panel-content" className="h-full">
+            <FeedList />
+          </div>
+        </Panel>
 
-      {/* 拖拽手柄 */}
-      <ResizeHandle id="resize-handle-1" />
+        {/* 拖拽手柄 */}
+        <ResizeHandle id="resize-handle-1" />
 
-      {/* 中间文章列表 */}
-      <Panel
-        id="article-list-panel"
-        minSize={`${MIN_ARTICLE_LIST_PERCENT}%`}
-        maxSize={`${MAX_ARTICLE_LIST_PERCENT}%`}
-        defaultSize={`${DEFAULT_ARTICLE_LIST_SIZE}%`}
-      >
-        <div data-testid="article-list-panel-content" className="h-full">
-          <ArticleList />
-        </div>
-      </Panel>
+        {/* 中间文章列表 */}
+        <Panel
+          id="article-list-panel"
+          minSize={`${MIN_ARTICLE_LIST_PERCENT}%`}
+          maxSize={`${MAX_ARTICLE_LIST_PERCENT}%`}
+          defaultSize={`${DEFAULT_ARTICLE_LIST_SIZE}%`}
+        >
+          <div data-testid="article-list-panel-content" className="h-full">
+            <ArticleList />
+          </div>
+        </Panel>
 
-      {/* 拖拽手柄 */}
-      <ResizeHandle id="resize-handle-2" />
+        {/* 拖拽手柄 */}
+        <ResizeHandle id="resize-handle-2" />
 
-      {/* 右侧阅读器 */}
-      <Panel
-        id="reader-panel"
-        minSize={MIN_READER_SIZE}
-        defaultSize={`${DEFAULT_READER_SIZE}%`}
-      >
-        <div data-testid="reader-panel-content" className="h-full">
-          {selectedArticle ? (
-            <ArticleViewer
-              key={selectedArticle.id}
-              article={selectedArticle}
-              articles={articles}
-              onNext={handleNext}
-              onPrevious={handlePrevious}
-              hasNext={hasNext}
-              hasPrevious={hasPrevious}
-              readerSettings={readerSettings}
-            />
-          ) : (
-            <EmptyReaderPlaceholder />
-          )}
-        </div>
-      </Panel>
-    </Group>
+        {/* 右侧阅读器 */}
+        <Panel
+          id="reader-panel"
+          minSize={MIN_READER_SIZE}
+          defaultSize={`${DEFAULT_READER_SIZE}%`}
+        >
+          <div data-testid="reader-panel-content" className="h-full">
+            {selectedArticle ? (
+              <ArticleViewer
+                key={selectedArticle.id}
+                article={selectedArticle}
+                articles={articles}
+                onNext={handleNext}
+                onPrevious={handlePrevious}
+                hasNext={hasNext}
+                hasPrevious={hasPrevious}
+                readerSettings={readerSettings}
+              />
+            ) : (
+              <EmptyReaderPlaceholder />
+            )}
+          </div>
+        </Panel>
+      </Group>
+    </div>
   );
 }
 
