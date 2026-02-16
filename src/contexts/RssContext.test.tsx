@@ -288,6 +288,44 @@ describe('RssContext', () => {
       expect(RssApi.getFeeds).toHaveBeenCalled()
     })
 
+    it('should update feeds list after adding', async () => {
+      const existingFeed: FeedWithUnreadCount = {
+        feed: { id: 'f1', url: 'https://existing.com', title: 'Existing', created_at: '', updated_at: '' },
+        unread_count: 5,
+      }
+      const newFeed = { id: 'f2', url: 'https://rsshub.app/bilibili/user/video/123', title: 'New RSSHub Feed', created_at: '', updated_at: '' }
+      const newFeedWithCount: FeedWithUnreadCount = {
+        feed: newFeed,
+        unread_count: 0,
+      }
+
+      // 第一次调用 loadFeeds（手动调用）返回现有订阅
+      // 第二次调用 loadFeeds（添加后）返回包含新订阅的列表
+      vi.mocked(RssApi.getFeeds)
+        .mockResolvedValueOnce([existingFeed])
+        .mockResolvedValueOnce([existingFeed, newFeedWithCount])
+      vi.mocked(RssApi.addFeed).mockResolvedValue(newFeed)
+
+      const { result } = renderHook(() => useRss(), { wrapper })
+
+      // 手动加载 feeds
+      await act(async () => {
+        await result.current.loadFeeds()
+      })
+
+      // 验证初始状态
+      expect(result.current.feeds).toHaveLength(1)
+
+      // 添加新订阅
+      await act(async () => {
+        await result.current.addFeed('https://rsshub.app/bilibili/user/video/123')
+      })
+
+      // 验证 feeds 列表已更新
+      expect(result.current.feeds).toHaveLength(2)
+      expect(result.current.feeds.find(f => f.feed.id === 'f2')).toBeDefined()
+    })
+
     it('should set error and rethrow on failure', async () => {
       vi.mocked(RssApi.addFeed).mockRejectedValue(new Error('Duplicate'))
 

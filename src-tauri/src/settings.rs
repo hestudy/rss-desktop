@@ -328,6 +328,25 @@ impl Default for AutoUpdateCheckInterval {
     }
 }
 
+/// RSSHub 设置
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct RSSHubSettings {
+    /// RSSHub 实例 URL
+    pub instance_url: String,
+    /// 是否启用 RSSHub
+    pub enabled: bool,
+}
+
+impl Default for RSSHubSettings {
+    fn default() -> Self {
+        Self {
+            instance_url: "https://rsshub.app".to_string(),
+            enabled: true,
+        }
+    }
+}
+
 impl AutoUpdateCheckInterval {
     /// 转换为毫秒数
     pub fn to_millis(self) -> u64 {
@@ -691,6 +710,70 @@ mod tests {
         assert_eq!(settings.max_tokens, 300);
         assert!(settings.enable_auto_summary);
         assert_eq!(settings.language, "zh-CN");
+    }
+
+    // ============= RSSHubSettings 测试 =============
+
+    // 测试: RSSHubSettings 默认值
+    #[test]
+    fn test_rsshub_settings_default() {
+        let settings = RSSHubSettings::default();
+
+        assert_eq!(settings.instance_url, "https://rsshub.app");
+        assert!(settings.enabled);
+    }
+
+    // 测试: RSSHubSettings 序列化
+    #[test]
+    fn test_rsshub_settings_serialize() {
+        let settings = RSSHubSettings {
+            instance_url: "https://my-rsshub.com".to_string(),
+            enabled: false,
+        };
+
+        let json = serde_json::to_string(&settings).unwrap();
+        assert!(json.contains("\"instanceUrl\":\"https://my-rsshub.com\""));
+        assert!(json.contains("\"enabled\":false"));
+    }
+
+    // 测试: RSSHubSettings 反序列化
+    #[test]
+    fn test_rsshub_settings_deserialize() {
+        let json = r#"{"instanceUrl":"https://custom.rsshub.com","enabled":true}"#;
+        let settings: RSSHubSettings = serde_json::from_str(json).unwrap();
+
+        assert_eq!(settings.instance_url, "https://custom.rsshub.com");
+        assert!(settings.enabled);
+    }
+
+    // 测试: RSSHubSettings 缺失字段使用默认值
+    #[test]
+    fn test_rsshub_settings_partial_deserialize() {
+        let json = r#"{}"#;
+        let settings: RSSHubSettings = serde_json::from_str(json).unwrap();
+
+        assert_eq!(settings.instance_url, "https://rsshub.app");
+        assert!(settings.enabled);
+    }
+
+    // 测试: RSSHubSettings 仅更新 instanceUrl
+    #[test]
+    fn test_rsshub_settings_partial_instance_url() {
+        let json = r#"{"instanceUrl":"https://rsshub.example.org"}"#;
+        let settings: RSSHubSettings = serde_json::from_str(json).unwrap();
+
+        assert_eq!(settings.instance_url, "https://rsshub.example.org");
+        assert!(settings.enabled); // 使用默认值
+    }
+
+    // 测试: RSSHubSettings 仅更新 enabled
+    #[test]
+    fn test_rsshub_settings_partial_enabled() {
+        let json = r#"{"enabled":false}"#;
+        let settings: RSSHubSettings = serde_json::from_str(json).unwrap();
+
+        assert_eq!(settings.instance_url, "https://rsshub.app"); // 使用默认值
+        assert!(!settings.enabled);
     }
 }
 

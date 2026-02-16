@@ -20,6 +20,7 @@ mod task_queue;
 mod queue_commands;
 mod keyring_helper;
 mod config_io;
+mod rsshub;
 
 // 导出常用类型
 pub use models::{Feed, Article, AddFeedRequest, UpdateFeedRequest, GetArticlesRequest, ApiResponse, FeedWithUnreadCount, FeedLog, LogArticleSummary};
@@ -238,6 +239,13 @@ pub fn run() {
             commands::get_pending_notification_feed,
             config_io::export_config,
             config_io::import_config,
+            commands::get_rsshub_radar_rules,
+            commands::detect_rsshub_feeds,
+            commands::search_rsshub_routes,
+            commands::test_rsshub_connection,
+            commands::validate_rss_url,
+            scheduler_commands::get_rsshub_settings,
+            scheduler_commands::update_rsshub_settings,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

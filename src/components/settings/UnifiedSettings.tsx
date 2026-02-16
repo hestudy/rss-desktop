@@ -18,6 +18,7 @@ import {
   CheckCircle,
   AlertCircle,
   Database,
+  Globe,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useUpdater } from '@/hooks/useUpdater'
@@ -42,10 +43,11 @@ import {
 } from '@/lib/settings'
 import { SettingToggle } from './SettingToggle'
 import { DataManagementSection } from './DataManagementSection'
+import { RSSHubSection } from './RSSHubSection'
 
 // ============= 设置面板 Context =============
 
-type SettingsTab = 'appearance' | 'reading' | 'notification' | 'ai' | 'ai-usage' | 'data' | 'about'
+type SettingsTab = 'appearance' | 'reading' | 'notification' | 'rsshub' | 'ai' | 'ai-usage' | 'data' | 'about'
 
 interface UnifiedSettingsContextType {
   open: boolean
@@ -90,6 +92,7 @@ const NAV_ITEMS: { key: SettingsTab; label: string; icon: React.ReactNode }[] = 
   { key: 'appearance', label: '外观', icon: <Palette className="w-4 h-4" /> },
   { key: 'reading', label: '阅读', icon: <BookOpen className="w-4 h-4" /> },
   { key: 'notification', label: '通知', icon: <Bell className="w-4 h-4" /> },
+  { key: 'rsshub', label: 'RSSHub', icon: <Globe className="w-4 h-4" /> },
   { key: 'ai', label: 'AI', icon: <Sparkles className="w-4 h-4" /> },
   { key: 'ai-usage', label: 'AI 费用', icon: <Coins className="w-4 h-4" /> },
   { key: 'data', label: '数据管理', icon: <Database className="w-4 h-4" /> },
@@ -178,6 +181,7 @@ function UnifiedSettingsPanel({ initialTab, onClose }: UnifiedSettingsPanelProps
             {activeTab === 'appearance' && <AppearanceSection />}
             {activeTab === 'reading' && <ReadingSection />}
             {activeTab === 'notification' && <NotificationSection />}
+            {activeTab === 'rsshub' && <RSSHubSection />}
             {activeTab === 'ai' && <AiSection />}
             {activeTab === 'ai-usage' && <AiUsageSection />}
             {activeTab === 'data' && <DataManagementSection />}
