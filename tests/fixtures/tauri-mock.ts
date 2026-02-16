@@ -689,8 +689,13 @@ export function buildTauriMockScript(): string {
     window.__TAURI_INTERNALS__ = {};
   }
 
+  // Store the mock invoke function globally for debugging
+  window.__TAURI_INVOKE__ = mockInvoke;
+
+  // Tauri v2 invoke implementation
   window.__TAURI_INTERNALS__.invoke = function(command, args) {
-    return mockInvoke(command, args || {});
+    console.log('[Tauri Mock] Invoke called:', command, args);
+    return Promise.resolve(mockInvoke(command, args || {}));
   };
 
   // Also intercept the @tauri-apps/api/core module's invoke
@@ -715,6 +720,18 @@ export function buildTauriMockScript(): string {
     currentWindow: { label: 'main' },
     currentWebview: { label: 'main' },
   };
+
+  // For Tauri v2, also need to mock the invoke function export
+  // This is called by @tauri-apps/api/core
+  window.__TAURI__ = {
+    invoke: (cmd, args) => {
+      console.log('[Tauri Mock] __TAURI__.invoke called:', cmd, args);
+      return Promise.resolve(mockInvoke(cmd, args || {}));
+    }
+  };
+
+  // Set a flag to indicate mock is active
+  window.__TAURI_MOCK_ACTIVE__ = true;
 
   console.log('[Tauri Mock] Tauri invoke mocked successfully');
 })();

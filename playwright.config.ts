@@ -68,9 +68,9 @@ export default defineConfig({
   webServer: process.env.CI
     ? undefined // In CI, expect server to be already running
     : {
-        command: 'pnpm dev',
+        command: 'E2E_TEST=true pnpm dev',
         url: 'http://localhost:1420',
-        reuseExistingServer: true,
+        reuseExistingServer: !process.env.E2E_TEST, // Don't reuse if we're explicitly running E2E tests
         timeout: 60000,
         stdout: 'pipe',
         stderr: 'pipe',

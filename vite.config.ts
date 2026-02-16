@@ -3,8 +3,10 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "node:path";
 
-// @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
+
+// Check if we're running E2E tests
+const isE2ETest = process.env.E2E_TEST === 'true' || process.env.PLAYWRIGHT === 'true';
 
 // https://vite.dev/config/
 export default defineConfig(async () => ({
@@ -15,6 +17,11 @@ export default defineConfig(async () => ({
       "@/components": path.resolve(__dirname, "./src/components"),
       "@/lib": path.resolve(__dirname, "./src/lib"),
       "@/hooks": path.resolve(__dirname, "./src/hooks"),
+      // In E2E test mode, replace Tauri API with mock
+      ...(isE2ETest && {
+        "@tauri-apps/api/core": path.resolve(__dirname, "./tests/fixtures/tauri-api-mock.ts"),
+        "@tauri-apps/api/event": path.resolve(__dirname, "./tests/fixtures/tauri-api-mock.ts"),
+      }),
     },
   },
 
