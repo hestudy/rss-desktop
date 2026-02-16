@@ -656,4 +656,319 @@ describe('RSSHubDiscoveryDialog', () => {
       })
     })
   })
+
+  describe('参数输入对话框的添加订阅流程', () => {
+    it('点击确认按钮后不立即关闭对话框，显示验证中状态', async () => {
+      // 搜索返回带参数的路由
+      const mockRoutes = [
+        {
+          path: '/bilibili/user/video/:uid',
+          namespace: 'bilibili',
+          title: 'UP 主视频',
+        },
+      ]
+      vi.mocked(RSSHubApi.RSSHubApi.searchRoutes).mockResolvedValue(mockRoutes)
+
+      // 模拟验证需要时间
+      let resolveValidate: (value: { valid: boolean; feedInfo?: { title: string } }) => void
+      vi.mocked(RSSHubApi.RSSHubApi.validateRssUrl).mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolveValidate = resolve
+          })
+      )
+
+      render(<RSSHubDiscoveryDialog isOpen={true} onClose={() => {}} />)
+
+      // 切换到搜索 Tab
+      const searchTab = screen.getByRole('tab', { name: /平台搜索/ })
+      fireEvent.click(searchTab)
+
+      const input = screen.getByPlaceholderText(/搜索平台/)
+      fireEvent.change(input, { target: { value: 'bilibili' } })
+
+      // 等待搜索结果显示
+      await waitFor(() => {
+        expect(screen.getByText('UP 主视频')).toBeDefined()
+      })
+
+      // 点击添加按钮（打开参数对话框）
+      const addButton = screen.getByRole('button', { name: /添加/ })
+      fireEvent.click(addButton)
+
+      // 等待参数对话框出现
+      await waitFor(() => {
+        expect(screen.getByText('填写路由参数')).toBeDefined()
+      })
+
+      // 填写参数
+      const paramInput = screen.getByLabelText('uid')
+      fireEvent.change(paramInput, { target: { value: '123456' } })
+
+      // 点击确认添加
+      const confirmButton = screen.getByRole('button', { name: '添加订阅' })
+      fireEvent.click(confirmButton)
+
+      // 验证中状态应该显示，对话框应该保持打开
+      await waitFor(() => {
+        expect(screen.getByText('验证中')).toBeDefined()
+        expect(screen.getByText('填写路由参数')).toBeDefined() // 对话框仍然打开
+      })
+
+      // 完成验证
+      resolveValidate!({ valid: true, feedInfo: { title: 'Test Feed' } })
+    })
+
+    it('验证失败时保持对话框打开并显示错误信息', async () => {
+      const mockRoutes = [
+        {
+          path: '/bilibili/user/video/:uid',
+          namespace: 'bilibili',
+          title: 'UP 主视频',
+        },
+      ]
+      vi.mocked(RSSHubApi.RSSHubApi.searchRoutes).mockResolvedValue(mockRoutes)
+      vi.mocked(RSSHubApi.RSSHubApi.validateRssUrl).mockResolvedValue({
+        valid: false,
+        errorType: 'not_found',
+        errorMessage: '订阅地址不存在',
+      })
+
+      render(<RSSHubDiscoveryDialog isOpen={true} onClose={() => {}} />)
+
+      // 切换到搜索 Tab
+      const searchTab = screen.getByRole('tab', { name: /平台搜索/ })
+      fireEvent.click(searchTab)
+
+      const input = screen.getByPlaceholderText(/搜索平台/)
+      fireEvent.change(input, { target: { value: 'bilibili' } })
+
+      await waitFor(() => {
+        expect(screen.getByText('UP 主视频')).toBeDefined()
+      })
+
+      const addButton = screen.getByRole('button', { name: /添加/ })
+      fireEvent.click(addButton)
+
+      await waitFor(() => {
+        expect(screen.getByText('填写路由参数')).toBeDefined()
+      })
+
+      const paramInput = screen.getByLabelText('uid')
+      fireEvent.change(paramInput, { target: { value: '123456' } })
+
+      const confirmButton = screen.getByRole('button', { name: '添加订阅' })
+      fireEvent.click(confirmButton)
+
+      // 验证失败后对话框保持打开，显示错误信息
+      await waitFor(() => {
+        expect(screen.getByText(/添加失败/)).toBeDefined()
+        expect(screen.getByText(/不存在/)).toBeDefined()
+        expect(screen.getByText('填写路由参数')).toBeDefined() // 对话框仍然打开
+      })
+
+      // addFeed 不应该被调用
+      expect(mockAddFeed).not.toHaveBeenCalled()
+    })
+
+    it('添加成功后显示成功状态', async () => {
+      // 重置设置 mock
+      const { getRSSHubSettings } = await import('../../lib/settings')
+      vi.mocked(getRSSHubSettings).mockResolvedValue({
+        instanceUrl: 'https://rsshub.app',
+        enabled: true,
+      })
+
+      const mockRoutes = [
+        {
+          path: '/bilibili/user/video/:uid',
+          namespace: 'bilibili',
+          title: 'UP 主视频',
+        },
+      ]
+      vi.mocked(RSSHubApi.RSSHubApi.searchRoutes).mockResolvedValue(mockRoutes)
+      vi.mocked(RSSHubApi.RSSHubApi.validateRssUrl).mockResolvedValue({
+        valid: true,
+        feedInfo: { title: 'Test Feed' },
+      })
+      mockAddFeed.mockResolvedValue({
+        id: 'feed-1',
+        url: 'https://rsshub.app/bilibili/user/video/123456',
+        title: 'UP 主视频',
+      })
+
+      render(<RSSHubDiscoveryDialog isOpen={true} onClose={() => {}} />)
+
+      // 切换到搜索 Tab
+      const searchTab = screen.getByRole('tab', { name: /平台搜索/ })
+      fireEvent.click(searchTab)
+
+      const input = screen.getByPlaceholderText(/搜索平台/)
+      fireEvent.change(input, { target: { value: 'bilibili' } })
+
+      await waitFor(() => {
+        expect(screen.getByText('UP 主视频')).toBeDefined()
+      })
+
+      const addButton = screen.getByRole('button', { name: /添加/ })
+      fireEvent.click(addButton)
+
+      await waitFor(() => {
+        expect(screen.getByText('填写路由参数')).toBeDefined()
+      })
+
+      const paramInput = screen.getByLabelText('uid')
+      fireEvent.change(paramInput, { target: { value: '123456' } })
+
+      const confirmButton = screen.getByRole('button', { name: '添加订阅' })
+      fireEvent.click(confirmButton)
+
+      // 验证成功并添加成功
+      await waitFor(() => {
+        expect(mockAddFeed).toHaveBeenCalledWith(
+          'https://rsshub.app/bilibili/user/video/123456'
+        )
+      })
+
+      // 显示添加成功状态
+      await waitFor(() => {
+        // 使用 getAllByText 检查至少有一个"添加成功"元素
+        const successElements = screen.getAllByText('添加成功')
+        expect(successElements.length).toBeGreaterThan(0)
+      })
+
+      // 对话框在成功后仍然打开（延迟关闭）
+      expect(screen.getByText('填写路由参数')).toBeDefined()
+    })
+
+    it('添加失败时保持对话框打开并显示错误信息', async () => {
+      const mockRoutes = [
+        {
+          path: '/bilibili/user/video/:uid',
+          namespace: 'bilibili',
+          title: 'UP 主视频',
+        },
+      ]
+      vi.mocked(RSSHubApi.RSSHubApi.searchRoutes).mockResolvedValue(mockRoutes)
+      vi.mocked(RSSHubApi.RSSHubApi.validateRssUrl).mockResolvedValue({
+        valid: true,
+        feedInfo: { title: 'Test Feed' },
+      })
+      mockAddFeed.mockRejectedValue(new Error('该订阅已存在'))
+
+      render(<RSSHubDiscoveryDialog isOpen={true} onClose={() => {}} />)
+
+      // 切换到搜索 Tab
+      const searchTab = screen.getByRole('tab', { name: /平台搜索/ })
+      fireEvent.click(searchTab)
+
+      const input = screen.getByPlaceholderText(/搜索平台/)
+      fireEvent.change(input, { target: { value: 'bilibili' } })
+
+      await waitFor(() => {
+        expect(screen.getByText('UP 主视频')).toBeDefined()
+      })
+
+      const addButton = screen.getByRole('button', { name: /添加/ })
+      fireEvent.click(addButton)
+
+      await waitFor(() => {
+        expect(screen.getByText('填写路由参数')).toBeDefined()
+      })
+
+      const paramInput = screen.getByLabelText('uid')
+      fireEvent.change(paramInput, { target: { value: '123456' } })
+
+      const confirmButton = screen.getByRole('button', { name: '添加订阅' })
+      fireEvent.click(confirmButton)
+
+      // 添加失败后对话框保持打开，显示错误信息
+      await waitFor(() => {
+        expect(screen.getByText(/添加失败/)).toBeDefined()
+        expect(screen.getByText(/该订阅已存在/)).toBeDefined()
+        expect(screen.getByText('填写路由参数')).toBeDefined() // 对话框仍然打开
+      })
+    })
+
+    it('失败后用户可以修改参数重试', async () => {
+      // 重置设置 mock
+      const { getRSSHubSettings } = await import('../../lib/settings')
+      vi.mocked(getRSSHubSettings).mockResolvedValue({
+        instanceUrl: 'https://rsshub.app',
+        enabled: true,
+      })
+
+      const mockRoutes = [
+        {
+          path: '/bilibili/user/video/:uid',
+          namespace: 'bilibili',
+          title: 'UP 主视频',
+        },
+      ]
+      vi.mocked(RSSHubApi.RSSHubApi.searchRoutes).mockResolvedValue(mockRoutes)
+
+      // 第一次验证失败，第二次成功
+      vi.mocked(RSSHubApi.RSSHubApi.validateRssUrl)
+        .mockResolvedValueOnce({
+          valid: false,
+          errorType: 'not_found',
+          errorMessage: '订阅地址不存在',
+        })
+        .mockResolvedValueOnce({
+          valid: true,
+          feedInfo: { title: 'Test Feed' },
+        })
+
+      mockAddFeed.mockResolvedValue({
+        id: 'feed-1',
+        url: 'https://rsshub.app/bilibili/user/video/654321',
+        title: 'UP 主视频',
+      })
+
+      render(<RSSHubDiscoveryDialog isOpen={true} onClose={() => {}} />)
+
+      // 切换到搜索 Tab
+      const searchTab = screen.getByRole('tab', { name: /平台搜索/ })
+      fireEvent.click(searchTab)
+
+      const input = screen.getByPlaceholderText(/搜索平台/)
+      fireEvent.change(input, { target: { value: 'bilibili' } })
+
+      await waitFor(() => {
+        expect(screen.getByText('UP 主视频')).toBeDefined()
+      })
+
+      const addButton = screen.getByRole('button', { name: /添加/ })
+      fireEvent.click(addButton)
+
+      await waitFor(() => {
+        expect(screen.getByText('填写路由参数')).toBeDefined()
+      })
+
+      const paramInput = screen.getByLabelText('uid')
+      fireEvent.change(paramInput, { target: { value: '123456' } })
+
+      const confirmButton = screen.getByRole('button', { name: '添加订阅' })
+      fireEvent.click(confirmButton)
+
+      // 第一次验证失败
+      await waitFor(() => {
+        expect(screen.getByText(/添加失败/)).toBeDefined()
+      })
+
+      // 对话框仍然打开
+      expect(screen.getByText('填写路由参数')).toBeDefined()
+
+      // 修改参数重试（清除错误状态）
+      fireEvent.change(paramInput, { target: { value: '654321' } })
+      fireEvent.click(confirmButton)
+
+      // 第二次成功
+      await waitFor(() => {
+        // 使用 getAllByText 检查至少有一个"添加成功"元素
+        const successElements = screen.getAllByText('添加成功')
+        expect(successElements.length).toBeGreaterThan(0)
+      })
+    })
+  })
 })

@@ -10,7 +10,6 @@ import type {
   RSSHubRadarRules,
   DetectedRSSHubFeed,
   RSSHubRoute,
-  RssUrlValidationResult,
 } from '../types/rsshub'
 
 // 模拟 Tauri invoke 函数

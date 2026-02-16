@@ -29,6 +29,8 @@ interface ParamInputDialogState {
   isOpen: boolean
   route: RSSHubRoute | null
   params: Record<string, string>
+  status: 'idle' | 'validating' | 'adding' | 'success' | 'error'
+  errorMessage: string | null
 }
 
 export function RSSHubDiscoveryDialog({
@@ -40,6 +42,18 @@ export function RSSHubDiscoveryDialog({
 
   // 用户配置的 RSSHub 实例 URL
   const [instanceUrl, setInstanceUrl] = useState<string>('https://rsshub.app')
+
+  // 延迟关闭的 timeout ref
+  const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // 清理 timeout
+  useEffect(() => {
+    return () => {
+      if (closeTimeoutRef.current) {
+        clearTimeout(closeTimeoutRef.current)
+      }
+    }
+  }, [])
 
   // 加载用户配置的 RSSHub 实例
   useEffect(() => {
@@ -77,6 +91,8 @@ export function RSSHubDiscoveryDialog({
     isOpen: false,
     route: null,
     params: {},
+    status: 'idle',
+    errorMessage: null,
   })
 
   // 清理搜索定时器
@@ -191,6 +207,8 @@ export function RSSHubDiscoveryDialog({
       isOpen: true,
       route,
       params: initialParams,
+      status: 'idle',
+      errorMessage: null,
     })
   }, [])
 
@@ -210,9 +228,58 @@ export function RSSHubDiscoveryDialog({
     }
 
     const rssUrl = RSSHubApi.buildRssUrl(filledPath, { instanceUrl })
-    setParamDialog((prev) => ({ ...prev, isOpen: false }))
-    await handleAddFeed(rssUrl)
-  }, [paramDialog.route, paramDialog.params, handleAddFeed, instanceUrl])
+
+    // 设置验证中状态
+    setParamDialog((prev) => ({
+      ...prev,
+      status: 'validating',
+      errorMessage: null,
+    }))
+
+    try {
+      // 验证 URL
+      const validationResult = await RSSHubApi.validateRssUrl(rssUrl)
+
+      if (!validationResult.valid) {
+        // 验证失败，显示错误但保持对话框打开
+        const errorMessage = getValidationErrorMessage(validationResult)
+        setParamDialog((prev) => ({
+          ...prev,
+          status: 'error',
+          errorMessage,
+        }))
+        return
+      }
+
+      // 验证成功，开始添加
+      setParamDialog((prev) => ({
+        ...prev,
+        status: 'adding',
+      }))
+
+      await addFeed(rssUrl)
+
+      // 添加成功
+      setAddedUrls((prev) => new Set(prev).add(rssUrl))
+      setParamDialog((prev) => ({
+        ...prev,
+        status: 'success',
+      }))
+
+      // 延迟关闭对话框，让用户看到成功状态
+      closeTimeoutRef.current = setTimeout(() => {
+        setParamDialog((prev) => ({ ...prev, isOpen: false }))
+      }, 1500)
+    } catch (error) {
+      // 添加失败，显示错误但保持对话框打开
+      const errorMessage = error instanceof Error ? error.message : '添加订阅失败'
+      setParamDialog((prev) => ({
+        ...prev,
+        status: 'error',
+        errorMessage,
+      }))
+    }
+  }, [paramDialog.route, paramDialog.params, instanceUrl, addFeed])
 
   // 更新参数值
   const handleParamChange = useCallback((paramName: string, value: string) => {
@@ -425,8 +492,15 @@ export function RSSHubDiscoveryDialog({
                       id={`param-${param}`}
                       type="text"
                       value={paramDialog.params[param] || ''}
-                      onChange={(e) => handleParamChange(param, e.target.value)}
+                      onChange={(e) => {
+                        handleParamChange(param, e.target.value)
+                        // 清除错误状态当用户修改参数时
+                        if (paramDialog.status === 'error') {
+                          setParamDialog((prev) => ({ ...prev, status: 'idle', errorMessage: null }))
+                        }
+                      }}
                       placeholder={`输入 ${param}`}
+                      disabled={paramDialog.status === 'validating' || paramDialog.status === 'adding' || paramDialog.status === 'success'}
                     />
                   </div>
                 ))}
@@ -445,11 +519,19 @@ export function RSSHubDiscoveryDialog({
                 </div>
               )}
 
-              {/* 添加错误提示 */}
-              {addError && (
+              {/* 成功提示 */}
+              {paramDialog.status === 'success' && (
+                <div className="mb-4 p-3 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-lg text-sm flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 shrink-0" />
+                  <span>添加成功</span>
+                </div>
+              )}
+
+              {/* 错误提示 */}
+              {paramDialog.status === 'error' && paramDialog.errorMessage && (
                 <div className="mb-4 p-3 bg-destructive/10 text-destructive rounded-lg text-sm flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 shrink-0" />
-                  <span>添加失败: {addError}</span>
+                  <span>添加失败: {paramDialog.errorMessage}</span>
                 </div>
               )}
 
@@ -457,18 +539,37 @@ export function RSSHubDiscoveryDialog({
                 <Button
                   variant="ghost"
                   onClick={() => {
-                    setParamDialog((prev) => ({ ...prev, isOpen: false }))
+                    setParamDialog((prev) => ({ ...prev, isOpen: false, status: 'idle', errorMessage: null }))
                     setAddError(null)
                   }}
+                  disabled={paramDialog.status === 'validating' || paramDialog.status === 'adding'}
                 >
                   取消
                 </Button>
                 <Button
                   onClick={handleConfirmParams}
-                  disabled={!allParamsFilled() || addingUrl !== null}
+                  disabled={
+                    !allParamsFilled() ||
+                    paramDialog.status === 'validating' ||
+                    paramDialog.status === 'adding' ||
+                    paramDialog.status === 'success'
+                  }
                 >
-                  {addingUrl ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
+                  {paramDialog.status === 'validating' ? (
+                    <>
+                      <ShieldCheck className="w-4 h-4 mr-1 animate-pulse" />
+                      验证中
+                    </>
+                  ) : paramDialog.status === 'adding' ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                      添加中
+                    </>
+                  ) : paramDialog.status === 'success' ? (
+                    <>
+                      <CheckCircle className="w-4 h-4 mr-1" />
+                      添加成功
+                    </>
                   ) : (
                     '添加订阅'
                   )}
