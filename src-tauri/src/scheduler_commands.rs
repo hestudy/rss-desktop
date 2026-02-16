@@ -1,4 +1,4 @@
-use crate::settings::{AiSettings, AiSettingsResponse, AppSettings, RSSHubSettings, SchedulerState};
+use crate::settings::{AiSettings, AiSettingsResponse, AppSettings, SchedulerState};
 use crate::storage_sqlite::SqliteStorage;
 use crate::commands::CommandResult;
 use tauri::State;
@@ -186,30 +186,4 @@ pub async fn set_scheduler_state(
         .map_err(|e| format!("Failed to serialize scheduler state: {}", e))?;
     storage.set_kv("scheduler_state", &value)
         .map_err(|e| format!("Failed to save scheduler state: {}", e))
-}
-
-// ============= RSSHub 设置命令 =============
-
-/// 获取 RSSHub 设置
-#[tauri::command]
-pub async fn get_rsshub_settings(storage: State<'_, Arc<SqliteStorage>>) -> CommandResult<RSSHubSettings> {
-    match storage.get_kv("rsshub_settings") {
-        Ok(Some(value)) => serde_json::from_value(value)
-            .map_err(|e| format!("Failed to parse RSSHub settings: {}", e)),
-        Ok(None) => Ok(RSSHubSettings::default()),
-        Err(e) => Err(format!("Failed to get RSSHub settings: {}", e)),
-    }
-}
-
-/// 更新 RSSHub 设置
-#[tauri::command]
-pub async fn update_rsshub_settings(
-    settings: RSSHubSettings,
-    storage: State<'_, Arc<SqliteStorage>>,
-) -> CommandResult<RSSHubSettings> {
-    let value = serde_json::to_value(&settings)
-        .map_err(|e| format!("Failed to serialize RSSHub settings: {}", e))?;
-    storage.set_kv("rsshub_settings", &value)
-        .map_err(|e| format!("Failed to save RSSHub settings: {}", e))?;
-    Ok(settings)
 }

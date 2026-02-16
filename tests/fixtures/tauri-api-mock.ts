@@ -379,27 +379,6 @@ async function mockInvoke<T>(command: string, args?: Record<string, unknown>): P
         aiSettingsImported: true,
       } as T
 
-    case 'get_rsshub_radar_rules':
-      return {} as T
-
-    case 'detect_rsshub_feeds':
-      return [] as T
-
-    case 'search_rsshub_routes':
-      return [] as T
-
-    case 'test_rsshub_connection':
-      return true as T
-
-    case 'get_rsshub_settings':
-      return {
-        instance_url: 'https://rsshub.app',
-        enabled: true,
-      } as T
-
-    case 'update_rsshub_settings':
-      return args?.settings as T
-
     default:
       console.warn(`[Tauri API Mock] Unknown command: ${command}`)
       return null as T

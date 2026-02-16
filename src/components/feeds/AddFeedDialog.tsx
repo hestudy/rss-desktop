@@ -4,8 +4,6 @@ import { Dialog, DialogContent } from '../ui/Dialog'
 import { Input } from '../ui/Input'
 import { Button } from '../ui/Button'
 import { useRss } from '../../contexts/RssContext'
-import { RSSHubDiscoveryDialog } from './RSSHubDiscoveryDialog'
-import { Search } from 'lucide-react'
 
 const feedUrlSchema = z.string().url('Invalid URL format')
 
@@ -16,7 +14,6 @@ export function AddFeedDialog({ isOpen, onClose }: { isOpen: boolean; onClose: (
   const [useAiTranslation, setUseAiTranslation] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [isRSSHubOpen, setIsRSSHubOpen] = useState(false)
   const { addFeed } = useRss()
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -77,22 +74,6 @@ export function AddFeedDialog({ isOpen, onClose }: { isOpen: boolean; onClose: (
               {error && (
                 <p data-testid="feed-url-error" className="text-sm text-destructive mt-2">{error}</p>
               )}
-              <div className="mt-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setIsRSSHubOpen(true)}
-                  disabled={isLoading}
-                  className="text-muted-foreground"
-                >
-                  <Search className="w-4 h-4 mr-1" />
-                  RSSHub 发现
-                </Button>
-                <p className="text-xs text-muted-foreground mt-1">
-                  不知道 RSS 地址？试试 RSSHub 发现订阅源
-                </p>
-              </div>
             </div>
             <label htmlFor="add-feed-full-content" className="flex items-center gap-2 cursor-pointer select-none">
               <input
@@ -146,12 +127,6 @@ export function AddFeedDialog({ isOpen, onClose }: { isOpen: boolean; onClose: (
           </div>
         </form>
       </DialogContent>
-
-      {/* RSSHub 发现对话框 */}
-      <RSSHubDiscoveryDialog
-        isOpen={isRSSHubOpen}
-        onClose={() => setIsRSSHubOpen(false)}
-      />
     </Dialog>
   )
 }

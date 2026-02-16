@@ -185,40 +185,4 @@ describe('AddFeedDialog', () => {
       expect(screen.getByText('Feed already exists')).toBeInTheDocument()
     })
   })
-
-  describe('RSSHub 集成', () => {
-    it('renders RSSHub discovery button', () => {
-      render(<AddFeedDialog isOpen={true} onClose={vi.fn()} />)
-      expect(screen.getByRole('button', { name: /RSSHub 发现/ })).toBeInTheDocument()
-    })
-
-    it('opens RSSHub discovery dialog when button is clicked', () => {
-      render(<AddFeedDialog isOpen={true} onClose={vi.fn()} />)
-
-      const rsshubButton = screen.getByRole('button', { name: /RSSHub 发现/ })
-      fireEvent.click(rsshubButton)
-
-      // RSSHub 发现对话框应该显示（对话框标题在 h2 中）
-      expect(screen.getByRole('heading', { name: 'RSSHub 发现' })).toBeInTheDocument()
-    })
-
-    it('closes RSSHub discovery dialog independently', async () => {
-      render(<AddFeedDialog isOpen={true} onClose={vi.fn()} />)
-
-      // 打开 RSSHub 对话框
-      const rsshubButton = screen.getByRole('button', { name: /RSSHub 发现/ })
-      fireEvent.click(rsshubButton)
-      expect(screen.getByRole('heading', { name: 'RSSHub 发现' })).toBeInTheDocument()
-
-      // 关闭 RSSHub 对话框
-      const closeButtons = screen.getAllByLabelText('关闭')
-      fireEvent.click(closeButtons[closeButtons.length - 1]) // 点击最后一个关闭按钮（RSSHub 对话框的）
-
-      // RSSHub 对话框应该关闭，但添加订阅对话框应该还在
-      await waitFor(() => {
-        expect(screen.queryByRole('heading', { name: 'RSSHub 发现' })).not.toBeInTheDocument()
-      })
-      expect(screen.getByText('添加 RSS 订阅')).toBeInTheDocument()
-    })
-  })
 })
