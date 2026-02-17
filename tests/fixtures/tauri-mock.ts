@@ -613,9 +613,3 @@ export function getMockArticles(): Article[] {
   return [...MOCK_ARTICLES]
 }
 
-/**
- * Get the mock feeds for use in test assertions
- */
-export function getMockFeeds(): FeedWithUnreadCount[] {
-  return [...MOCK_FEEDS]
-}
