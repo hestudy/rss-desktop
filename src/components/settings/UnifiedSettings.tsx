@@ -18,6 +18,7 @@ import {
   CheckCircle,
   AlertCircle,
   Database,
+  FileText,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useUpdater } from '@/hooks/useUpdater'
@@ -42,6 +43,7 @@ import {
 } from '@/lib/settings'
 import { SettingToggle } from './SettingToggle'
 import { DataManagementSection } from './DataManagementSection'
+import { ChangelogDialog } from '@/components/ui/ChangelogDialog'
 
 // ============= 设置面板 Context =============
 
@@ -890,6 +892,7 @@ function AiUsageSection() {
 function AboutSection() {
   const updater = useUpdater()
   const version = useAppVersion()
+  const [changelogOpen, setChangelogOpen] = useState(false)
 
   return (
     <div className="space-y-6">
@@ -937,16 +940,22 @@ function AboutSection() {
             <p className="text-sm">
               发现新版本: <span className="font-medium">v{updater.newVersion}</span>
             </p>
-            {updater.releaseNotes && (
-              <p className="text-xs text-muted-foreground line-clamp-3">{updater.releaseNotes}</p>
-            )}
-            <button
-              onClick={() => updater.downloadAndInstall()}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
-            >
-              <Download className="w-3.5 h-3.5" />
-              下载并安装
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => updater.downloadAndInstall()}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+              >
+                <Download className="w-3.5 h-3.5" />
+                下载并安装
+              </button>
+              <button
+                onClick={() => setChangelogOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border border-border hover:bg-accent transition-colors"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                查看更新日志
+              </button>
+            </div>
           </div>
         )}
 
@@ -1004,6 +1013,16 @@ function AboutSection() {
       <p className="text-xs text-muted-foreground">
         一个轻量级的 RSS 阅读器桌面应用，专注于提供舒适的阅读体验。
       </p>
+
+      {/* 更新日志对话框 */}
+      {updater.newVersion && updater.releaseNotes && (
+        <ChangelogDialog
+          open={changelogOpen}
+          onOpenChange={setChangelogOpen}
+          version={updater.newVersion}
+          content={updater.releaseNotes}
+        />
+      )}
     </div>
   )
 }

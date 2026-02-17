@@ -34,42 +34,6 @@ describe('UpdateBanner', () => {
     expect(onDismiss).toHaveBeenCalledTimes(1)
   })
 
-  it('does not show details button when no release notes', () => {
-    render(<UpdateBanner {...defaultProps} />)
-
-    expect(screen.queryByText('详情')).not.toBeInTheDocument()
-  })
-
-  it('shows details button when release notes provided', () => {
-    render(<UpdateBanner {...defaultProps} releaseNotes="Bug fixes" />)
-
-    expect(screen.getByText('详情')).toBeInTheDocument()
-  })
-
-  it('expands to show release notes when details clicked', () => {
-    render(<UpdateBanner {...defaultProps} releaseNotes="Bug fixes and improvements" />)
-
-    // Initially collapsed
-    expect(screen.queryByText('Bug fixes and improvements')).not.toBeInTheDocument()
-
-    // Click to expand
-    fireEvent.click(screen.getByText('详情'))
-
-    expect(screen.getByText('Bug fixes and improvements')).toBeInTheDocument()
-  })
-
-  it('collapses release notes when details clicked again', () => {
-    render(<UpdateBanner {...defaultProps} releaseNotes="Bug fixes" />)
-
-    // Expand
-    fireEvent.click(screen.getByText('详情'))
-    expect(screen.getByText('Bug fixes')).toBeInTheDocument()
-
-    // Collapse
-    fireEvent.click(screen.getByText('详情'))
-    expect(screen.queryByText('Bug fixes')).not.toBeInTheDocument()
-  })
-
   it('applies custom className', () => {
     const { container } = render(
       <UpdateBanner {...defaultProps} className="custom-class" />
@@ -82,5 +46,38 @@ describe('UpdateBanner', () => {
     render(<UpdateBanner {...defaultProps} />)
 
     expect(screen.getByTestId('update-banner')).toBeInTheDocument()
+  })
+
+  describe('更新日志按钮', () => {
+    it('不显示查看更新日志按钮（当没有 onViewChangelog 回调）', () => {
+      render(<UpdateBanner {...defaultProps} />)
+
+      expect(screen.queryByText(/更新日志/)).not.toBeInTheDocument()
+    })
+
+    it('显示查看更新日志按钮（当提供 onViewChangelog 回调）', () => {
+      const onViewChangelog = vi.fn()
+      render(
+        <UpdateBanner
+          {...defaultProps}
+          onViewChangelog={onViewChangelog}
+        />
+      )
+
+      expect(screen.getByText(/更新日志/)).toBeInTheDocument()
+    })
+
+    it('点击查看更新日志按钮调用 onViewChangelog', () => {
+      const onViewChangelog = vi.fn()
+      render(
+        <UpdateBanner
+          {...defaultProps}
+          onViewChangelog={onViewChangelog}
+        />
+      )
+
+      fireEvent.click(screen.getByText(/更新日志/))
+      expect(onViewChangelog).toHaveBeenCalledTimes(1)
+    })
   })
 })

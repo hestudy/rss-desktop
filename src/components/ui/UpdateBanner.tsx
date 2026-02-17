@@ -1,24 +1,22 @@
-import { X, Download, ArrowRight } from 'lucide-react'
-import { useState } from 'react'
+import { X, Download, FileText } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export interface UpdateBannerProps {
   version: string
-  releaseNotes?: string
   onDownload: () => void
   onDismiss: () => void
+  /** 查看完整更新日志回调（可选） */
+  onViewChangelog?: () => void
   className?: string
 }
 
 export function UpdateBanner({
   version,
-  releaseNotes,
   onDownload,
   onDismiss,
+  onViewChangelog,
   className,
 }: UpdateBannerProps) {
-  const [expanded, setExpanded] = useState(false)
-
   return (
     <div
       data-testid="update-banner"
@@ -37,19 +35,14 @@ export function UpdateBanner({
             v{version}
           </span>
 
-          {/* 展开按钮 */}
-          {releaseNotes && (
+          {/* 查看更新日志按钮 */}
+          {onViewChangelog && (
             <button
-              onClick={() => setExpanded(!expanded)}
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-0.5"
+              onClick={onViewChangelog}
+              className="text-xs text-primary hover:text-primary/80 transition-colors flex items-center gap-0.5"
             >
-              详情
-              <ArrowRight
-                className={cn(
-                  'w-3 h-3 transition-transform',
-                  expanded && 'rotate-90'
-                )}
-              />
+              <FileText className="w-3 h-3" />
+              更新日志
             </button>
           )}
         </div>
@@ -72,15 +65,6 @@ export function UpdateBanner({
           </button>
         </div>
       </div>
-
-      {/* 展开的更新说明 */}
-      {expanded && releaseNotes && (
-        <div className="mt-2 pt-2 border-t border-primary/20">
-          <p className="text-xs text-muted-foreground line-clamp-3 whitespace-pre-wrap">
-            {releaseNotes}
-          </p>
-        </div>
-      )}
     </div>
   )
 }

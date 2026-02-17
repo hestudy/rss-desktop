@@ -5,6 +5,7 @@
 
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
+@import "../highlight.css";
 
 /* ==================== 基础主题定义 ==================== */
 @theme {

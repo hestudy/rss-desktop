@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { RssProvider, useRss } from "./contexts/RssContext";
 import { ReaderProvider, useReader } from "./contexts/ReaderContext";
 import { ConfirmProvider } from "./components/ui/ConfirmDialog";
@@ -10,6 +10,7 @@ import { ArticleViewer } from "./components/articles/ArticleViewer";
 import { EmptyReaderPlaceholder } from "./components/articles/EmptyReaderPlaceholder";
 import { ResizeHandle } from "./components/ui/ResizeHandle";
 import { UpdateBanner } from "./components/ui/UpdateBanner";
+import { ChangelogDialog } from "./components/ui/ChangelogDialog";
 import { Group, Panel, type Layout, useGroupRef } from "react-resizable-panels";
 import { invoke } from "@tauri-apps/api/core";
 import { useNotificationNavigation } from "./hooks/useNotificationNavigation";
@@ -44,6 +45,9 @@ function AppContent() {
 
   // 自动更新检查
   const autoUpdater = useAutoUpdater();
+
+  // 更新日志对话框状态
+  const [changelogOpen, setChangelogOpen] = useState(false);
 
   // 点击通知后自动跳转到对应订阅
   useNotificationNavigation(selectFeedAndLoad);
@@ -149,9 +153,20 @@ function AppContent() {
       {autoUpdater.updateInfo && (
         <UpdateBanner
           version={autoUpdater.updateInfo.version}
-          releaseNotes={autoUpdater.updateInfo.body}
           onDownload={autoUpdater.downloadAndInstall}
           onDismiss={autoUpdater.dismissUpdate}
+          onViewChangelog={() => setChangelogOpen(true)}
+        />
+      )}
+
+      {/* 更新日志对话框 */}
+      {autoUpdater.updateInfo && (
+        <ChangelogDialog
+          open={changelogOpen}
+          onOpenChange={setChangelogOpen}
+          version={autoUpdater.updateInfo.version}
+          content={autoUpdater.updateInfo.body || ''}
+          publishedAt={autoUpdater.updateInfo.date?.toLocaleDateString()}
         />
       )}
 
