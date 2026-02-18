@@ -78,24 +78,6 @@
       "tags": ["gadgets", "reviews", "中文"]
     },
     {
-      "id": "36kr",
-      "title": "36氪",
-      "url": "https://36kr.com/feed",
-      "description": "创业资讯与商业科技报道",
-      "icon": null,
-      "categoryId": "news",
-      "tags": ["startup", "business", "中文"]
-    },
-    {
-      "id": "zaobao",
-      "title": "联合早报",
-      "url": "https://www.zaobao.com/realtime/china/news/rss",
-      "description": "新加坡华文媒体，提供中国与国际新闻",
-      "icon": null,
-      "categoryId": "news",
-      "tags": ["international", "中文"]
-    },
-    {
       "id": "ifanr",
       "title": "爱范儿",
       "url": "https://www.ifanr.com/feed",
@@ -105,49 +87,58 @@
       "tags": ["lifestyle", "gadgets", "中文"]
     },
     {
-      "id": "sspai",
-      "title": "少数派",
-      "url": "https://sspai.com/feed",
-      "description": "高效工作与数字生活指南",
+      "id": "hacker-news",
+      "title": "Hacker News",
+      "url": "https://hnrss.org/frontpage",
+      "description": "黑客新闻首页热门，技术圈最热门的话题",
       "icon": null,
-      "categoryId": "blog",
-      "tags": ["productivity", "tools", "中文"]
+      "categoryId": "tech",
+      "tags": ["community", "英文"]
     },
     {
-      "id": "ruanyf-english",
-      "title": "ESL Podcast",
-      "url": "https://feeds.feedburner.com/EsliPod",
-      "description": "英语学习播客，适合中级学习者",
+      "id": "github-blog",
+      "title": "GitHub Blog",
+      "url": "https://github.blog/feed/",
+      "description": "GitHub 官方博客，产品更新与工程实践",
       "icon": null,
-      "categoryId": "podcast",
-      "tags": ["english", "learning", "英文"]
+      "categoryId": "tech",
+      "tags": ["github", "engineering", "英文"]
     },
     {
-      "id": "xiaoyang-station",
-      "title": "小羊的技术站",
-      "url": "https://hijiangtao.github.io/atom.xml",
-      "description": "前端开发与可视化技术分享",
+      "id": "techcrunch",
+      "title": "TechCrunch",
+      "url": "https://techcrunch.com/feed/",
+      "description": "全球科技创业与投资新闻权威媒体",
       "icon": null,
-      "categoryId": "blog",
-      "tags": ["frontend", "visualization", "中文"]
+      "categoryId": "tech",
+      "tags": ["startup", "vc", "英文"]
     },
     {
-      "id": "lucida-me",
-      "title": "Lucida",
-      "url": "https://lucida.me/feed/",
-      "description": "独立博客，分享技术与生活感悟",
+      "id": "the-verge",
+      "title": "The Verge",
+      "url": "https://www.theverge.com/rss/index.xml",
+      "description": "科技、文化与未来趋势深度报道",
       "icon": null,
-      "categoryId": "blog",
-      "tags": ["独立博客", "中文"]
+      "categoryId": "tech",
+      "tags": ["culture", "future", "英文"]
     },
     {
-      "id": "dribbble-popular",
-      "title": "Dribbble Popular",
-      "url": "https://dribbble.com/shots/popular.rss",
-      "description": "Dribbble 热门设计作品",
+      "id": "ars-technica",
+      "title": "Ars Technica",
+      "url": "https://feeds.arstechnica.com/arstechnica/index",
+      "description": "深度科技新闻与分析，专注技术本质",
       "icon": null,
-      "categoryId": "design",
-      "tags": ["inspiration", "英文"]
+      "categoryId": "tech",
+      "tags": ["deep-dive", "science", "英文"]
+    },
+    {
+      "id": "wired",
+      "title": "Wired",
+      "url": "https://www.wired.com/feed/rss",
+      "description": "科技如何改变文化、经济与政治",
+      "icon": null,
+      "categoryId": "tech",
+      "tags": ["future", "culture", "英文"]
     },
     {
       "id": "css-tricks",
@@ -157,24 +148,6 @@
       "icon": null,
       "categoryId": "tech",
       "tags": ["css", "frontend", "英文"]
-    },
-    {
-      "id": "smashing-magazine",
-      "title": "Smashing Magazine",
-      "url": "https://www.smashingmagazine.com/feed/",
-      "description": "网页设计与开发深度文章",
-      "icon": null,
-      "categoryId": "design",
-      "tags": ["webdesign", "英文"]
-    },
-    {
-      "id": "hacker-news",
-      "title": "Hacker News",
-      "url": "https://hnrss.org/frontpage",
-      "description": "黑客新闻首页热门，技术圈最热门的话题",
-      "icon": null,
-      "categoryId": "tech",
-      "tags": ["community", "英文"]
     },
     {
       "id": "rust-blog",
@@ -204,6 +177,24 @@
       "tags": ["react", "frontend", "英文"]
     },
     {
+      "id": "vue-blog",
+      "title": "Vue Blog",
+      "url": "https://blog.vuejs.org/feed.rss",
+      "description": "Vue.js 官方博客",
+      "icon": null,
+      "categoryId": "tech",
+      "tags": ["vue", "frontend", "英文"]
+    },
+    {
+      "id": "nextjs-blog",
+      "title": "Next.js Blog",
+      "url": "https://nextjs.org/feed.xml",
+      "description": "Next.js 官方博客",
+      "icon": null,
+      "categoryId": "tech",
+      "tags": ["nextjs", "react", "英文"]
+    },
+    {
       "id": "typescript-blog",
       "title": "TypeScript Blog",
       "url": "https://devblogs.microsoft.com/typescript/feed/",
@@ -211,6 +202,141 @@
       "icon": null,
       "categoryId": "tech",
       "tags": ["typescript", "programming", "英文"]
+    },
+    {
+      "id": "nodejs-blog",
+      "title": "Node.js Blog",
+      "url": "https://nodejs.org/en/feed/blog.xml",
+      "description": "Node.js 官方博客",
+      "icon": null,
+      "categoryId": "tech",
+      "tags": ["nodejs", "javascript", "英文"]
+    },
+    {
+      "id": "python-insider",
+      "title": "Python Insider",
+      "url": "https://blog.python.org/feeds/posts/default",
+      "description": "Python 官方博客",
+      "icon": null,
+      "categoryId": "tech",
+      "tags": ["python", "programming", "英文"]
+    },
+    {
+      "id": "36kr",
+      "title": "36氪",
+      "url": "https://36kr.com/feed",
+      "description": "创业资讯与商业科技报道",
+      "icon": null,
+      "categoryId": "news",
+      "tags": ["startup", "business", "中文"]
+    },
+    {
+      "id": "zaobao",
+      "title": "联合早报",
+      "url": "https://www.zaobao.com/realtime/china/news/rss",
+      "description": "新加坡华文媒体，提供中国与国际新闻",
+      "icon": null,
+      "categoryId": "news",
+      "tags": ["international", "中文"]
+    },
+    {
+      "id": "bbc-chinese",
+      "title": "BBC 中文网",
+      "url": "https://feeds.bbci.co.uk/zhongwen/simp/rss.xml",
+      "description": "BBC 中文新闻，国际视野与中国报道",
+      "icon": null,
+      "categoryId": "news",
+      "tags": ["international", "中文"]
+    },
+    {
+      "id": "dw-chinese",
+      "title": "德国之声中文",
+      "url": "https://rss.dw.com/xml/rss-chi-all",
+      "description": "德国之声中文新闻，欧洲视角",
+      "icon": null,
+      "categoryId": "news",
+      "tags": ["europe", "中文"]
+    },
+    {
+      "id": "sspai",
+      "title": "少数派",
+      "url": "https://sspai.com/feed",
+      "description": "高效工作与数字生活指南",
+      "icon": null,
+      "categoryId": "blog",
+      "tags": ["productivity", "tools", "中文"]
+    },
+    {
+      "id": "xiaoyang-station",
+      "title": "小羊的技术站",
+      "url": "https://hijiangtao.github.io/atom.xml",
+      "description": "前端开发与可视化技术分享",
+      "icon": null,
+      "categoryId": "blog",
+      "tags": ["frontend", "visualization", "中文"]
+    },
+    {
+      "id": "lucida-me",
+      "title": "Lucida",
+      "url": "https://lucida.me/feed/",
+      "description": "独立博客，分享技术与生活感悟",
+      "icon": null,
+      "categoryId": "blog",
+      "tags": ["独立博客", "中文"]
+    },
+    {
+      "id": "paul-graham",
+      "title": "Paul Graham Essays",
+      "url": "http://www.aaronsw.com/2002/feeds/pgessays.rss",
+      "description": "Y Combinator 创始人创业与人生思考",
+      "icon": null,
+      "categoryId": "blog",
+      "tags": ["startup", "essays", "英文"]
+    },
+    {
+      "id": "joel-on-software",
+      "title": "Joel on Software",
+      "url": "https://www.joelonsoftware.com/feed/",
+      "description": "软件开发与创业经典博客",
+      "icon": null,
+      "categoryId": "blog",
+      "tags": ["software", "business", "英文"]
+    },
+    {
+      "id": "dribbble-popular",
+      "title": "Dribbble Popular",
+      "url": "https://dribbble.com/shots/popular.rss",
+      "description": "Dribbble 热门设计作品",
+      "icon": null,
+      "categoryId": "design",
+      "tags": ["inspiration", "英文"]
+    },
+    {
+      "id": "smashing-magazine",
+      "title": "Smashing Magazine",
+      "url": "https://www.smashingmagazine.com/feed/",
+      "description": "网页设计与开发深度文章",
+      "icon": null,
+      "categoryId": "design",
+      "tags": ["webdesign", "英文"]
+    },
+    {
+      "id": "ux-collective",
+      "title": "UX Collective",
+      "url": "https://uxdesign.cc/feed",
+      "description": "用户体验设计深度文章与思考",
+      "icon": null,
+      "categoryId": "design",
+      "tags": ["ux", "design-thinking", "英文"]
+    },
+    {
+      "id": "ruanyf-english",
+      "title": "ESL Podcast",
+      "url": "https://feeds.feedburner.com/EsliPod",
+      "description": "英语学习播客，适合中级学习者",
+      "icon": null,
+      "categoryId": "podcast",
+      "tags": ["english", "learning", "英文"]
     }
   ]
 }
