@@ -4,6 +4,7 @@ import { FeedList } from './FeedList'
 
 const mockSelectFeed = vi.fn()
 const mockSelectFavorites = vi.fn()
+const mockSelectDiscover = vi.fn()
 const mockRemoveFeed = vi.fn()
 const mockRefreshFeed = vi.fn()
 const mockRefreshAllFeeds = vi.fn()
@@ -23,6 +24,7 @@ let mockFeeds = [
 let mockSelectedFeedId: string | null = null
 let mockIsLoading = false
 let mockShowFavoritesOnly = false
+let mockShowDiscover = false
 let mockRefreshingFeedIds = new Set<string>()
 
 vi.mock('../../contexts/RssContext', () => ({
@@ -31,6 +33,7 @@ vi.mock('../../contexts/RssContext', () => ({
     get selectedFeedId() { return mockSelectedFeedId },
     get isLoading() { return mockIsLoading },
     get showFavoritesOnly() { return mockShowFavoritesOnly },
+    get showDiscover() { return mockShowDiscover },
     get refreshingFeedIds() { return mockRefreshingFeedIds },
     removeFeed: mockRemoveFeed,
     refreshFeed: mockRefreshFeed,
@@ -38,19 +41,8 @@ vi.mock('../../contexts/RssContext', () => ({
     updateFeed: mockUpdateFeed,
     selectFeed: mockSelectFeed,
     selectFavorites: mockSelectFavorites,
+    selectDiscover: mockSelectDiscover,
     getGlobalUnreadCount: mockGetGlobalUnreadCount,
-  }),
-}))
-
-vi.mock('../ui/ConfirmDialog', () => ({
-  useConfirm: () => ({
-    confirm: mockConfirm,
-  }),
-}))
-
-vi.mock('../settings/UnifiedSettings', () => ({
-  useUnifiedSettings: () => ({
-    openSettings: mockOpenSettings,
   }),
 }))
 
@@ -68,6 +60,7 @@ vi.mock('lucide-react', () => ({
   MoreHorizontal: (props: Record<string, unknown>) => <svg data-testid="more-icon" {...props} />,
   ScrollText: (props: Record<string, unknown>) => <svg data-testid="scroll-text-icon" {...props} />,
   X: (props: Record<string, unknown>) => <svg data-testid="x-icon" {...props} />,
+  Compass: (props: Record<string, unknown>) => <svg data-testid="compass-icon" {...props} />,
 }))
 
 vi.mock('../queue/QueueIndicator', () => ({
