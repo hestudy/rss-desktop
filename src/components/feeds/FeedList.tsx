@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Rss, Plus, Trash2, Settings, Star, RefreshCw, Pencil, ScrollText, MoreHorizontal, Loader2 } from 'lucide-react'
+import { Rss, Plus, Trash2, Settings, Star, RefreshCw, Pencil, ScrollText, MoreHorizontal, Loader2, Compass } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { ScrollArea } from '../ui/ScrollArea'
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '../ui/DropdownMenu'
@@ -24,7 +24,9 @@ export function FeedList() {
     refreshAllFeeds,
     selectFeed,
     selectFavorites,
+    selectDiscover,
     showFavoritesOnly,
+    showDiscover,
     getGlobalUnreadCount,
     refreshingFeedIds,
   } = useRss()
@@ -121,6 +123,22 @@ export function FeedList() {
             <div className="flex items-center gap-2">
               <Star className="w-4 h-4" />
               <span className="font-medium text-sm">收藏文章</span>
+            </div>
+          </button>
+
+          {/* 发现订阅入口 */}
+          <button
+            data-testid="discover-button"
+            onClick={() => selectDiscover()}
+            className={`group relative w-full text-left px-3 py-2 rounded-md transition-all duration-200 ${
+              showDiscover
+                ? 'bg-sidebar-hover text-sidebar-fg'
+                : 'hover:bg-sidebar-hover text-sidebar-muted'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <Compass className="w-4 h-4" />
+              <span className="font-medium text-sm">发现</span>
             </div>
           </button>
         </div>

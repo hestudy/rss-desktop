@@ -9,6 +9,7 @@ import type {
   FeedLog,
   AiUsageSummary,
   ModelPrice,
+  DiscoverData,
 } from '../types'
 
 /**
@@ -190,5 +191,12 @@ export class RssApi {
 
   static async getBuiltinModelPrices(): Promise<ModelPrice[]> {
     return await invoke<ModelPrice[]>('get_builtin_model_prices')
+  }
+
+  /**
+   * 获取发现页订阅列表
+   */
+  static async getDiscoverFeeds(): Promise<DiscoverData> {
+    return await invoke<DiscoverData>('get_discover_feeds')
   }
 }

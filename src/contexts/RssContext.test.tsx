@@ -632,6 +632,278 @@ describe('RssContext', () => {
     })
   })
 
+  describe('selectDiscover', () => {
+    it('should set showDiscover to true', async () => {
+      const { result } = renderHook(() => useRss(), { wrapper })
+
+      expect(result.current.showDiscover).toBe(false)
+
+      act(() => {
+        result.current.selectDiscover()
+      })
+
+      expect(result.current.showDiscover).toBe(true)
+    })
+
+    it('should clear selectedFeedId', async () => {
+      const { result } = renderHook(() => useRss(), { wrapper })
+
+      // First select a feed
+      act(() => {
+        result.current.selectFeed('feed-1')
+      })
+
+      await waitFor(() => {
+        expect(result.current.selectedFeedId).toBe('feed-1')
+      })
+
+      // Then select discover
+      act(() => {
+        result.current.selectDiscover()
+      })
+
+      expect(result.current.selectedFeedId).toBeNull()
+    })
+
+    it('should set showFavoritesOnly to false', async () => {
+      const { result } = renderHook(() => useRss(), { wrapper })
+
+      // First select favorites
+      vi.mocked(RssApi.getFavoriteArticles).mockResolvedValue([])
+      await act(async () => {
+        await result.current.selectFavorites()
+      })
+
+      expect(result.current.showFavoritesOnly).toBe(true)
+
+      // Then select discover
+      act(() => {
+        result.current.selectDiscover()
+      })
+
+      expect(result.current.showFavoritesOnly).toBe(false)
+    })
+
+    it('should not affect feeds or articles state', async () => {
+      const mockFeeds: FeedWithUnreadCount[] = [
+        { feed: { id: 'f1', url: 'https://example.com', title: 'Feed 1', created_at: '', updated_at: '' }, unread_count: 3 },
+      ]
+      const mockArticles: Article[] = [
+        { id: 'a1', feed_id: 'f1', title: 'Article 1', link: '', read: false, created_at: '' },
+      ]
+
+      vi.mocked(RssApi.getFeeds).mockResolvedValue(mockFeeds)
+      vi.mocked(RssApi.getArticles).mockResolvedValue(mockArticles)
+
+      const { result } = renderHook(() => useRss(), { wrapper })
+
+      // Load feeds and articles
+      await act(async () => {
+        await result.current.loadFeeds()
+        await result.current.loadArticles('f1')
+      })
+
+      const feedsBeforeDiscover = result.current.feeds
+      const articlesBeforeDiscover = result.current.articles
+
+      // Select discover
+      act(() => {
+        result.current.selectDiscover()
+      })
+
+      // Feeds and articles should not change
+      expect(result.current.feeds).toEqual(feedsBeforeDiscover)
+      expect(result.current.articles).toEqual(articlesBeforeDiscover)
+    })
+
+    it('should be callable multiple times without side effects', async () => {
+      const { result } = renderHook(() => useRss(), { wrapper })
+
+      act(() => {
+        result.current.selectDiscover()
+      })
+      expect(result.current.showDiscover).toBe(true)
+
+      act(() => {
+        result.current.selectDiscover()
+      })
+      expect(result.current.showDiscover).toBe(true)
+
+      act(() => {
+        result.current.selectDiscover()
+      })
+      expect(result.current.showDiscover).toBe(true)
+    })
+  })
+
+  describe('exitDiscover', () => {
+    it('should set showDiscover to false', async () => {
+      const { result } = renderHook(() => useRss(), { wrapper })
+
+      // First enter discover mode
+      act(() => {
+        result.current.selectDiscover()
+      })
+
+      expect(result.current.showDiscover).toBe(true)
+
+      // Then exit discover
+      act(() => {
+        result.current.exitDiscover()
+      })
+
+      expect(result.current.showDiscover).toBe(false)
+    })
+
+    it('should not affect selectedFeedId', async () => {
+      const { result } = renderHook(() => useRss(), { wrapper })
+
+      // Set up initial state
+      act(() => {
+        result.current.selectDiscover()
+      })
+
+      // selectedFeedId should be null after selectDiscover
+      expect(result.current.selectedFeedId).toBeNull()
+
+      // Exit discover
+      act(() => {
+        result.current.exitDiscover()
+      })
+
+      // selectedFeedId should remain null
+      expect(result.current.selectedFeedId).toBeNull()
+    })
+
+    it('should not affect showFavoritesOnly', async () => {
+      const { result } = renderHook(() => useRss(), { wrapper })
+
+      act(() => {
+        result.current.selectDiscover()
+      })
+
+      expect(result.current.showFavoritesOnly).toBe(false)
+
+      act(() => {
+        result.current.exitDiscover()
+      })
+
+      expect(result.current.showFavoritesOnly).toBe(false)
+    })
+
+    it('should be callable when not in discover mode without side effects', async () => {
+      const { result } = renderHook(() => useRss(), { wrapper })
+
+      // exitDiscover when not in discover mode
+      act(() => {
+        result.current.exitDiscover()
+      })
+
+      expect(result.current.showDiscover).toBe(false)
+      expect(result.current.selectedFeedId).toBeNull()
+      expect(result.current.showFavoritesOnly).toBe(false)
+    })
+
+    it('should be callable multiple times without side effects', async () => {
+      const { result } = renderHook(() => useRss(), { wrapper })
+
+      // Enter discover mode
+      act(() => {
+        result.current.selectDiscover()
+      })
+      expect(result.current.showDiscover).toBe(true)
+
+      // Exit multiple times
+      act(() => {
+        result.current.exitDiscover()
+      })
+      expect(result.current.showDiscover).toBe(false)
+
+      act(() => {
+        result.current.exitDiscover()
+      })
+      expect(result.current.showDiscover).toBe(false)
+
+      act(() => {
+        result.current.exitDiscover()
+      })
+      expect(result.current.showDiscover).toBe(false)
+    })
+  })
+
+  describe('selectDiscover and exitDiscover interaction', () => {
+    it('should toggle discover mode correctly', async () => {
+      const { result } = renderHook(() => useRss(), { wrapper })
+
+      // Initially not in discover mode
+      expect(result.current.showDiscover).toBe(false)
+
+      // Enter discover
+      act(() => {
+        result.current.selectDiscover()
+      })
+      expect(result.current.showDiscover).toBe(true)
+
+      // Exit discover
+      act(() => {
+        result.current.exitDiscover()
+      })
+      expect(result.current.showDiscover).toBe(false)
+
+      // Enter again
+      act(() => {
+        result.current.selectDiscover()
+      })
+      expect(result.current.showDiscover).toBe(true)
+
+      // Exit again
+      act(() => {
+        result.current.exitDiscover()
+      })
+      expect(result.current.showDiscover).toBe(false)
+    })
+
+    it('should clear discover mode when selecting a feed', async () => {
+      const { result } = renderHook(() => useRss(), { wrapper })
+
+      // Enter discover mode
+      act(() => {
+        result.current.selectDiscover()
+      })
+      expect(result.current.showDiscover).toBe(true)
+
+      // Select a feed should exit discover mode
+      vi.mocked(RssApi.getArticles).mockResolvedValue([])
+      act(() => {
+        result.current.selectFeed('feed-1')
+      })
+
+      await waitFor(() => {
+        expect(result.current.showDiscover).toBe(false)
+        expect(result.current.selectedFeedId).toBe('feed-1')
+      })
+    })
+
+    it('should clear discover mode when selecting favorites', async () => {
+      const { result } = renderHook(() => useRss(), { wrapper })
+
+      // Enter discover mode
+      act(() => {
+        result.current.selectDiscover()
+      })
+      expect(result.current.showDiscover).toBe(true)
+
+      // Select favorites should exit discover mode
+      vi.mocked(RssApi.getFavoriteArticles).mockResolvedValue([])
+      await act(async () => {
+        await result.current.selectFavorites()
+      })
+
+      expect(result.current.showDiscover).toBe(false)
+      expect(result.current.showFavoritesOnly).toBe(true)
+    })
+  })
+
   describe('markArticleRead', () => {
     it('should mark article as read and decrement unread count', async () => {
       const feeds: FeedWithUnreadCount[] = [

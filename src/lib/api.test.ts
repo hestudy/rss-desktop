@@ -536,6 +536,199 @@ describe('RssApi - 任务队列', () => {
   })
 })
 
+describe('RssApi - 发现功能', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  describe('getDiscoverFeeds', () => {
+    it('应该调用正确的命令并返回发现数据', async () => {
+      const mockDiscoverData = {
+        categories: [
+          { id: 'tech', name: '科技', icon: 'Cpu', description: '科技资讯' },
+        ],
+        feeds: [
+          {
+            id: 'feed-1',
+            title: 'Test Feed',
+            url: 'https://example.com/feed.xml',
+            description: 'Test description',
+            categoryId: 'tech',
+            tags: ['test'],
+          },
+        ],
+      }
+      mockInvoke.mockResolvedValue(mockDiscoverData)
+
+      const result = await RssApi.getDiscoverFeeds()
+
+      expect(mockInvoke).toHaveBeenCalledWith('get_discover_feeds')
+      expect(result).toEqual(mockDiscoverData)
+      expect(result.categories).toHaveLength(1)
+      expect(result.feeds).toHaveLength(1)
+    })
+
+    it('应该返回正确结构的分类数据', async () => {
+      const mockDiscoverData = {
+        categories: [
+          { id: 'tech', name: '科技', icon: 'Cpu', description: '科技资讯与开发者博客' },
+          { id: 'news', name: '新闻', icon: 'Newspaper', description: '国内外新闻资讯' },
+        ],
+        feeds: [],
+      }
+      mockInvoke.mockResolvedValue(mockDiscoverData)
+
+      const result = await RssApi.getDiscoverFeeds()
+
+      expect(result.categories[0]).toEqual({
+        id: 'tech',
+        name: '科技',
+        icon: 'Cpu',
+        description: '科技资讯与开发者博客',
+      })
+      expect(result.categories[1]).toEqual({
+        id: 'news',
+        name: '新闻',
+        icon: 'Newspaper',
+        description: '国内外新闻资讯',
+      })
+    })
+
+    it('应该返回正确结构的订阅源数据', async () => {
+      const mockDiscoverData = {
+        categories: [],
+        feeds: [
+          {
+            id: 'feed-1',
+            title: '阮一峰的网络日志',
+            url: 'https://www.ruanyifeng.com/blog/atom.xml',
+            description: '科技爱好者周刊',
+            categoryId: 'tech',
+            tags: ['weekly', 'tech', '中文'],
+            icon: null,
+          },
+        ],
+      }
+      mockInvoke.mockResolvedValue(mockDiscoverData)
+
+      const result = await RssApi.getDiscoverFeeds()
+
+      expect(result.feeds[0]).toEqual({
+        id: 'feed-1',
+        title: '阮一峰的网络日志',
+        url: 'https://www.ruanyifeng.com/blog/atom.xml',
+        description: '科技爱好者周刊',
+        categoryId: 'tech',
+        tags: ['weekly', 'tech', '中文'],
+        icon: null,
+      })
+    })
+
+    it('应该处理空的分类和订阅源列表', async () => {
+      mockInvoke.mockResolvedValue({ categories: [], feeds: [] })
+
+      const result = await RssApi.getDiscoverFeeds()
+
+      expect(result.categories).toEqual([])
+      expect(result.feeds).toEqual([])
+    })
+
+    it('应该处理带有可选 icon 字段的订阅源', async () => {
+      const mockDiscoverData = {
+        categories: [],
+        feeds: [
+          {
+            id: 'feed-with-icon',
+            title: 'Feed with Icon',
+            url: 'https://example.com/feed.xml',
+            description: 'Description',
+            categoryId: 'tech',
+            tags: [],
+            icon: 'https://example.com/icon.png',
+          },
+          {
+            id: 'feed-without-icon',
+            title: 'Feed without Icon',
+            url: 'https://example2.com/feed.xml',
+            description: 'Description',
+            categoryId: 'tech',
+            tags: [],
+            icon: null,
+          },
+        ],
+      }
+      mockInvoke.mockResolvedValue(mockDiscoverData)
+
+      const result = await RssApi.getDiscoverFeeds()
+
+      expect(result.feeds[0].icon).toBe('https://example.com/icon.png')
+      expect(result.feeds[1].icon).toBeNull()
+    })
+
+    it('应该处理带有空标签数组的订阅源', async () => {
+      const mockDiscoverData = {
+        categories: [],
+        feeds: [
+          {
+            id: 'feed-1',
+            title: 'Feed',
+            url: 'https://example.com/feed.xml',
+            description: 'Description',
+            categoryId: 'tech',
+            tags: [],
+          },
+        ],
+      }
+      mockInvoke.mockResolvedValue(mockDiscoverData)
+
+      const result = await RssApi.getDiscoverFeeds()
+
+      expect(result.feeds[0].tags).toEqual([])
+    })
+
+    it('应该处理带有多个标签的订阅源', async () => {
+      const mockDiscoverData = {
+        categories: [],
+        feeds: [
+          {
+            id: 'feed-1',
+            title: 'Feed',
+            url: 'https://example.com/feed.xml',
+            description: 'Description',
+            categoryId: 'tech',
+            tags: ['tag1', 'tag2', 'tag3', 'tag4', 'tag5'],
+          },
+        ],
+      }
+      mockInvoke.mockResolvedValue(mockDiscoverData)
+
+      const result = await RssApi.getDiscoverFeeds()
+
+      expect(result.feeds[0].tags).toHaveLength(5)
+    })
+
+    it('应该抛出错误当 invoke 调用失败时', async () => {
+      mockInvoke.mockRejectedValue(new Error('Failed to load discover feeds'))
+
+      await expect(RssApi.getDiscoverFeeds()).rejects.toThrow('Failed to load discover feeds')
+    })
+
+    it('应该抛出错误当 JSON 解析失败时', async () => {
+      mockInvoke.mockRejectedValue(new Error('Failed to parse discover feeds: invalid JSON'))
+
+      await expect(RssApi.getDiscoverFeeds()).rejects.toThrow('Failed to parse discover feeds')
+    })
+
+    it('返回类型应该是 Promise<DiscoverData>', async () => {
+      mockInvoke.mockResolvedValue({ categories: [], feeds: [] })
+
+      const result = RssApi.getDiscoverFeeds()
+
+      expect(result).toBeInstanceOf(Promise)
+    })
+  })
+})
+
 describe('RssApi - 日志', () => {
   beforeEach(() => {
     vi.clearAllMocks()

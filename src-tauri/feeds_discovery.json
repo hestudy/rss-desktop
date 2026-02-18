@@ -1,0 +1,216 @@
+{
+  "categories": [
+    {
+      "id": "tech",
+      "name": "科技",
+      "icon": "Cpu",
+      "description": "科技资讯与开发者博客"
+    },
+    {
+      "id": "news",
+      "name": "新闻",
+      "icon": "Newspaper",
+      "description": "国内外新闻资讯"
+    },
+    {
+      "id": "design",
+      "name": "设计",
+      "icon": "Palette",
+      "description": "UI/UX 设计与创意灵感"
+    },
+    {
+      "id": "blog",
+      "name": "博客",
+      "icon": "PenLine",
+      "description": "个人博客与独立思考"
+    },
+    {
+      "id": "podcast",
+      "name": "播客",
+      "icon": "Headphones",
+      "description": "精选中文播客"
+    }
+  ],
+  "feeds": [
+    {
+      "id": "ruanyifeng-weekly",
+      "title": "阮一峰的网络日志",
+      "url": "https://www.ruanyifeng.com/blog/atom.xml",
+      "description": "科技爱好者周刊，每周五发布，分享科技圈动态与工具推荐",
+      "icon": null,
+      "categoryId": "tech",
+      "tags": ["weekly", "tech", "中文"]
+    },
+    {
+      "id": "solidot",
+      "title": "奇客Solidot",
+      "url": "https://www.solidot.org/index.rss",
+      "description": "科技新闻与开源资讯，关注技术发展与自由软件",
+      "icon": null,
+      "categoryId": "tech",
+      "tags": ["news", "opensource", "中文"]
+    },
+    {
+      "id": "infoq-china",
+      "title": "InfoQ 中文",
+      "url": "https://www.infoq.cn/feed",
+      "description": "企业级软件开发资讯，涵盖架构、AI、云原生等领域",
+      "icon": null,
+      "categoryId": "tech",
+      "tags": ["enterprise", "architecture", "中文"]
+    },
+    {
+      "id": "oschina",
+      "title": "开源中国",
+      "url": "https://www.oschina.net/news/rss",
+      "description": "开源技术资讯与项目推荐",
+      "icon": null,
+      "categoryId": "tech",
+      "tags": ["opensource", "中文"]
+    },
+    {
+      "id": "ithome-rss",
+      "title": "IT之家",
+      "url": "https://www.ithome.com/rss/",
+      "description": "数码科技资讯与产品评测",
+      "icon": null,
+      "categoryId": "tech",
+      "tags": ["gadgets", "reviews", "中文"]
+    },
+    {
+      "id": "36kr",
+      "title": "36氪",
+      "url": "https://36kr.com/feed",
+      "description": "创业资讯与商业科技报道",
+      "icon": null,
+      "categoryId": "news",
+      "tags": ["startup", "business", "中文"]
+    },
+    {
+      "id": "zaobao",
+      "title": "联合早报",
+      "url": "https://www.zaobao.com/realtime/china/news/rss",
+      "description": "新加坡华文媒体，提供中国与国际新闻",
+      "icon": null,
+      "categoryId": "news",
+      "tags": ["international", "中文"]
+    },
+    {
+      "id": "ifanr",
+      "title": "爱范儿",
+      "url": "https://www.ifanr.com/feed",
+      "description": "科技生活方式媒体，关注数字产品与创新",
+      "icon": null,
+      "categoryId": "tech",
+      "tags": ["lifestyle", "gadgets", "中文"]
+    },
+    {
+      "id": "sspai",
+      "title": "少数派",
+      "url": "https://sspai.com/feed",
+      "description": "高效工作与数字生活指南",
+      "icon": null,
+      "categoryId": "blog",
+      "tags": ["productivity", "tools", "中文"]
+    },
+    {
+      "id": "ruanyf-english",
+      "title": "ESL Podcast",
+      "url": "https://feeds.feedburner.com/EsliPod",
+      "description": "英语学习播客，适合中级学习者",
+      "icon": null,
+      "categoryId": "podcast",
+      "tags": ["english", "learning", "英文"]
+    },
+    {
+      "id": "xiaoyang-station",
+      "title": "小羊的技术站",
+      "url": "https://hijiangtao.github.io/atom.xml",
+      "description": "前端开发与可视化技术分享",
+      "icon": null,
+      "categoryId": "blog",
+      "tags": ["frontend", "visualization", "中文"]
+    },
+    {
+      "id": "lucida-me",
+      "title": "Lucida",
+      "url": "https://lucida.me/feed/",
+      "description": "独立博客，分享技术与生活感悟",
+      "icon": null,
+      "categoryId": "blog",
+      "tags": ["独立博客", "中文"]
+    },
+    {
+      "id": "dribbble-popular",
+      "title": "Dribbble Popular",
+      "url": "https://dribbble.com/shots/popular.rss",
+      "description": "Dribbble 热门设计作品",
+      "icon": null,
+      "categoryId": "design",
+      "tags": ["inspiration", "英文"]
+    },
+    {
+      "id": "css-tricks",
+      "title": "CSS-Tricks",
+      "url": "https://css-tricks.com/feed/",
+      "description": "CSS 技巧与前端开发教程",
+      "icon": null,
+      "categoryId": "tech",
+      "tags": ["css", "frontend", "英文"]
+    },
+    {
+      "id": "smashing-magazine",
+      "title": "Smashing Magazine",
+      "url": "https://www.smashingmagazine.com/feed/",
+      "description": "网页设计与开发深度文章",
+      "icon": null,
+      "categoryId": "design",
+      "tags": ["webdesign", "英文"]
+    },
+    {
+      "id": "hacker-news",
+      "title": "Hacker News",
+      "url": "https://hnrss.org/frontpage",
+      "description": "黑客新闻首页热门，技术圈最热门的话题",
+      "icon": null,
+      "categoryId": "tech",
+      "tags": ["community", "英文"]
+    },
+    {
+      "id": "rust-blog",
+      "title": "Rust Blog",
+      "url": "https://blog.rust-lang.org/feed.xml",
+      "description": "Rust 编程语言官方博客",
+      "icon": null,
+      "categoryId": "tech",
+      "tags": ["rust", "programming", "英文"]
+    },
+    {
+      "id": "go-blog",
+      "title": "Go Blog",
+      "url": "https://go.dev/blog/feed.atom",
+      "description": "Go 编程语言官方博客",
+      "icon": null,
+      "categoryId": "tech",
+      "tags": ["golang", "programming", "英文"]
+    },
+    {
+      "id": "react-blog",
+      "title": "React Blog",
+      "url": "https://react.dev/blog/rss.xml",
+      "description": "React 官方博客",
+      "icon": null,
+      "categoryId": "tech",
+      "tags": ["react", "frontend", "英文"]
+    },
+    {
+      "id": "typescript-blog",
+      "title": "TypeScript Blog",
+      "url": "https://devblogs.microsoft.com/typescript/feed/",
+      "description": "TypeScript 官方博客",
+      "icon": null,
+      "categoryId": "tech",
+      "tags": ["typescript", "programming", "英文"]
+    }
+  ]
+}

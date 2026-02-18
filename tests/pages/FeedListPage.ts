@@ -155,8 +155,22 @@ export class FeedListPage {
    * Check if a feed with the given title exists
    */
   async hasFeed(title: string): Promise<boolean> {
-    const count = await this.page.locator('button').filter({ hasText: title }).count()
-    return count > 0
+    // Look for feed items that contain the title in the span element
+    const feedItem = this.page.locator('[data-testid="feed-item"]').filter({ hasText: title })
+    return await feedItem.isVisible({ timeout: 3000 }).catch(() => false)
+  }
+
+  /**
+   * Wait for a feed to appear in the list
+   */
+  async waitForFeed(title: string, timeout = 5000): Promise<boolean> {
+    try {
+      const feedItem = this.page.locator('[data-testid="feed-item"]').filter({ hasText: title })
+      await feedItem.waitFor({ state: 'visible', timeout })
+      return true
+    } catch {
+      return false
+    }
   }
 
   /**

@@ -254,6 +254,37 @@ impl FeedLog {
     }
 }
 
+/// 发现页分类
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiscoverCategory {
+    pub id: String,
+    pub name: String,
+    pub icon: String,
+    pub description: String,
+}
+
+/// 发现页订阅源
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscoverFeed {
+    pub id: String,
+    pub title: String,
+    pub url: String,
+    pub description: String,
+    #[serde(default)]
+    pub icon: Option<String>,
+    pub category_id: String,
+    #[serde(default)]
+    pub tags: Vec<String>,
+}
+
+/// 发现页数据
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiscoverData {
+    pub categories: Vec<DiscoverCategory>,
+    pub feeds: Vec<DiscoverFeed>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -340,5 +371,217 @@ mod tests {
         a2.guid = None;
 
         assert!(!a1.is_duplicate_of(&a2));
+    }
+
+    #[test]
+    fn test_discover_category_serialization() {
+        let category = DiscoverCategory {
+            id: "tech".to_string(),
+            name: "科技".to_string(),
+            icon: "Cpu".to_string(),
+            description: "科技资讯".to_string(),
+        };
+
+        let json = serde_json::to_string(&category).unwrap();
+        assert!(json.contains("tech"));
+        assert!(json.contains("科技"));
+        assert!(json.contains("Cpu"));
+    }
+
+    #[test]
+    fn test_discover_category_deserialization() {
+        let json = r#"{
+            "id": "news",
+            "name": "新闻",
+            "icon": "Newspaper",
+            "description": "新闻资讯"
+        }"#;
+
+        let category: DiscoverCategory = serde_json::from_str(json).unwrap();
+        assert_eq!(category.id, "news");
+        assert_eq!(category.name, "新闻");
+        assert_eq!(category.icon, "Newspaper");
+        assert_eq!(category.description, "新闻资讯");
+    }
+
+    #[test]
+    fn test_discover_feed_serialization() {
+        let feed = DiscoverFeed {
+            id: "feed-1".to_string(),
+            title: "Test Feed".to_string(),
+            url: "https://example.com/feed.xml".to_string(),
+            description: "A test feed".to_string(),
+            icon: Some("https://example.com/icon.png".to_string()),
+            category_id: "tech".to_string(),
+            tags: vec!["tech".to_string(), "news".to_string()],
+        };
+
+        let json = serde_json::to_string(&feed).unwrap();
+        assert!(json.contains("feed-1"));
+        assert!(json.contains("Test Feed"));
+        assert!(json.contains("https://example.com/feed.xml"));
+        assert!(json.contains("categoryId")); // camelCase (JSON format)
+    }
+
+    #[test]
+    fn test_discover_feed_deserialization_with_camel_case() {
+        // 测试实际的 JSON 文件格式 (camelCase)
+        let json = r#"{
+            "id": "ruanyifeng-weekly",
+            "title": "阮一峰的网络日志",
+            "url": "https://www.ruanyifeng.com/blog/atom.xml",
+            "description": "科技爱好者周刊",
+            "icon": null,
+            "categoryId": "tech",
+            "tags": ["weekly", "tech", "中文"]
+        }"#;
+
+        let feed: DiscoverFeed = serde_json::from_str(json).unwrap();
+        assert_eq!(feed.id, "ruanyifeng-weekly");
+        assert_eq!(feed.title, "阮一峰的网络日志");
+        assert_eq!(feed.url, "https://www.ruanyifeng.com/blog/atom.xml");
+        assert_eq!(feed.category_id, "tech");
+        assert_eq!(feed.tags, vec!["weekly", "tech", "中文"]);
+    }
+
+    #[test]
+    fn test_discover_feed_deserialization_with_optional_icon() {
+        let json = r#"{
+            "id": "feed-1",
+            "title": "Test Feed",
+            "url": "https://example.com/feed.xml",
+            "description": "Description",
+            "icon": "https://example.com/icon.png",
+            "categoryId": "tech",
+            "tags": []
+        }"#;
+
+        let feed: DiscoverFeed = serde_json::from_str(json).unwrap();
+        assert_eq!(feed.icon, Some("https://example.com/icon.png".to_string()));
+    }
+
+    #[test]
+    fn test_discover_feed_default_values() {
+        let json = r#"{
+            "id": "feed-1",
+            "title": "Test Feed",
+            "url": "https://example.com/feed.xml",
+            "description": "Description",
+            "categoryId": "tech"
+        }"#;
+
+        let feed: DiscoverFeed = serde_json::from_str(json).unwrap();
+        assert!(feed.icon.is_none());
+        assert!(feed.tags.is_empty());
+    }
+
+    #[test]
+    fn test_discover_data_serialization() {
+        let data = DiscoverData {
+            categories: vec![
+                DiscoverCategory {
+                    id: "tech".to_string(),
+                    name: "科技".to_string(),
+                    icon: "Cpu".to_string(),
+                    description: "科技资讯".to_string(),
+                },
+            ],
+            feeds: vec![
+                DiscoverFeed {
+                    id: "feed-1".to_string(),
+                    title: "Test Feed".to_string(),
+                    url: "https://example.com/feed.xml".to_string(),
+                    description: "Description".to_string(),
+                    icon: None,
+                    category_id: "tech".to_string(),
+                    tags: vec![],
+                },
+            ],
+        };
+
+        let json = serde_json::to_string(&data).unwrap();
+        assert!(json.contains("categories"));
+        assert!(json.contains("feeds"));
+    }
+
+    #[test]
+    fn test_discover_data_deserialization() {
+        let json = r#"{
+            "categories": [
+                {
+                    "id": "tech",
+                    "name": "科技",
+                    "icon": "Cpu",
+                    "description": "科技资讯"
+                }
+            ],
+            "feeds": [
+                {
+                    "id": "feed-1",
+                    "title": "Test Feed",
+                    "url": "https://example.com/feed.xml",
+                    "description": "Description",
+                    "categoryId": "tech",
+                    "tags": ["tech"]
+                }
+            ]
+        }"#;
+
+        let data: DiscoverData = serde_json::from_str(json).unwrap();
+        assert_eq!(data.categories.len(), 1);
+        assert_eq!(data.feeds.len(), 1);
+        assert_eq!(data.categories[0].id, "tech");
+        assert_eq!(data.feeds[0].category_id, "tech");
+    }
+
+    #[test]
+    fn test_discover_data_empty_arrays() {
+        let json = r#"{
+            "categories": [],
+            "feeds": []
+        }"#;
+
+        let data: DiscoverData = serde_json::from_str(json).unwrap();
+        assert!(data.categories.is_empty());
+        assert!(data.feeds.is_empty());
+    }
+
+    #[test]
+    fn test_discover_feed_with_multiple_tags() {
+        let json = r#"{
+            "id": "feed-1",
+            "title": "Test Feed",
+            "url": "https://example.com/feed.xml",
+            "description": "Description",
+            "categoryId": "tech",
+            "tags": ["tag1", "tag2", "tag3", "tag4", "tag5"]
+        }"#;
+
+        let feed: DiscoverFeed = serde_json::from_str(json).unwrap();
+        assert_eq!(feed.tags.len(), 5);
+    }
+
+    #[test]
+    fn test_discover_category_required_fields() {
+        // Test that all fields are required
+        let json = r#"{
+            "id": "test",
+            "name": "Test"
+        }"#;
+
+        let result: Result<DiscoverCategory, _> = serde_json::from_str(json);
+        assert!(result.is_err()); // Should fail because icon and description are missing
+    }
+
+    #[test]
+    fn test_discover_feed_required_fields() {
+        // Test that required fields are enforced
+        let json = r#"{
+            "id": "feed-1",
+            "title": "Test"
+        }"#;
+
+        let result: Result<DiscoverFeed, _> = serde_json::from_str(json);
+        assert!(result.is_err()); // Should fail because url, description, category_id are missing
     }
 }

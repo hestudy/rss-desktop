@@ -212,3 +212,34 @@ export interface ModelPrice {
   input_price: number
   output_price: number
 }
+
+/**
+ * 发现页分类
+ */
+export interface DiscoverCategory {
+  id: string
+  name: string
+  icon: string
+  description: string
+}
+
+/**
+ * 发现页订阅源
+ */
+export interface DiscoverFeed {
+  id: string
+  title: string
+  url: string
+  description: string
+  icon?: string
+  categoryId: string
+  tags: string[]
+}
+
+/**
+ * 发现页数据
+ */
+export interface DiscoverData {
+  categories: DiscoverCategory[]
+  feeds: DiscoverFeed[]
+}

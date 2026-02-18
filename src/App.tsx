@@ -8,6 +8,7 @@ import { FeedList } from "./components/feeds/FeedList";
 import { ArticleList } from "./components/articles/ArticleList";
 import { ArticleViewer } from "./components/articles/ArticleViewer";
 import { EmptyReaderPlaceholder } from "./components/articles/EmptyReaderPlaceholder";
+import { DiscoverPanel } from "./components/discover";
 import { ResizeHandle } from "./components/ui/ResizeHandle";
 import { UpdateBanner } from "./components/ui/UpdateBanner";
 import { ChangelogDialog } from "./components/ui/ChangelogDialog";
@@ -18,11 +19,16 @@ import { useAutoUpdater } from "./hooks/useAutoUpdater";
 import "./styles/themes/index.css";
 
 const STORAGE_KEY = "panel-layout-v2";
+const DISCOVER_LAYOUT_STORAGE_KEY = "discover-layout-v1";
 
 // 三栏默认大小（百分比）
 const DEFAULT_SIDEBAR_SIZE = 15;
 const DEFAULT_ARTICLE_LIST_SIZE = 30;
 const DEFAULT_READER_SIZE = 55;
+
+// 两栏发现模式默认大小
+const DEFAULT_DISCOVER_SIDEBAR_SIZE = 20;
+const DEFAULT_DISCOVER_PANEL_SIZE = 80;
 
 // 面板约束
 const MIN_SIDEBAR_PERCENT = 12;
@@ -31,6 +37,10 @@ const MIN_ARTICLE_LIST_PERCENT = 20;
 const MAX_ARTICLE_LIST_PERCENT = 45;
 const MIN_READER_SIZE = 200; // px
 
+// 发现模式面板约束
+const MIN_DISCOVER_SIDEBAR_PERCENT = 15;
+const MAX_DISCOVER_SIDEBAR_PERCENT = 35;
+
 interface ThreePanelLayout {
   sidebar: number;
   articleList: number;
@@ -38,9 +48,10 @@ interface ThreePanelLayout {
 }
 
 function AppContent() {
-  const { loadFeeds, silentRefreshAll, articles, selectFeedAndLoad } = useRss();
+  const { loadFeeds, silentRefreshAll, articles, selectFeedAndLoad, showDiscover, feeds, addFeed, exitDiscover } = useRss();
   const { selectedArticleId, selectArticle, readerSettings } = useReader();
   const groupRef = useGroupRef();
+  const discoverGroupRef = useGroupRef();
   const initialRefreshDone = useRef(false);
 
   // 自动更新检查
@@ -124,6 +135,42 @@ function AppContent() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadFeeds, groupRef]);
 
+  // 加载发现模式布局
+  useEffect(() => {
+    if (!showDiscover) return;
+
+    let cancelled = false;
+
+    invoke("get_store_value", { key: DISCOVER_LAYOUT_STORAGE_KEY })
+      .then((value: unknown) => {
+        if (cancelled || !discoverGroupRef.current) return;
+
+        if (value && typeof value === "object") {
+          const record = value as Record<string, unknown>;
+          const sidebar = typeof record.sidebar === "number" ? record.sidebar : null;
+
+          if (
+            sidebar !== null &&
+            sidebar >= MIN_DISCOVER_SIDEBAR_PERCENT &&
+            sidebar <= MAX_DISCOVER_SIDEBAR_PERCENT
+          ) {
+            discoverGroupRef.current.setLayout({
+              "discover-sidebar-panel": sidebar,
+              "discover-content-panel": 100 - sidebar,
+            });
+          }
+        }
+      })
+      .catch(() => {
+        // 存储加载失败时使用默认布局
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showDiscover]);
+
   const handleLayoutChange = (newLayout: Layout) => {
     const sidebar = newLayout["sidebar-panel"];
     const articleList = newLayout["article-list-panel"];
@@ -147,6 +194,98 @@ function AppContent() {
     }
   };
 
+  const handleDiscoverLayoutChange = (newLayout: Layout) => {
+    const sidebar = newLayout["discover-sidebar-panel"];
+
+    if (
+      typeof sidebar === "number" &&
+      sidebar >= MIN_DISCOVER_SIDEBAR_PERCENT &&
+      sidebar <= MAX_DISCOVER_SIDEBAR_PERCENT
+    ) {
+      invoke("set_store_value", {
+        key: DISCOVER_LAYOUT_STORAGE_KEY,
+        value: { sidebar, discoverPanel: 100 - sidebar },
+      }).catch(() => {
+        // 存储保存失败时静默忽略
+      });
+    }
+  };
+
+  // 发现模式两栏布局
+  if (showDiscover) {
+    return (
+      <div className="flex flex-col h-screen">
+        {/* 更新提示 Banner */}
+        {autoUpdater.updateInfo && (
+          <UpdateBanner
+            version={autoUpdater.updateInfo.version}
+            onDownload={autoUpdater.downloadAndInstall}
+            onDismiss={autoUpdater.dismissUpdate}
+            onViewChangelog={() => setChangelogOpen(true)}
+          />
+        )}
+
+        {/* 更新日志对话框 */}
+        {autoUpdater.updateInfo && (
+          <ChangelogDialog
+            open={changelogOpen}
+            onOpenChange={setChangelogOpen}
+            version={autoUpdater.updateInfo.version}
+            content={autoUpdater.updateInfo.body || ''}
+            publishedAt={autoUpdater.updateInfo.date?.toLocaleDateString()}
+          />
+        )}
+
+        {/* 发现模式两栏布局 */}
+        <div data-testid="discover-layout" className="flex-1">
+          <Group
+            groupRef={discoverGroupRef}
+            orientation="horizontal"
+            className="h-full"
+            defaultLayout={{
+              "discover-sidebar-panel": DEFAULT_DISCOVER_SIDEBAR_SIZE,
+              "discover-content-panel": DEFAULT_DISCOVER_PANEL_SIZE,
+            }}
+            onLayoutChange={handleDiscoverLayoutChange}
+          >
+          {/* 左侧订阅列表 */}
+          <Panel
+            id="discover-sidebar-panel"
+            minSize={`${MIN_DISCOVER_SIDEBAR_PERCENT}%`}
+            maxSize={`${MAX_DISCOVER_SIDEBAR_PERCENT}%`}
+            defaultSize={`${DEFAULT_DISCOVER_SIDEBAR_SIZE}%`}
+          >
+            <div data-testid="feed-panel-content" className="h-full">
+              <FeedList />
+            </div>
+          </Panel>
+
+          {/* 拖拽手柄 */}
+          <ResizeHandle id="discover-resize-handle" />
+
+          {/* 右侧发现面板 */}
+          <Panel
+            id="discover-content-panel"
+            defaultSize={`${DEFAULT_DISCOVER_PANEL_SIZE}%`}
+          >
+            <div data-testid="discover-panel-content" className="h-full">
+              <DiscoverPanel
+                existingFeeds={feeds}
+                onAddFeed={async (url, useFullContent, useAiSummary, useAiTranslation) => {
+                  await addFeed(url, useFullContent, useAiSummary, useAiTranslation)
+                  exitDiscover()
+                }}
+                onClose={exitDiscover}
+              />
+            </div>
+          </Panel>
+          </Group>
+        </div>
+      </div>
+    );
+  }
+
+  // 正常三栏布局
   return (
     <div className="flex flex-col h-screen">
       {/* 更新提示 Banner */}

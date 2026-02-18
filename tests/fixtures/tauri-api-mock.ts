@@ -104,6 +104,19 @@ const MOCK_ARTICLES: Article[] = [
 const articleState: Record<string, Article> = {}
 MOCK_ARTICLES.forEach(a => { articleState[a.id] = { ...a } })
 
+// Mutable feeds state (for dynamic feed addition)
+const feedState: FeedWithUnreadCount[] = [...MOCK_FEEDS]
+
+// Discover feeds data (for add_feed to look up titles)
+const DISCOVER_FEEDS: Record<string, { title: string; description: string }> = {
+  'https://www.ruanyifeng.com/blog/atom.xml': { title: '阮一峰的网络日志', description: '科技爱好者周刊，分享技术文章和有趣资源' },
+  'https://sspai.com/feed': { title: '少数派', description: '高效工作与数字生活，分享效率工具和方法' },
+  'https://36kr.com/feed': { title: '36氪', description: '让一部分人先看到未来，创业投资资讯' },
+  'https://www.uisdc.com/feed': { title: '优设网', description: '设计师的学习平台，UI/UX 设计教程' },
+  'https://xueqiu.com/feed': { title: '雪球', description: '聪明的投资者都在这里，股票投资社区' },
+  'https://www.infoq.com/feed': { title: 'InfoQ', description: '软件开发领域的技术文章与新闻' },
+}
+
 // --- Invoke handler ----------------------------------------------------------
 
 async function mockInvoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
@@ -111,7 +124,7 @@ async function mockInvoke<T>(command: string, args?: Record<string, unknown>): P
 
   switch (command) {
     case 'get_feeds':
-      return MOCK_FEEDS as T
+      return [...feedState] as T
 
     case 'get_articles': {
       let result = Object.values(articleState)
@@ -140,8 +153,30 @@ async function mockInvoke<T>(command: string, args?: Record<string, unknown>): P
     case 'get_article':
       return (articleState[args?.id as string] || null) as T
 
-    case 'add_feed':
-      return MOCK_FEEDS[0].feed as T
+    case 'add_feed': {
+      const url = args?.url as string
+      // 检查是否已存在
+      const existingFeed = feedState.find(f => f.feed.url === url)
+      if (existingFeed) {
+        return existingFeed.feed as T
+      }
+      // 从发现数据中查找标题和描述
+      const discoverInfo = DISCOVER_FEEDS[url]
+      // 创建新的 feed
+      const newFeed: FeedWithUnreadCount = {
+        feed: {
+          id: `feed-${Date.now()}`,
+          url,
+          title: discoverInfo?.title || args?.title as string || url.split('/').pop() || 'New Feed',
+          description: discoverInfo?.description || '',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        unread_count: 0,
+      }
+      feedState.push(newFeed)
+      return newFeed.feed as T
+    }
 
     case 'remove_feed':
       return undefined as T
@@ -377,6 +412,67 @@ async function mockInvoke<T>(command: string, args?: Record<string, unknown>): P
         feedsSkipped: 0,
         settingsImported: true,
         aiSettingsImported: true,
+      } as T
+
+    case 'get_discover_feeds':
+      return {
+        categories: [
+          { id: 'tech', name: '科技', icon: 'Cpu', description: '科技资讯与编程技术' },
+          { id: 'news', name: '新闻', icon: 'Newspaper', description: '国内外新闻资讯' },
+          { id: 'design', name: '设计', icon: 'Palette', description: 'UI/UX 设计与创意灵感' },
+          { id: 'finance', name: '财经', icon: 'TrendingUp', description: '金融投资与市场分析' },
+        ],
+        feeds: [
+          {
+            id: 'discover-1',
+            title: '阮一峰的网络日志',
+            url: 'https://www.ruanyifeng.com/blog/atom.xml',
+            description: '科技爱好者周刊，分享技术文章和有趣资源',
+            icon: 'https://www.ruanyifeng.com/favicon.ico',
+            categoryId: 'tech',
+            tags: ['科技', '编程', '技术周刊'],
+          },
+          {
+            id: 'discover-2',
+            title: '少数派',
+            url: 'https://sspai.com/feed',
+            description: '高效工作与数字生活，分享效率工具和方法',
+            categoryId: 'tech',
+            tags: ['效率', '工具', '数字生活'],
+          },
+          {
+            id: 'discover-3',
+            title: '36氪',
+            url: 'https://36kr.com/feed',
+            description: '让一部分人先看到未来，创业投资资讯',
+            categoryId: 'news',
+            tags: ['创业', '投资', '商业'],
+          },
+          {
+            id: 'discover-4',
+            title: '优设网',
+            url: 'https://www.uisdc.com/feed',
+            description: '设计师的学习平台，UI/UX 设计教程',
+            categoryId: 'design',
+            tags: ['设计', 'UI', 'UX'],
+          },
+          {
+            id: 'discover-5',
+            title: '雪球',
+            url: 'https://xueqiu.com/feed',
+            description: '聪明的投资者都在这里，股票投资社区',
+            categoryId: 'finance',
+            tags: ['投资', '股票', '理财'],
+          },
+          {
+            id: 'discover-6',
+            title: 'InfoQ',
+            url: 'https://www.infoq.com/feed',
+            description: '软件开发领域的技术文章与新闻',
+            categoryId: 'tech',
+            tags: ['技术', '架构', '敏捷开发'],
+          },
+        ],
       } as T
 
     default:

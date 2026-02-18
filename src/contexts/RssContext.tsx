@@ -11,6 +11,7 @@ interface RssContextType {
   isLoading: boolean
   error: string | null
   showFavoritesOnly: boolean
+  showDiscover: boolean
   refreshProgress: RefreshProgress
   refreshingFeedIds: Set<string>
   loadFeeds: () => Promise<void>
@@ -24,6 +25,8 @@ interface RssContextType {
   selectFeed: (id: string | null) => void
   selectFeedAndLoad: (feedId: string) => Promise<void>
   selectFavorites: () => void
+  selectDiscover: () => void
+  exitDiscover: () => void
   markArticleRead: (id: string, read: boolean) => Promise<void>
   markAllRead: (feedId: string) => Promise<void>
   openLink: (url: string) => Promise<void>
@@ -59,6 +62,7 @@ export function RssProvider({ children }: RssProviderProps) {
     currentFeedTitle: '',
   })
   const [refreshingFeedIds, setRefreshingFeedIds] = useState<Set<string>>(new Set())
+  const [showDiscover, setShowDiscover] = useState(false)
 
   const selectedFeedIdRef = useRef(selectedFeedId)
   selectedFeedIdRef.current = selectedFeedId
@@ -279,6 +283,7 @@ export function RssProvider({ children }: RssProviderProps) {
   const selectFeed = useCallback((id: string | null) => {
     setSelectedFeedId(id)
     setShowFavoritesOnly(false)
+    setShowDiscover(false)
     loadArticles(id || undefined)
   }, [loadArticles])
 
@@ -291,6 +296,7 @@ export function RssProvider({ children }: RssProviderProps) {
   const selectFavorites = useCallback(async () => {
     setSelectedFeedId(null)
     setShowFavoritesOnly(true)
+    setShowDiscover(false)
     setIsLoading(true)
     setError(null)
     try {
@@ -301,6 +307,16 @@ export function RssProvider({ children }: RssProviderProps) {
     } finally {
       setIsLoading(false)
     }
+  }, [])
+
+  const selectDiscover = useCallback(() => {
+    setSelectedFeedId(null)
+    setShowFavoritesOnly(false)
+    setShowDiscover(true)
+  }, [])
+
+  const exitDiscover = useCallback(() => {
+    setShowDiscover(false)
   }, [])
 
   const markArticleRead = useCallback(async (id: string, read: boolean) => {
@@ -367,6 +383,7 @@ export function RssProvider({ children }: RssProviderProps) {
     isLoading,
     error,
     showFavoritesOnly,
+    showDiscover,
     refreshProgress,
     refreshingFeedIds,
     loadFeeds,
@@ -380,6 +397,8 @@ export function RssProvider({ children }: RssProviderProps) {
     selectFeed,
     selectFeedAndLoad,
     selectFavorites,
+    selectDiscover,
+    exitDiscover,
     markArticleRead,
     markAllRead,
     openLink,

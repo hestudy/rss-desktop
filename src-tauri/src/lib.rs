@@ -22,7 +22,7 @@ mod keyring_helper;
 mod config_io;
 
 // 导出常用类型
-pub use models::{Feed, Article, AddFeedRequest, UpdateFeedRequest, GetArticlesRequest, ApiResponse, FeedWithUnreadCount, FeedLog, LogArticleSummary};
+pub use models::{Feed, Article, AddFeedRequest, UpdateFeedRequest, GetArticlesRequest, ApiResponse, FeedWithUnreadCount, FeedLog, LogArticleSummary, DiscoverFeed, DiscoverCategory, DiscoverData};
 pub use error::{RssError, Result};
 pub use settings::{AiSettings, AppSettings, SchedulerState, PollInterval, NotificationType};
 pub use background_scheduler::{BackgroundScheduler, NewArticlesEvent, ArticleSummary};
@@ -238,6 +238,7 @@ pub fn run() {
             commands::get_pending_notification_feed,
             config_io::export_config,
             config_io::import_config,
+            commands::get_discover_feeds,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

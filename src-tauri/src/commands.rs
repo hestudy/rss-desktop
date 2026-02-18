@@ -1,4 +1,4 @@
-use crate::models::{Feed, Article, FeedWithUnreadCount, FeedLog, LogArticleSummary};
+use crate::models::{Feed, Article, FeedWithUnreadCount, FeedLog, LogArticleSummary, DiscoverData};
 use crate::fetcher::fetch_feed;
 use crate::content_extractor::fetch_and_extract_content;
 use crate::ai_summarizer;
@@ -820,4 +820,16 @@ pub async fn get_pending_notification_feed(
     pending: State<'_, Arc<PendingNotificationFeed>>,
 ) -> CommandResult<Option<String>> {
     Ok(pending.take())
+}
+
+/// 获取发现页订阅列表
+#[tauri::command]
+pub async fn get_discover_feeds() -> CommandResult<DiscoverData> {
+    // 从嵌入的资源文件中读取
+    let json_data = include_str!("../feeds_discovery.json");
+
+    let discover_data: DiscoverData = serde_json::from_str(json_data)
+        .map_err(|e| format!("Failed to parse discover feeds: {}", e))?;
+
+    Ok(discover_data)
 }
