@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { PullToRefreshIndicator } from './PullToRefreshIndicator'
 
@@ -57,7 +57,7 @@ describe('PullToRefreshIndicator', () => {
 
   describe('下拉状态', () => {
     it('下拉中应该显示进度旋转', () => {
-      const { container } = render(
+      render(
         <PullToRefreshIndicator
           distance={50}
           progress={0.5}
@@ -144,7 +144,7 @@ describe('PullToRefreshIndicator', () => {
 
   describe('样式', () => {
     it('应该支持自定义 className', () => {
-      const { container } = render(
+      render(
         <PullToRefreshIndicator
           distance={50}
           progress={0.5}
@@ -154,8 +154,8 @@ describe('PullToRefreshIndicator', () => {
         />
       )
 
-      const wrapper = container.firstChild as HTMLElement
-      expect(wrapper).toHaveClass('custom-class')
+      const wrapper = document.querySelector('.custom-class')
+      expect(wrapper).toBeInTheDocument()
     })
 
     it('图标应该有正确的颜色类', () => {

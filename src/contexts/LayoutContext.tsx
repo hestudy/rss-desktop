@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react'
+import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react'
 import { isMobile } from '@/lib/platform'
 
 /**
@@ -66,8 +66,18 @@ interface LayoutProviderProps {
 }
 
 export function LayoutProvider({ children }: LayoutProviderProps) {
-  // Layout mode based on platform detection
-  const [isMobileLayout] = useState(() => isMobile())
+  // Layout mode based on platform detection and screen size
+  const [isMobileLayout, setIsMobileLayout] = useState(() => isMobile())
+
+  // Listen for window resize to update layout mode
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobileLayout(isMobile())
+    }
+
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   // Current mobile view
   const [mobileView, setMobileViewState] = useState<MobileView>('feed-list')

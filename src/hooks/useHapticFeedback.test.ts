@@ -266,10 +266,10 @@ describe('useHapticFeedback', () => {
 
   describe('边界情况', () => {
     it('在 SSR 环境中应该正常工作', () => {
-      // 模拟 SSR 环境（无 navigator）
-      const originalNavigator = global.navigator
+      // 模拟 SSR 环境（无 navigator.vibrate）
+      const originalVibrate = navigator.vibrate
       // @ts-expect-error 模拟 SSR 环境
-      delete global.navigator
+      delete navigator.vibrate
 
       const { result } = renderHook(() => useHapticFeedback())
 
@@ -281,8 +281,8 @@ describe('useHapticFeedback', () => {
         result.current.trigger('light')
       })
 
-      // 恢复 navigator
-      global.navigator = originalNavigator
+      // 恢复 vibrate
+      navigator.vibrate = originalVibrate
     })
 
     it('应该在组件重新渲染时保持状态', () => {

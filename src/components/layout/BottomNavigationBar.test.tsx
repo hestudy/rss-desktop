@@ -264,7 +264,7 @@ describe('BottomNavigationBar', () => {
     })
 
     it('should position badge on feed button', () => {
-      const { container } = render(<BottomNavigationBar unreadCount={5} />)
+      render(<BottomNavigationBar unreadCount={5} />)
 
       const feedButton = screen.getByRole('button', { name: /订阅|feeds/i })
       const badge = screen.getByText('5')

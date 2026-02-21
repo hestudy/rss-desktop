@@ -106,13 +106,45 @@ export function getPlatform(): Platform {
 }
 
 /**
- * Checks if the app is running on a mobile platform (iOS or Android).
+ * Mobile layout breakpoint in pixels.
+ * Screens narrower than this will use mobile layout.
+ */
+export const MOBILE_BREAKPOINT = 768
+
+/**
+ * Checks if the screen width is below mobile breakpoint.
  *
- * @returns true if running on iOS or Android, false otherwise
+ * @returns true if screen width < MOBILE_BREAKPOINT
+ */
+export function isNarrowScreen(): boolean {
+  if (typeof window === 'undefined') {
+    return false
+  }
+  return window.innerWidth < MOBILE_BREAKPOINT
+}
+
+/**
+ * Checks if the app should use mobile layout.
+ * Returns true if:
+ * - Running on iOS or Android platform, OR
+ * - Screen width is below mobile breakpoint
+ *
+ * @returns true if mobile layout should be used
  */
 export function isMobile(): boolean {
   const platform = getPlatform()
-  return platform === Platform.IOS || platform === Platform.Android
+
+  // Native mobile platforms always use mobile layout
+  if (platform === Platform.IOS || platform === Platform.Android) {
+    return true
+  }
+
+  // Desktop platforms use mobile layout if screen is narrow
+  if (platform === Platform.Desktop) {
+    return isNarrowScreen()
+  }
+
+  return false
 }
 
 /**
