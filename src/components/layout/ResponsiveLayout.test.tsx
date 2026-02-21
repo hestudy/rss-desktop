@@ -161,6 +161,19 @@ vi.mock('@/components/discover', () => ({
   DiscoverPanel: () => <div data-testid="discover-panel">DiscoverPanel</div>,
 }))
 
+// Mock AddFeedDialog
+vi.mock('@/components/feeds/AddFeedDialog', () => ({
+  AddFeedDialog: ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) => {
+    if (!isOpen) return null
+    return (
+      <div data-testid="add-feed-dialog">
+        AddFeedDialog
+        <button data-testid="close-add-feed-dialog" onClick={onClose}>Close</button>
+      </div>
+    )
+  },
+}))
+
 // Mock UpdateBanner and ChangelogDialog
 vi.mock('@/components/ui/UpdateBanner', () => ({
   UpdateBanner: () => <div data-testid="update-banner">UpdateBanner</div>,
@@ -521,6 +534,47 @@ describe('ResponsiveLayout', () => {
       render(<ResponsiveLayout><div>Content</div></ResponsiveLayout>)
 
       expect(screen.getByTestId('feeds-count')).toHaveTextContent('0')
+    })
+
+    it('should show AddFeedDialog when add feed button is clicked in MobileFeedList', async () => {
+      mockMobileView = 'feed-list'
+      mockFeeds = [
+        { feed: { id: 'feed-1', title: 'Feed 1' }, unread_count: 5 },
+      ]
+
+      render(<ResponsiveLayout><div>Content</div></ResponsiveLayout>)
+
+      // 点击添加按钮应该打开 AddFeedDialog
+      const addFeedButton = screen.getByTestId('mobile-add-feed')
+
+      // 初始时对话框不应该显示
+      expect(screen.queryByTestId('add-feed-dialog')).not.toBeInTheDocument()
+
+      await act(async () => {
+        addFeedButton.click()
+      })
+
+      // 点击后对话框应该显示
+      expect(screen.getByTestId('add-feed-dialog')).toBeInTheDocument()
+    })
+
+    it('should NOT call selectDiscover when add feed button is clicked in MobileFeedList', async () => {
+      mockMobileView = 'feed-list'
+      mockFeeds = [
+        { feed: { id: 'feed-1', title: 'Feed 1' }, unread_count: 5 },
+      ]
+
+      render(<ResponsiveLayout><div>Content</div></ResponsiveLayout>)
+
+      const addFeedButton = screen.getByTestId('mobile-add-feed')
+
+      await act(async () => {
+        addFeedButton.click()
+      })
+
+      // 点击添加按钮不应该调用 selectDiscover（导航到发现页面）
+      // 而是应该打开 AddFeedDialog
+      expect(mockSelectDiscover).not.toHaveBeenCalled()
     })
   })
 

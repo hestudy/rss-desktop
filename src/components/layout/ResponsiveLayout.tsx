@@ -7,6 +7,7 @@ import { FeedList } from '@/components/feeds/FeedList'
 import { ArticleList } from '@/components/articles/ArticleList'
 import { ArticleViewer } from '@/components/articles/ArticleViewer'
 import { EmptyReaderPlaceholder } from '@/components/articles/EmptyReaderPlaceholder'
+import { AddFeedDialog } from '@/components/feeds/AddFeedDialog'
 import { DiscoverPanel } from '@/components/discover'
 import { MobileLayout } from './MobileLayout'
 import { MobileFeedList } from '@/components/mobile/MobileFeedList'
@@ -63,9 +64,11 @@ function MobileContentView() {
     selectFeedAndLoad,
     refreshAllFeeds,
     markArticleRead,
-    selectDiscover,
   } = useRss()
   const { selectedArticleId, selectArticle } = useReader()
+
+  // 添加订阅对话框状态
+  const [showAddFeedDialog, setShowAddFeedDialog] = useState(false)
 
   // Get current selected article
   const selectedArticle = articles.find(a => a.id === selectedArticleId) || null
@@ -124,15 +127,21 @@ function MobileContentView() {
   switch (mobileView) {
     case 'feed-list':
       return (
-        <MobileFeedList
-          feeds={feedList}
-          selectedFeedId={selectedFeedId}
-          onFeedClick={handleFeedClick}
-          onRefresh={refreshAllFeeds}
-          onAddFeed={selectDiscover}
-          unreadCounts={unreadCounts}
-          isLoading={isLoading}
-        />
+        <>
+          <MobileFeedList
+            feeds={feedList}
+            selectedFeedId={selectedFeedId}
+            onFeedClick={handleFeedClick}
+            onRefresh={refreshAllFeeds}
+            onAddFeed={() => setShowAddFeedDialog(true)}
+            unreadCounts={unreadCounts}
+            isLoading={isLoading}
+          />
+          <AddFeedDialog
+            isOpen={showAddFeedDialog}
+            onClose={() => setShowAddFeedDialog(false)}
+          />
+        </>
       )
     case 'article-list':
       return (
@@ -164,15 +173,21 @@ function MobileContentView() {
       return <MobileSettingsView />
     default:
       return (
-        <MobileFeedList
-          feeds={feedList}
-          selectedFeedId={selectedFeedId}
-          onFeedClick={handleFeedClick}
-          onRefresh={refreshAllFeeds}
-          onAddFeed={selectDiscover}
-          unreadCounts={unreadCounts}
-          isLoading={isLoading}
-        />
+        <>
+          <MobileFeedList
+            feeds={feedList}
+            selectedFeedId={selectedFeedId}
+            onFeedClick={handleFeedClick}
+            onRefresh={refreshAllFeeds}
+            onAddFeed={() => setShowAddFeedDialog(true)}
+            unreadCounts={unreadCounts}
+            isLoading={isLoading}
+          />
+          <AddFeedDialog
+            isOpen={showAddFeedDialog}
+            onClose={() => setShowAddFeedDialog(false)}
+          />
+        </>
       )
   }
 }
