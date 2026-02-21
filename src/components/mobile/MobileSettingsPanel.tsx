@@ -1,8 +1,11 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import {
   ArrowLeft,
   Palette,
   BookOpen,
+  Bell,
+  Sparkles,
+  Coins,
   Database,
   Info,
   ChevronDown,
@@ -20,6 +23,21 @@ import { DEFAULT_READER_SETTINGS } from '@/types'
 import { useUpdater } from '@/hooks/useUpdater'
 import { useAppVersion } from '@/hooks/useAppVersion'
 import { DataManagementSection } from '@/components/settings/DataManagementSection'
+import {
+  getSettings,
+  updateSettings,
+  getAiSettings,
+  updateAiSettings,
+  POLL_INTERVAL_OPTIONS,
+  NOTIFICATION_TYPE_OPTIONS,
+  AUTO_UPDATE_CHECK_INTERVAL_OPTIONS,
+  DEFAULT_SETTINGS,
+  DEFAULT_AI_SETTINGS,
+  type AppSettings,
+  type AiSettings,
+} from '@/lib/settings'
+import { RssApi } from '@/lib/api'
+import type { AiUsageSummary } from '@/types'
 
 // ============= Types =============
 
@@ -28,7 +46,7 @@ export interface MobileSettingsPanelProps {
   onBack?: () => void
 }
 
-type SettingGroup = 'appearance' | 'reading' | 'data' | 'about'
+type SettingGroup = 'appearance' | 'reading' | 'notification' | 'ai' | 'ai-usage' | 'data' | 'about'
 
 // ============= Theme Configuration =============
 
@@ -361,6 +379,36 @@ export function MobileSettingsPanel({ onBack }: MobileSettingsPanelProps) {
           </button>
         </AccordionItem>
 
+        {/* Notification Settings */}
+        <AccordionItem
+          title="通知"
+          icon={<Bell className="w-5 h-5" />}
+          isExpanded={isGroupExpanded('notification')}
+          onToggle={() => toggleGroup('notification')}
+        >
+          <NotificationSection />
+        </AccordionItem>
+
+        {/* AI Settings */}
+        <AccordionItem
+          title="AI"
+          icon={<Sparkles className="w-5 h-5" />}
+          isExpanded={isGroupExpanded('ai')}
+          onToggle={() => toggleGroup('ai')}
+        >
+          <AiSection />
+        </AccordionItem>
+
+        {/* AI Usage Settings */}
+        <AccordionItem
+          title="AI 费用"
+          icon={<Coins className="w-5 h-5" />}
+          isExpanded={isGroupExpanded('ai-usage')}
+          onToggle={() => toggleGroup('ai-usage')}
+        >
+          <AiUsageSection />
+        </AccordionItem>
+
         {/* Data Management Settings */}
         <AccordionItem
           title="Data Management"
@@ -434,6 +482,537 @@ export function MobileSettingsPanel({ onBack }: MobileSettingsPanelProps) {
             A lightweight RSS reader desktop application focused on providing a comfortable reading experience.
           </p>
         </AccordionItem>
+      </div>
+    </div>
+  )
+}
+
+// ============= Notification Settings Section =============
+
+function NotificationSection() {
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS)
+  const [saving, setSaving] = useState(false)
+  const [loaded, setLoaded] = useState(false)
+
+  useEffect(() => {
+    getSettings()
+      .then((s) => {
+        setSettings(s)
+        setLoaded(true)
+      })
+      .catch(() => {
+        setLoaded(true)
+      })
+  }, [])
+
+  const handleChange = async (patch: Partial<AppSettings>) => {
+    const updated = { ...settings, ...patch }
+    setSettings(updated)
+    setSaving(true)
+    try {
+      await updateSettings(updated)
+    } catch {
+      // 静默失败
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (!loaded) {
+    return <div className="text-sm text-muted-foreground py-4">加载中...</div>
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* 轮询间隔 */}
+      <div>
+        <h3 className="text-sm font-medium text-foreground mb-1">轮询间隔</h3>
+        <p className="text-xs text-muted-foreground mb-2">自动检查新文章的频率</p>
+        <select
+          value={settings.pollInterval}
+          onChange={(e) => handleChange({ pollInterval: e.target.value as AppSettings['pollInterval'] })}
+          disabled={saving}
+          className="w-full px-3 py-3 rounded-lg border border-border bg-card text-foreground text-sm min-h-[44px]"
+        >
+          {POLL_INTERVAL_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* 启用通知 */}
+      <SettingToggle
+        label="启用通知"
+        description="有新文章时发送系统通知"
+        checked={settings.enableNotifications}
+        onChange={(v) => handleChange({ enableNotifications: v })}
+      />
+
+      {/* 通知类型 */}
+      {settings.enableNotifications && (
+        <div>
+          <h3 className="text-sm font-medium text-foreground mb-1">通知类型</h3>
+          <p className="text-xs text-muted-foreground mb-2">选择通知的展示方式</p>
+          <select
+            value={settings.notificationType}
+            onChange={(e) => handleChange({ notificationType: e.target.value as AppSettings['notificationType'] })}
+            disabled={saving}
+            className="w-full px-3 py-3 rounded-lg border border-border bg-card text-foreground text-sm min-h-[44px]"
+          >
+            {NOTIFICATION_TYPE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {/* 每批次最大通知数 */}
+      {settings.enableNotifications && (
+        <SettingSlider
+          label="每批次最大通知数"
+          value={settings.maxNotificationsPerBatch}
+          min={1}
+          max={20}
+          step={1}
+          onChange={(v) => handleChange({ maxNotificationsPerBatch: v })}
+        />
+      )}
+
+      {/* 后台刷新 */}
+      <SettingToggle
+        label="后台刷新"
+        description="应用最小化时继续检查新文章"
+        checked={settings.enableBackgroundRefresh}
+        onChange={(v) => handleChange({ enableBackgroundRefresh: v })}
+      />
+
+      {/* 关闭到托盘 */}
+      <SettingToggle
+        label="关闭到托盘"
+        description="关闭窗口时最小化到系统托盘"
+        checked={settings.closeToTray}
+        onChange={(v) => handleChange({ closeToTray: v })}
+      />
+
+      {/* 分隔线 */}
+      <div className="border-t border-border pt-4 mt-4">
+        <h3 className="text-sm font-medium text-foreground mb-3">自动更新</h3>
+
+        {/* 自动检查更新 */}
+        <SettingToggle
+          label="自动检查更新"
+          description="启动时和定期检查应用更新"
+          checked={settings.enableAutoUpdateCheck}
+          onChange={(v) => handleChange({ enableAutoUpdateCheck: v })}
+        />
+
+        {/* 检查间隔 */}
+        {settings.enableAutoUpdateCheck && (
+          <div className="mt-3">
+            <h3 className="text-sm font-medium text-foreground mb-1">检查间隔</h3>
+            <p className="text-xs text-muted-foreground mb-2">自动检查更新的频率</p>
+            <select
+              value={settings.autoUpdateCheckInterval}
+              onChange={(e) => handleChange({ autoUpdateCheckInterval: e.target.value as AppSettings['autoUpdateCheckInterval'] })}
+              disabled={saving}
+              className="w-full px-3 py-3 rounded-lg border border-border bg-card text-foreground text-sm min-h-[44px]"
+            >
+              {AUTO_UPDATE_CHECK_INTERVAL_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ============= AI Settings Section =============
+
+function AiSection() {
+  const [settings, setSettings] = useState<AiSettings>(DEFAULT_AI_SETTINGS)
+  const [saving, setSaving] = useState(false)
+  const [loaded, setLoaded] = useState(false)
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(null)
+
+  useEffect(() => {
+    getAiSettings()
+      .then((s) => {
+        setSettings(s)
+        setLoaded(true)
+      })
+      .catch(() => setLoaded(true))
+  }, [])
+
+  const saveSettings = useCallback(async (updated: AiSettings) => {
+    setSaving(true)
+    try {
+      await updateAiSettings(updated)
+    } catch {
+      // 静默失败
+    } finally {
+      setSaving(false)
+    }
+  }, [])
+
+  const handleChange = useCallback((patch: Partial<AiSettings>) => {
+    setSettings((prev) => {
+      const updated = { ...prev, ...patch }
+      saveSettings(updated)
+      return updated
+    })
+  }, [saveSettings])
+
+  const handleDebouncedChange = useCallback((patch: Partial<AiSettings>) => {
+    setSettings((prev) => ({ ...prev, ...patch }))
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      setSettings((prev) => {
+        saveSettings(prev)
+        return prev
+      })
+    }, 500)
+  }, [saveSettings])
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [])
+
+  if (!loaded) {
+    return <div className="text-sm text-muted-foreground py-4">加载中...</div>
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* API 地址 */}
+      <div>
+        <h3 className="text-sm font-medium text-foreground mb-1">API 地址</h3>
+        <p className="text-xs text-muted-foreground mb-2">OpenAI 兼容的 API 端点</p>
+        <input
+          type="text"
+          value={settings.apiEndpoint}
+          onChange={(e) => handleDebouncedChange({ apiEndpoint: e.target.value })}
+          disabled={saving}
+          placeholder="https://api.openai.com/v1"
+          className="w-full px-3 py-3 rounded-lg border border-border bg-card text-foreground text-sm min-h-[44px]"
+        />
+      </div>
+
+      {/* API Key */}
+      <div>
+        <h3 className="text-sm font-medium text-foreground mb-1">API Key</h3>
+        <p className="text-xs text-muted-foreground mb-2">用于身份验证的密钥</p>
+        <input
+          type="password"
+          value={settings.apiKey}
+          onChange={(e) => handleDebouncedChange({ apiKey: e.target.value })}
+          disabled={saving}
+          placeholder="sk-..."
+          className="w-full px-3 py-3 rounded-lg border border-border bg-card text-foreground text-sm min-h-[44px]"
+        />
+      </div>
+
+      {/* 模型 */}
+      <div>
+        <h3 className="text-sm font-medium text-foreground mb-1">模型</h3>
+        <p className="text-xs text-muted-foreground mb-2">用于生成摘要的模型名称</p>
+        <input
+          type="text"
+          value={settings.model}
+          onChange={(e) => handleDebouncedChange({ model: e.target.value })}
+          disabled={saving}
+          placeholder="gpt-4o-mini"
+          className="w-full px-3 py-3 rounded-lg border border-border bg-card text-foreground text-sm min-h-[44px]"
+        />
+      </div>
+
+      {/* 最大 Token */}
+      <SettingSlider
+        label="最大 Token 数"
+        value={settings.maxTokens}
+        min={50}
+        max={2000}
+        step={50}
+        onChange={(v) => handleChange({ maxTokens: v })}
+      />
+
+      {/* 最大并发数 */}
+      <SettingSlider
+        label="翻译最大并发数"
+        value={settings.maxConcurrency}
+        min={1}
+        max={10}
+        step={1}
+        onChange={(v) => handleChange({ maxConcurrency: v })}
+      />
+
+      {/* 自动摘要 */}
+      <SettingToggle
+        label="自动生成摘要"
+        description="新文章自动生成 AI 摘要"
+        checked={settings.enableAutoSummary}
+        onChange={(v) => handleChange({ enableAutoSummary: v })}
+      />
+
+      {/* 摘要语言 */}
+      <div>
+        <h3 className="text-sm font-medium text-foreground mb-1">摘要语言</h3>
+        <select
+          value={settings.language}
+          onChange={(e) => handleChange({ language: e.target.value })}
+          disabled={saving}
+          className="w-full px-3 py-3 rounded-lg border border-border bg-card text-foreground text-sm min-h-[44px]"
+        >
+          <option value="zh-CN">中文</option>
+          <option value="en">English</option>
+          <option value="ja">日本語</option>
+        </select>
+      </div>
+
+      {/* 自定义提示词 */}
+      <div>
+        <h3 className="text-sm font-medium text-foreground mb-1">自定义提示词</h3>
+        <p className="text-xs text-muted-foreground mb-2">AI 生成摘要时使用的系统提示词</p>
+        <textarea
+          value={settings.prompt}
+          onChange={(e) => handleDebouncedChange({ prompt: e.target.value })}
+          disabled={saving}
+          rows={3}
+          className="w-full px-3 py-3 rounded-lg border border-border bg-card text-foreground text-sm resize-none"
+        />
+      </div>
+    </div>
+  )
+}
+
+// ============= AI Usage Section =============
+
+function AiUsageSection() {
+  const [summary, setSummary] = useState<AiUsageSummary | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [clearing, setClearing] = useState(false)
+  const [showConfirm, setShowConfirm] = useState(false)
+  const [aiSettings, setAiSettings] = useState<AiSettings>(DEFAULT_AI_SETTINGS)
+  const [savingPrice, setSavingPrice] = useState(false)
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(null)
+
+  const loadData = useCallback(async () => {
+    try {
+      const [s, ai] = await Promise.all([
+        RssApi.getAiUsageSummary(),
+        getAiSettings(),
+      ])
+      setSummary(s)
+      setAiSettings(ai)
+    } catch {
+      // silent
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [])
+
+  const handleClear = async () => {
+    setClearing(true)
+    try {
+      await RssApi.clearAiUsageRecords()
+      await loadData()
+    } catch {
+      // silent
+    } finally {
+      setClearing(false)
+      setShowConfirm(false)
+    }
+  }
+
+  const handlePriceChange = (field: 'customInputPrice' | 'customOutputPrice', value: string) => {
+    const numValue = value === '' ? null : Number(value)
+    const updated = { ...aiSettings, [field]: numValue }
+    setAiSettings(updated)
+
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(async () => {
+      setSavingPrice(true)
+      try {
+        await updateAiSettings({ [field]: numValue })
+        const s = await RssApi.getAiUsageSummary()
+        setSummary(s)
+      } catch {
+        // silent
+      } finally {
+        setSavingPrice(false)
+      }
+    }, 600)
+  }
+
+  const formatCost = (cost: number) => {
+    if (cost < 0.01) return `$${cost.toFixed(6)}`
+    if (cost < 1) return `$${cost.toFixed(4)}`
+    return `$${cost.toFixed(2)}`
+  }
+
+  const formatTokens = (tokens: number) => {
+    if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M`
+    if (tokens >= 1_000) return `${(tokens / 1_000).toFixed(1)}K`
+    return tokens.toString()
+  }
+
+  if (loading) {
+    return <div className="text-sm text-muted-foreground py-4">加载中...</div>
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* 概览卡片 */}
+      {summary && (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="p-3 rounded-lg border border-border bg-muted/30">
+            <div className="text-xs text-muted-foreground">总 Token</div>
+            <div className="text-lg font-semibold mt-1">{formatTokens(summary.total_tokens)}</div>
+          </div>
+          <div className="p-3 rounded-lg border border-border bg-muted/30">
+            <div className="text-xs text-muted-foreground">预估费用</div>
+            <div className="text-lg font-semibold mt-1">{formatCost(summary.total_cost)}</div>
+          </div>
+          <div className="p-3 rounded-lg border border-border bg-muted/30">
+            <div className="text-xs text-muted-foreground">调用次数</div>
+            <div className="text-lg font-semibold mt-1">{summary.total_calls}</div>
+          </div>
+          <div className="p-3 rounded-lg border border-border bg-muted/30">
+            <div className="text-xs text-muted-foreground">Input / Output</div>
+            <div className="text-sm font-medium mt-1">
+              {formatTokens(summary.total_prompt_tokens)} / {formatTokens(summary.total_completion_tokens)}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 按操作类型统计 */}
+      {summary && summary.total_calls > 0 && (
+        <div>
+          <h3 className="text-sm font-medium text-foreground mb-2">按类型统计</h3>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between py-2 px-3 rounded-lg border border-border">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-blue-500" />
+                <span className="text-sm">摘要</span>
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {summary.summary_calls} 次 · {formatTokens(summary.summary_tokens)} tokens · {formatCost(summary.summary_cost)}
+              </div>
+            </div>
+            <div className="flex items-center justify-between py-2 px-3 rounded-lg border border-border">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-green-500" />
+                <span className="text-sm">翻译</span>
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {summary.translation_calls} 次 · {formatTokens(summary.translation_tokens)} tokens · {formatCost(summary.translation_cost)}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 每日趋势 */}
+      {summary && summary.daily_stats.length > 0 && (
+        <div>
+          <h3 className="text-sm font-medium text-foreground mb-2">每日趋势</h3>
+          <div className="space-y-1 max-h-40 overflow-y-auto">
+            {[...summary.daily_stats].reverse().map((day) => (
+              <div key={day.date} className="flex items-center justify-between py-1.5 px-3 rounded border border-border text-sm">
+                <span className="text-muted-foreground">{day.date}</span>
+                <div className="flex items-center gap-2">
+                  <span>{day.calls} 次</span>
+                  <span className="text-muted-foreground">{formatTokens(day.total_tokens)}</span>
+                  <span className="font-medium">{formatCost(day.cost)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 自定义价格 */}
+      <div>
+        <h3 className="text-sm font-medium text-foreground mb-1">自定义价格</h3>
+        <p className="text-xs text-muted-foreground mb-2">
+          留空则使用内置价格（单位：$/百万 tokens）{savingPrice && ' · 保存中...'}
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label htmlFor="mobile-custom-input-price" className="text-xs text-muted-foreground">Input 价格</label>
+            <input
+              id="mobile-custom-input-price"
+              type="number"
+              step="0.01"
+              min="0"
+              value={aiSettings.customInputPrice ?? ''}
+              onChange={(e) => handlePriceChange('customInputPrice', e.target.value)}
+              placeholder="自动"
+              className="w-full mt-1 px-3 py-2 rounded-lg border border-border bg-card text-foreground text-sm min-h-[44px]"
+            />
+          </div>
+          <div>
+            <label htmlFor="mobile-custom-output-price" className="text-xs text-muted-foreground">Output 价格</label>
+            <input
+              id="mobile-custom-output-price"
+              type="number"
+              step="0.01"
+              min="0"
+              value={aiSettings.customOutputPrice ?? ''}
+              onChange={(e) => handlePriceChange('customOutputPrice', e.target.value)}
+              placeholder="自动"
+              className="w-full mt-1 px-3 py-2 rounded-lg border border-border bg-card text-foreground text-sm min-h-[44px]"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* 清空记录 */}
+      <div>
+        {!showConfirm ? (
+          <button
+            onClick={() => setShowConfirm(true)}
+            className="w-full py-3 px-4 rounded-lg border border-border text-sm text-muted-foreground hover:bg-muted/50 transition-colors min-h-[44px]"
+          >
+            清空历史记录
+          </button>
+        ) : (
+          <div className="flex gap-2">
+            <button
+              onClick={handleClear}
+              disabled={clearing}
+              className="flex-1 py-3 px-4 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90 transition-colors disabled:opacity-50 min-h-[44px]"
+            >
+              {clearing ? '清空中...' : '确认清空'}
+            </button>
+            <button
+              onClick={() => setShowConfirm(false)}
+              className="flex-1 py-3 px-4 rounded-lg border border-border text-sm text-muted-foreground hover:bg-muted/50 transition-colors min-h-[44px]"
+            >
+              取消
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )

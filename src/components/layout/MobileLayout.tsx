@@ -1,4 +1,4 @@
-import { ReactNode } from 'react'
+import { ReactNode, useEffect, useState } from 'react'
 import { BottomNavigationBar } from './BottomNavigationBar'
 
 interface MobileLayoutProps {
@@ -7,32 +7,35 @@ interface MobileLayoutProps {
 
 /**
  * MobileLayout Component
- *
- * The main layout container for mobile devices. Provides:
- * - Full-screen layout with flexbox
- * - Safe area inset support for notched devices
- * - Bottom navigation bar integration
- * - Main content area that fills remaining space
- *
- * Usage:
- * ```tsx
- * <MobileLayout>
- *   <FeedView />
- * </MobileLayout>
- * ```
  */
 export function MobileLayout({ children }: MobileLayoutProps) {
-  return (
-    <div className="flex h-screen flex-col pt-[env(safe-area-inset-top)]">
-      {/* Main content area */}
-      <main className="flex-1 overflow-hidden" role="main">
-        {children}
-      </main>
+  const [height, setHeight] = useState('100vh')
 
-      {/* Bottom navigation - sticky at bottom */}
-      <div className="sticky bottom-0">
-        <BottomNavigationBar />
+  useEffect(() => {
+    const updateHeight = () => {
+      setHeight(`${window.innerHeight}px`)
+    }
+    updateHeight()
+    window.addEventListener('resize', updateHeight)
+    return () => window.removeEventListener('resize', updateHeight)
+  }, [])
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height, overflow: 'hidden' }}>
+      {/* Main content area */}
+      <div
+        style={{
+          flex: 1,
+          overflow: 'hidden',
+          minHeight: 0,
+          paddingTop: 'env(safe-area-inset-top, 0px)',
+        }}
+      >
+        {children}
       </div>
+
+      {/* Bottom navigation */}
+      <BottomNavigationBar />
     </div>
   )
 }

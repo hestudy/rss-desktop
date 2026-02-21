@@ -84,10 +84,7 @@ export interface BottomNavigationBarProps {
  * - Optional visibility control for reader mode
  * - Unread count badge on feeds tab
  */
-export function BottomNavigationBar({
-  visible = true,
-  unreadCount,
-}: BottomNavigationBarProps) {
+export function BottomNavigationBar({ visible = true, unreadCount }: BottomNavigationBarProps) {
   const { mobileView, navigateToFeedList, navigateToDiscover, navigateToSettings } = useLayout()
 
   // Navigation handlers mapped to nav items
@@ -112,7 +109,8 @@ export function BottomNavigationBar({
 
   return (
     <nav
-      className={`flex items-center justify-around border-t border-border bg-background pb-[env(safe-area-inset-bottom)] ${!visible ? 'hidden' : ''}`}
+      className={`flex items-center justify-around border-t bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 ${!visible ? 'hidden' : ''}`}
+      style={{ paddingBottom: '8px' }}
       aria-label="主导航"
     >
       {NAV_ITEMS.map((item) => {
@@ -128,8 +126,8 @@ export function BottomNavigationBar({
             aria-current={active ? 'page' : undefined}
             aria-label={item.label}
             className={`
-              relative flex min-h-11 min-w-11 flex-1 flex-col items-center justify-center gap-1
-              px-2 py-2 transition-colors
+              relative flex flex-1 flex-col items-center justify-center gap-0.5
+              px-2 py-2 transition-colors min-h-[44px]
               ${active
                 ? 'text-primary'
                 : 'text-muted-foreground hover:text-foreground'

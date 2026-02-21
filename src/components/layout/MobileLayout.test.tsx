@@ -100,14 +100,19 @@ describe('MobileLayout', () => {
     })
 
     it('should position bottom nav at bottom', () => {
-      render(
+      const { container } = render(
         <MobileLayout>
           <div>Content</div>
         </MobileLayout>
       )
 
       const bottomNav = screen.getByTestId('bottom-navigation-bar')
-      expect(bottomNav.parentElement?.className).toMatch(/sticky|fixed|bottom/)
+      // Bottom nav should be the last child of the flex container
+      const flexContainer = container.firstChild as HTMLElement
+      const lastChild = flexContainer.lastChild as HTMLElement
+      expect(lastChild.contains(bottomNav)).toBe(true)
+      // Parent should have flex-shrink-0 to prevent compression
+      expect(bottomNav.parentElement?.className).toMatch(/flex-shrink-0/)
     })
   })
 

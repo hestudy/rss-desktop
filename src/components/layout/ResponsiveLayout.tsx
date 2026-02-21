@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { useLayout } from '@/contexts/LayoutContext'
 import { useRss } from '@/contexts/RssContext'
 import { useReader } from '@/contexts/ReaderContext'
-import { useUnifiedSettings } from '@/components/settings/UnifiedSettings'
 import { FeedList } from '@/components/feeds/FeedList'
 import { ArticleList } from '@/components/articles/ArticleList'
 import { ArticleViewer } from '@/components/articles/ArticleViewer'
@@ -13,6 +12,7 @@ import { MobileLayout } from './MobileLayout'
 import { MobileFeedList } from '@/components/mobile/MobileFeedList'
 import { MobileArticleList } from '@/components/mobile/MobileArticleList'
 import { MobileArticleViewer } from '@/components/mobile/MobileArticleViewer'
+import { MobileSettingsPanel } from '@/components/mobile/MobileSettingsPanel'
 import { ResizeHandle } from '@/components/ui/ResizeHandle'
 import { UpdateBanner } from '@/components/ui/UpdateBanner'
 import { ChangelogDialog } from '@/components/ui/ChangelogDialog'
@@ -217,25 +217,9 @@ function MobileDiscoverView() {
  * Renders settings content directly for mobile layout
  */
 function MobileSettingsView() {
-  const { closeSettings } = useUnifiedSettings()
+  const { goBack } = useLayout()
 
-  return (
-    <div data-testid="settings-view" className="h-full overflow-y-auto bg-background">
-      <div className="flex items-center justify-between p-4 border-b border-border">
-        <h1 className="text-lg font-semibold">Settings</h1>
-        <button
-          onClick={closeSettings}
-          className="p-2 rounded-md hover:bg-muted"
-          aria-label="Close settings"
-        >
-          Close
-        </button>
-      </div>
-      <div className="p-4">
-        <p className="text-muted-foreground">Settings content will be rendered here.</p>
-      </div>
-    </div>
-  )
+  return <MobileSettingsPanel onBack={goBack} />
 }
 
 /**

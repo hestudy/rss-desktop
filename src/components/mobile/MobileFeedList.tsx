@@ -261,6 +261,7 @@ export function MobileFeedList({
         role="list"
         aria-label="订阅列表"
         data-testid="feed-list"
+        data-scroll-container
       >
         {feeds.map((feed) => (
           <FeedItem

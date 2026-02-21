@@ -21,6 +21,7 @@ export interface PullToRefreshState {
 
 interface TouchPosition {
   y: number
+  scrollTop: number
 }
 
 const INITIAL_STATE: PullToRefreshState = {
@@ -37,6 +38,9 @@ const DEFAULT_MAX_DISTANCE = 120
 // 阻尼效果参数
 const DAMPING_LOG_BASE = 9 // 对数底数参数，控制阻尼曲线
 const DAMPING_MAX_PROGRESS = 0.5 // 超过阈值后的最大进度增量
+
+// 最小移动距离，用于判断是否是下拉意图
+const MIN_PULL_DISTANCE = 10
 
 export function usePullToRefresh(config: PullToRefreshConfig): {
   pullState: PullToRefreshState
@@ -55,6 +59,7 @@ export function usePullToRefresh(config: PullToRefreshConfig): {
 
   const [pullState, setPullState] = useState<PullToRefreshState>(INITIAL_STATE)
   const startPositionRef = useRef<TouchPosition | null>(null)
+  const isPullingRef = useRef(false)
 
   /**
    * 计算带阻尼效果的下拉距离和进度
@@ -86,6 +91,7 @@ export function usePullToRefresh(config: PullToRefreshConfig): {
 
   const resetPull = useCallback(() => {
     startPositionRef.current = null
+    isPullingRef.current = false
     setPullState(INITIAL_STATE)
   }, [])
 
@@ -102,14 +108,15 @@ export function usePullToRefresh(config: PullToRefreshConfig): {
       }
 
       const touch = e.touches[0]
+      // 获取滚动容器的 scrollTop
+      const scrollContainer = (e.target as HTMLElement).closest('[data-scroll-container]')
+      const scrollTop = scrollContainer?.scrollTop ?? 0
+
       startPositionRef.current = {
         y: touch.clientY,
+        scrollTop,
       }
-
-      setPullState({
-        ...INITIAL_STATE,
-        isPulling: true,
-      })
+      isPullingRef.current = false
     },
     [pullState.isRefreshing]
   )
@@ -135,15 +142,22 @@ export function usePullToRefresh(config: PullToRefreshConfig): {
       const touch = e.touches[0]
       const deltaY = touch.clientY - startPositionRef.current.y
 
-      // 只处理向下拉（正 deltaY）
-      if (deltaY <= 0) {
-        setPullState({
-          ...INITIAL_STATE,
-          isPulling: true,
-        })
-        onPull?.(0, 0)
+      // 只有在滚动到顶部且向下拉时才处理
+      if (startPositionRef.current.scrollTop > 0 || deltaY <= 0) {
+        // 不是下拉刷新，重置但不干扰正常滚动
+        if (isPullingRef.current) {
+          resetPull()
+        }
         return
       }
+
+      // 移动距离太小，不认为是下拉
+      if (deltaY < MIN_PULL_DISTANCE && !isPullingRef.current) {
+        return
+      }
+
+      // 标记为下拉中
+      isPullingRef.current = true
 
       const { distance, progress } = calculatePullMetrics(deltaY)
       const canRefresh = distance >= threshold
@@ -175,10 +189,17 @@ export function usePullToRefresh(config: PullToRefreshConfig): {
         return
       }
 
+      // 不是下拉状态，直接重置
+      if (!isPullingRef.current) {
+        startPositionRef.current = null
+        return
+      }
+
       const canRefresh = pullState.canRefresh
 
       // 重置起始位置
       startPositionRef.current = null
+      isPullingRef.current = false
 
       if (canRefresh) {
         // 开始刷新
