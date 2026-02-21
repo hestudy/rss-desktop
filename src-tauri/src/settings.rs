@@ -178,8 +178,17 @@ pub struct AiSettings {
     #[serde(default = "default_api_endpoint")]
     pub api_endpoint: String,
 
-    /// API Key（不持久化到数据库，通过系统密钥管理服务存储）
-    #[serde(default, skip_serializing)]
+    /// API Key
+    /// 桌面端：不持久化到数据库，通过系统密钥管理服务存储
+    /// 移动端：持久化到数据库（安全性较低但可用）
+    #[cfg_attr(
+        not(any(target_os = "android", target_os = "ios")),
+        serde(default, skip_serializing)
+    )]
+    #[cfg_attr(
+        any(target_os = "android", target_os = "ios"),
+        serde(default)
+    )]
     pub api_key: String,
 
     /// 模型名称
@@ -651,7 +660,7 @@ mod tests {
         assert_eq!(settings.language, "zh-CN");
     }
 
-    // 测试: AiSettings 序列化和反序列化（api_key 不参与序列化）
+    // 测试: AiSettings 序列化和反序列化
     #[test]
     fn test_ai_settings_serialize_roundtrip() {
         let settings = AiSettings {
@@ -668,11 +677,21 @@ mod tests {
         };
 
         let json = serde_json::to_string(&settings).unwrap();
-        // api_key 应被 skip_serializing 跳过，不出现在 JSON 中
-        assert!(!json.contains("test-key"), "api_key should not be serialized");
+        // 桌面端: api_key 应被 skip_serializing 跳过，不出现在 JSON 中
+        // 移动端: api_key 会正常序列化
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        assert!(!json.contains("test-key"), "api_key should not be serialized on desktop");
+        #[cfg(any(target_os = "android", target_os = "ios"))]
+        assert!(json.contains("test-key"), "api_key should be serialized on mobile");
+
         let parsed: AiSettings = serde_json::from_str(&json).unwrap();
-        // 反序列化后 api_key 应为默认空字符串
+        // 桌面端: 反序列化后 api_key 应为默认空字符串
+        // 移动端: 反序列化后 api_key 应为原始值
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         assert_eq!(parsed.api_key, "");
+        #[cfg(any(target_os = "android", target_os = "ios"))]
+        assert_eq!(parsed.api_key, "test-key");
+
         assert_eq!(parsed.api_endpoint, settings.api_endpoint);
         assert_eq!(parsed.model, settings.model);
         assert_eq!(parsed.max_tokens, settings.max_tokens);
@@ -702,7 +721,8 @@ pub fn load_ai_settings_from_storage(storage: &crate::storage_sqlite::SqliteStor
         }
         _ => AiSettings::default(),
     };
-    // 从系统密钥管理服务加载 API Key
+    // 从系统密钥管理服务加载 API Key（仅桌面端）
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if let Some(key) = crate::keyring_helper::load_api_key() {
         settings.api_key = key;
     }

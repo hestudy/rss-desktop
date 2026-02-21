@@ -12,12 +12,14 @@ mod scheduler;
 mod scheduler_commands;
 mod background_scheduler;
 mod notifications;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod tray;
 mod ai_summarizer;
 mod ai_translator;
 mod ai_pricing;
 mod task_queue;
 mod queue_commands;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod keyring_helper;
 mod config_io;
 
@@ -56,13 +58,20 @@ pub fn run() {
     let scheduler = Arc::new(BackgroundScheduler::new());
     let unread_count = Arc::new(AtomicUsize::new(0));
 
-    let app = tauri::Builder::default()
+    let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_fs::init());
+
+    // 桌面端专用插件：updater
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+    }
+
+    let app = builder
         .setup(move |app| {
             // 创建数据目录
             std::fs::create_dir_all(&data_dir)?;
@@ -174,19 +183,26 @@ pub fn run() {
                 }
             });
 
-            // 创建系统托盘
-            #[cfg(not(test))]
+            // 创建系统托盘（仅桌面端）
+            #[cfg(all(not(test), not(any(target_os = "android", target_os = "ios"))))]
             tray::create_tray(app.handle())?;
 
-            // 缓存 close_to_tray 设置值，避免在窗口关闭事件中同步读取数据库
-            let initial_settings = settings::load_app_settings_from_storage(&shared_storage);
-            let close_to_tray = Arc::new(AtomicBool::new(initial_settings.close_to_tray));
-            app.manage(close_to_tray.clone());
+            // 桌面端：缓存 close_to_tray 设置值，避免在窗口关闭事件中同步读取数据库
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            let close_to_tray: Option<Arc<AtomicBool>> = {
+                let initial_settings = settings::load_app_settings_from_storage(&shared_storage);
+                let flag = Arc::new(AtomicBool::new(initial_settings.close_to_tray));
+                app.manage(flag.clone());
+                Some(flag)
+            };
+            #[cfg(any(target_os = "android", target_os = "ios"))]
+            let close_to_tray: Option<Arc<AtomicBool>> = None;
 
-            // 拦截窗口关闭事件：根据缓存的设置决定隐藏到托盘还是退出
+            // 桌面端：拦截窗口关闭事件：根据缓存的设置决定隐藏到托盘还是退出
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
             if let Some(window) = app.get_webview_window("main") {
                 let window_clone = window.clone();
-                let close_to_tray_flag = close_to_tray.clone();
+                let close_to_tray_flag = close_to_tray.clone().unwrap();
                 window.on_window_event(move |event| {
                     if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                         if close_to_tray_flag.load(Ordering::SeqCst) {
@@ -246,7 +262,8 @@ pub fn run() {
     app.run(|app_handle, event| {
         #[allow(clippy::single_match)]
         match event {
-            #[cfg(target_os = "macos")]
+            // macOS Reopen 事件（仅桌面端）
+            #[cfg(all(target_os = "macos", not(any(target_os = "android", target_os = "ios"))))]
             tauri::RunEvent::Reopen { has_visible_windows, .. } => {
                 if !has_visible_windows {
                     tray::show_main_window(app_handle);

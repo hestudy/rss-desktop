@@ -134,7 +134,8 @@ pub async fn get_ai_settings(storage: State<'_, Arc<SqliteStorage>>) -> CommandR
         Ok(None) => AiSettings::default(),
         Err(e) => return Err(format!("Failed to get AI settings: {}", e)),
     };
-    // 从系统密钥管理服务加载 API Key
+    // 从系统密钥管理服务加载 API Key（仅桌面端）
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if let Some(key) = crate::keyring_helper::load_api_key() {
         settings.api_key = key;
     }
@@ -152,11 +153,19 @@ pub async fn update_ai_settings(
     if !settings.api_endpoint.trim().is_empty() {
         crate::fetcher::validate_api_endpoint(&settings.api_endpoint)?;
     }
-    // 将 API Key 存入系统密钥管理服务（不写入数据库）
-    crate::keyring_helper::store_api_key(&settings.api_key)?;
-    log::info!("API key saved to keyring successfully");
+    // 将 API Key 存入系统密钥管理服务（不写入数据库）- 仅桌面端
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        crate::keyring_helper::store_api_key(&settings.api_key)?;
+        log::info!("API key saved to keyring successfully");
+    }
+    // 移动端：API Key 直接存储在数据库中（安全性较低但可用）
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        log::warn!("Mobile platform: API key will be stored in database (less secure)");
+    }
 
-    // 序列化时 api_key 会被 skip_serializing 跳过
+    // 序列化时 api_key 在桌面端会被 skip_serializing 跳过，移动端会正常序列化
     let value = serde_json::to_value(&settings)
         .map_err(|e| format!("Failed to serialize AI settings: {}", e))?;
     storage.set_kv("ai_settings", &value)

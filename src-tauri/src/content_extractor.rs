@@ -1,9 +1,12 @@
 use crate::error::{Result, RssError};
 use crate::fetcher::validate_url;
 use dom_smoothie::{Config, Readability};
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use headless_chrome::{Browser, LaunchOptions};
 use regex::Regex;
-use std::sync::{LazyLock, Mutex};
+use std::sync::LazyLock;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use std::sync::Mutex;
 use std::time::Duration;
 
 const MAX_CONTENT_SIZE: usize = 5 * 1_048_576; // 5MB
@@ -44,10 +47,15 @@ static RE_HTML_TAGS: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"<[^>]+>").unwrap()
 });
 
+// Chrome 浏览器实例（仅桌面端）
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 static CHROME_BROWSER: LazyLock<Mutex<Option<Browser>>> =
     LazyLock::new(|| Mutex::new(None));
 
 /// 清理 Chrome 浏览器实例，释放资源。可在应用退出时调用。
+/// 移动端此函数为空操作。
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[allow(dead_code)]
 pub fn cleanup_chrome() {
     if let Ok(mut guard) = CHROME_BROWSER.lock() {
         if guard.is_some() {
@@ -57,6 +65,13 @@ pub fn cleanup_chrome() {
     }
 }
 
+#[cfg(any(target_os = "android", target_os = "ios"))]
+#[allow(dead_code)]
+pub fn cleanup_chrome() {
+    // 移动端无操作
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn get_or_init_browser() -> Result<Browser> {
     let mut guard = CHROME_BROWSER.lock().map_err(|e| {
         RssError::ContentExtractionError(format!("浏览器锁获取失败: {}", e))
@@ -86,6 +101,7 @@ fn get_or_init_browser() -> Result<Browser> {
     Ok(browser)
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn try_fetch_via_chrome(url: &str) -> Result<String> {
     // Chrome 能访问 file://, chrome:// 等协议，必须严格校验
     validate_url(url)?;
@@ -128,6 +144,7 @@ fn try_fetch_via_chrome(url: &str) -> Result<String> {
     Ok(html)
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn fetch_spa_content_via_chrome(url: &str) -> Result<String> {
     match try_fetch_via_chrome(url) {
         Ok(html) => Ok(html),
@@ -196,9 +213,15 @@ pub fn fetch_and_extract_content(url: &str) -> Result<String> {
         )));
     }
 
-    // 检测 SPA 页面，走 Chrome 渲染路径
+    // 检测 SPA 页面，桌面端走 Chrome 渲染路径
     if is_likely_spa(&html) {
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         return fetch_and_extract_spa(url);
+        // 移动端不支持 Chrome 渲染，返回错误
+        #[cfg(any(target_os = "android", target_os = "ios"))]
+        return Err(RssError::ContentExtractionError(
+            "该页面使用 JavaScript 动态渲染内容，移动端暂不支持提取".to_string(),
+        ));
     }
 
     // 用 catch_unwind 包裹解析，防止第三方库 panic 导致线程崩溃
@@ -323,15 +346,19 @@ pub fn safe_extract_content_from_html(html: &str, url: Option<&str>) -> Result<S
     }
 }
 
+// 桌面端：SPA 内容渲染和提取
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn fetch_and_extract_spa(url: &str) -> Result<String> {
     let html = fetch_spa_content_via_chrome(url)?;
     safe_extract_rendered_html(&html, Some(url))
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn extract_rendered_html(html: &str, url: Option<&str>) -> Result<String> {
     do_extract_html(html, url, "Chrome 渲染后仍未找到可读内容")
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn safe_extract_rendered_html(html: &str, url: Option<&str>) -> Result<String> {
     let primary = safe_extract(html, url, "渲染后内容解析过程中发生异常", extract_rendered_html);
     match primary {
@@ -730,6 +757,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn test_extract_rendered_html_with_content() {
         let html = r#"
         <html><head><title>SPA Page</title></head>
@@ -757,6 +785,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn test_extract_rendered_html_empty_after_render() {
         let html = r#"<html><head></head><body><div id="root"></div></body></html>"#;
         let result = extract_rendered_html(html, Some("https://example.com"));
@@ -940,6 +969,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     #[ignore] // 需要系统安装 Chrome/Chromium
     fn test_chrome_renders_spa_page() {
         let result = fetch_spa_content_via_chrome("https://example.com");
